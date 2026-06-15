@@ -57,6 +57,8 @@ C = {
 
 # ---------------------------------------------------------------------------
 # Chart layout defaults (Plotly)
+# CHART_LAYOUT: base keys safe to spread (no page conflicts)
+# CHART_DEFAULTS: axis/legend/hover defaults, applied via _apply_layout
 # ---------------------------------------------------------------------------
 CHART_LAYOUT = dict(
     paper_bgcolor=C['chart_bg'],
@@ -67,6 +69,10 @@ CHART_LAYOUT = dict(
         size=12,
     ),
     margin=dict(l=52, r=20, t=48, b=36),
+    colorway=[C['accent'], C['up'], C['down'], C['warn'], '#a78bfa', '#06b6d4', '#f97316', '#ec4899'],
+)
+
+CHART_DEFAULTS = dict(
     xaxis=dict(
         gridcolor=C['grid'],
         zerolinecolor=C['grid_hi'],
@@ -94,7 +100,6 @@ CHART_LAYOUT = dict(
         bordercolor=C['border_hi'],
         font=dict(family=FONT, size=12, color=C['text']),
     ),
-    colorway=[C['accent'], C['up'], C['down'], C['warn'], '#a78bfa', '#06b6d4', '#f97316', '#ec4899'],
 )
 
 # ---------------------------------------------------------------------------

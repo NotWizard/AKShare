@@ -1,5 +1,17 @@
 # Change Log
 
+## 2026-06-15 — 修复 CHART_LAYOUT update_layout 关键字冲突
+
+### 架构修复
+
+- **[严重] `update_layout()` 重复关键字**: `CHART_LAYOUT` 中 `legend`/`xaxis`/`yaxis`/`hoverlabel` 与页面自定义冲突，导致 11 处 TypeError
+- `config.py`: 拆分为 `CHART_LAYOUT` (安全基础: bg/font/margin/colorway) + `CHART_DEFAULTS` (轴/图例/悬停)
+- `charts.py`: `_apply_layout()` 智能合并 — 页面显式覆盖的 key 自动跳过默认值
+- 全部 6 个页面: 移除 `**CHART_LAYOUT` 直接展开，统一通过 `_apply_layout(fig)` 应用样式
+- 33 项自动化测试全部通过 (6 页图表函数 + 边界用例 + 组件 + 引擎)
+
+---
+
 ## 2026-06-15 — 修复 Plotly 8位 hex 颜色格式错误
 
 ### Bug 修复

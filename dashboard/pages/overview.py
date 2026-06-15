@@ -10,7 +10,7 @@ import pandas as pd
 from dashboard.db import load
 from dashboard.config import CHART_LAYOUT, C, DB_PATH, FONT
 from dashboard.components.charts import (
-    make_dual_axis_line, make_area_chart, make_range_slider, _alpha,
+    make_dual_axis_line, make_area_chart, make_range_slider, _alpha, _apply_layout,
 )
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row, make_metric_tile, make_section
@@ -58,7 +58,7 @@ def _gdp_chart(dq):
         ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
     fig.update_layout(title=dict(text='GDP 同比增长率'), yaxis_title='%')
-    fig.update_layout(**CHART_LAYOUT)
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -91,7 +91,7 @@ def _spread_chart(dm):
     ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
     fig.update_layout(title=dict(text='M2-M1 剪刀差'), yaxis_title='pp')
-    fig.update_layout(**CHART_LAYOUT)
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -112,7 +112,7 @@ def _pmi_chart(dm):
                   annotation_text='荣枯线', annotation_font_color=C['text_3'],
                   annotation_font_size=10)
     fig.update_layout(title=dict(text='PMI 制造业指数'))
-    fig.update_layout(**CHART_LAYOUT)
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 

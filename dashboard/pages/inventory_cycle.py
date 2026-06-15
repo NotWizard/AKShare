@@ -9,7 +9,7 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import make_range_slider
+from dashboard.components.charts import _apply_layout, make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -66,7 +66,6 @@ def _pmi_chart(dm, ic_df):
     fig.update_layout(
         title=dict(text='PMI制造业指数与库存周期', x=0.5),
         yaxis_title='PMI',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -103,7 +102,6 @@ def _ip_chart(dm, ic_df):
     fig.update_layout(
         title=dict(text='工业增加值同比与趋势', x=0.5),
         yaxis_title='%',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -135,7 +133,6 @@ def _phase_timeline(ic_df):
         title=dict(text='库存周期阶段时间线', x=0.5),
         barmode='stack',
         yaxis=dict(showticklabels=False, title=''),
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )

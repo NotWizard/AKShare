@@ -10,7 +10,7 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import make_scatter_quadrant, make_range_slider
+from dashboard.components.charts import _apply_layout, make_scatter_quadrant, make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -85,7 +85,6 @@ def _phase_pie(mc_df):
     ))
     fig.update_layout(
         title=dict(text='各阶段时间分布', x=0.5),
-        **CHART_LAYOUT,
         showlegend=False,
     )
     return fig
@@ -119,7 +118,6 @@ def _timeline_chart(mc_df):
         title=dict(text='经济周期阶段时间线', x=0.5),
         barmode='stack',
         yaxis=dict(showticklabels=False, title=''),
-        **CHART_LAYOUT,
     )
     return make_range_slider(fig)
 

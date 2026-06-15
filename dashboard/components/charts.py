@@ -9,7 +9,7 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from dashboard.config import CHART_LAYOUT, C, PHASE_COLORS, PHASE_LABELS
+from dashboard.config import CHART_LAYOUT, CHART_DEFAULTS, C, PHASE_COLORS, PHASE_LABELS
 
 
 def _alpha(hex_color: str, opacity: float) -> str:
@@ -24,13 +24,16 @@ def _alpha(hex_color: str, opacity: float) -> str:
 
 
 def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
-    """Merge CHART_LAYOUT defaults with any overrides.
+    """Apply CHART_LAYOUT base + CHART_DEFAULTS (axis/legend/hover).
 
-    The ``title`` key is excluded from defaults — individual charts
-    always set their own title before calling this helper.
+    CHART_DEFAULTS keys are skipped if the caller already provides them
+    in ``overrides``, so pages can freely set their own legend/axis.
     """
-    defaults = {k: v for k, v in CHART_LAYOUT.items() if k != 'title'}
-    layout = {**defaults, **overrides}
+    layout = {**CHART_LAYOUT}
+    for key, val in CHART_DEFAULTS.items():
+        if key not in overrides:
+            layout[key] = val
+    layout.update(overrides)
     fig.update_layout(**layout)
     return fig
 

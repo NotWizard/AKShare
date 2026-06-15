@@ -9,7 +9,7 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import make_dual_axis_line, make_range_slider
+from dashboard.components.charts import _apply_layout, make_dual_axis_line, make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -67,7 +67,6 @@ def _m2_trend_chart(dm, cc_df):
     fig.update_layout(
         title=dict(text='M2同比增速与趋势', x=0.5),
         yaxis_title='%',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -87,7 +86,6 @@ def _credit_impulse_chart(cc_df):
     ))
     fig.update_layout(
         title=dict(text='信用脉冲', x=0.5),
-        **CHART_LAYOUT,
     )
     return make_range_slider(fig)
 

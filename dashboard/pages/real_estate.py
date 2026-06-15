@@ -10,7 +10,7 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, DB_PATH
-from dashboard.components.charts import make_dual_axis_line, make_range_slider
+from dashboard.components.charts import _apply_layout, make_dual_axis_line, make_range_slider
 from dashboard.components.controls import make_date_range_selector, make_city_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -60,7 +60,6 @@ def _price_index_chart(hp, cities):
     fig.update_layout(
         title=dict(text='各城市新建住宅价格指数', x=0.5),
         yaxis_title='指数',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -83,7 +82,6 @@ def _used_price_chart(hp, cities):
     fig.update_layout(
         title=dict(text='各城市二手住宅价格指数', x=0.5),
         yaxis_title='指数',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -118,7 +116,6 @@ def _leverage_vs_price(lev, hp, city):
     )
     fig.update_layout(
         title=dict(text=f'居民杠杆率 vs {city}房价指数', x=0.5),
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -158,7 +155,6 @@ def _lpr_trend_chart(lpr_df):
     fig.update_layout(
         title=dict(text='LPR 5年期以上贷款利率走势', x=0.5),
         yaxis_title='%',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -195,7 +191,6 @@ def _radar_chart(assessment):
             angularaxis=dict(gridcolor=C['border'], color=C['text']),
             bgcolor='rgba(30,30,46,0.8)',
         ),
-        **CHART_LAYOUT,
     )
     return fig
 

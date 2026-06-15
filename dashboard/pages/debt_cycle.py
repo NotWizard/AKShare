@@ -11,7 +11,7 @@ import numpy as np
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import make_area_chart, make_range_slider
+from dashboard.components.charts import _apply_layout, make_area_chart, make_range_slider
 from dashboard.components.controls import make_date_range_selector, make_phase_badge
 from dashboard.components.layout import make_card, make_row
 
@@ -77,7 +77,6 @@ def _leverage_change_speed(lev):
     fig.update_layout(
         title=dict(text='杠杆率变化速度 (年度Δ)', x=0.5),
         barmode='group',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -102,7 +101,6 @@ def _gov_breakdown(lev):
     fig.update_layout(
         title=dict(text='政府杠杆: 中央 vs 地方', x=0.5),
         yaxis_title='%',
-        **CHART_LAYOUT,
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
