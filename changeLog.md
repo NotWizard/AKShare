@@ -1,0 +1,59 @@
+# Change Log
+
+## 2026-06-15 — 初始化中国宏观经济数据分析平台
+
+### 新增功能
+
+- **数据采集层** (`scripts/`)
+  - `01_fetch_data.py`: AKShare 宏观数据采集脚本，支持 10 类指标（M0/M1/M2、GDP、CPI、PPI、PMI、杠杆率、社融、LPR、工业增加值、房价指数），清洗后存入 SQLite
+  - `02_compute_derived.py`: 衍生指标计算（M2-M1 剪刀差、PMI 均线、工业增加值趋势、实际利率、社融存量增速等）
+
+- **分析引擎** (`analysis/`)
+  - `cycle_merrill.py`: 美林投资时钟 — GDP增速 + CPI → 复苏/过热/滞胀/衰退 四象限分类
+  - `cycle_credit.py`: 信用周期 — M2增速 vs 趋势 → 宽信用/紧信用/中性 判定
+  - `cycle_inventory.py`: 库存周期（基钦）— PMI + 工业增加值 → 主动补库存/被动补库存/主动去库存/被动去库存
+  - `cycle_debt.py`: 债务周期（达利欧框架）— 各部门杠杆率变化 → 加杠杆/去杠杆 + 美丽/丑陋判定
+  - `real_estate.py`: 房地产综合分析 — 居民杠杆空间/利率环境/价格动能 三维评分
+  - `cross_indicator.py`: 交叉指标分析 — M1→PPI 领先滞后关系、M2-M1→CPI 相关性
+  - `signals.py`: 综合信号系统 — 四大周期 + 交叉指标 → 综合评分 (-4 到 +4)
+
+- **可视化看板** (`dashboard/`, Plotly Dash)
+  - `app.py`: 主应用入口，深色主题侧边栏导航，6 页面多页应用
+  - `pages/overview.py`: P1 总览仪表盘 — GDP/CPI/PPI/M1/M2/PMI/杠杆率 6 组图表 + 信号徽章
+  - `pages/merrill_clock.py`: P2 美林时钟 — 四象限散点图 + 阶段分布饼图 + 时间线
+  - `pages/credit_cycle.py`: P3 信用周期 — M2 趋势着色 + 信贷脉冲柱状图
+  - `pages/inventory_cycle.py`: P4 库存周期 — PMI+工增四象限 + 阶段着色时间线
+  - `pages/debt_cycle.py`: P5 债务周期 — 各部门杠杆率堆叠面积图 + 达利欧评估
+  - `pages/real_estate.py`: P6 房地产 — 多城市房价对比 + 杠杆vs房价双轴 + 雷达图评估
+  - `components/`: 可复用图表工厂、控件（日期选择器/城市选择器/阶段徽章）、布局组件
+  - `callbacks/`: 全局回调（日期范围联动）
+
+- **基础设施**
+  - `requirements.txt`: 依赖声明 (akshare, pandas, numpy, scipy, plotly, dash, dash-bootstrap-components)
+  - `run_dashboard.sh`: 一键启动脚本
+  - `data/macro_data.db`: SQLite 数据库（11 张表，8,034 行数据）
+
+### 数据覆盖
+
+| 指标 | 数据起始 | 频率 | 行数 |
+|---|---|---|---|
+| 货币供应 M0/M1/M2 | 1978 | 月 | 581 |
+| GDP | 2000 | 季 | 21 |
+| CPI 年率/月率 | 1986/1996 | 月 | 475 |
+| PPI 年率 | 1995 | 月 | 361 |
+| PMI (官方+财新+非制造业+服务业) | 2005 | 月 | 321 |
+| 宏观杠杆率 (各部门) | 1992 | 季 | 80 |
+| LPR 利率 | 2019 | 月 | 1,534 |
+| 工业增加值 | 2008 | 月 | 201 |
+| 房价指数 (10城市) | 2011 | 月 | 1,840 |
+
+---
+
+## 2026-06-15 — Initialize China Macro Data Analysis Platform
+
+### Features
+
+- **Data Layer** (`scripts/`): AKShare macro data fetchers (10 indicator categories), derived metrics computation (M2-M1 spread, PMI moving averages, real interest rate, etc.)
+- **Analysis Engines** (`analysis/`): 7 modules — Merrill Lynch clock, credit cycle, inventory cycle (Kitchin), debt cycle (Dalio), real estate analysis, cross-indicator leading/lag analysis, composite signal system
+- **Dashboard** (`dashboard/`, Plotly Dash): 6-page interactive dashboard with dark theme, date range selectors, multi-city house price comparison, 4-quadrant scatter plots, stacked area charts, radar charts
+- **Infrastructure**: requirements.txt, one-click launch script, SQLite database (11 tables, 8,034 rows)
