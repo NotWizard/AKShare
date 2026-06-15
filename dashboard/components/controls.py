@@ -1,8 +1,8 @@
-"""Reusable UI control components — date pickers, selectors, badges."""
+"""Reusable UI controls — date pickers, selectors, phase badges."""
 
 from __future__ import annotations
-
 from dash import dcc, html
+from dashboard.config import C, FONT
 
 
 def make_date_range_selector(
@@ -10,24 +10,35 @@ def make_date_range_selector(
     max_date: str,
     id_prefix: str = 'global',
 ) -> html.Div:
-    """DatePickerRange plus preset quick-select buttons (5Y / 10Y / 20Y / 全部).
+    """DatePickerRange + preset buttons (5Y / 10Y / 20Y / 全部).
 
     Component IDs produced:
-    - ``{id_prefix}-picker``  — the :class:`dcc.DatePickerRange`
+    - ``{id_prefix}-picker``
     - ``{id_prefix}-btn-5y``, ``-btn-10y``, ``-btn-20y``, ``-btn-all``
-
-    Parameters
-    ----------
-    min_date, max_date : str
-        ISO date strings (``'YYYY-MM-DD'``).
-    id_prefix : str
-        Prepended to every component ``id`` so multiple selectors on
-        different pages don't collide.
     """
+    btn_style = {
+        'backgroundColor': 'transparent',
+        'color': C['text_3'],
+        'border': f'1px solid {C["border"]}',
+        'borderRadius': '6px',
+        'padding': '5px 14px',
+        'cursor': 'pointer',
+        'fontSize': '12px',
+        'fontWeight': '500',
+        'fontFamily': FONT,
+        'transition': 'all 0.15s ease',
+    }
     return html.Div(
         style={
-            'display': 'flex', 'alignItems': 'center', 'gap': '12px',
-            'marginBottom': '16px', 'flexWrap': 'wrap',
+            'display': 'flex',
+            'alignItems': 'center',
+            'gap': '12px',
+            'marginBottom': '20px',
+            'flexWrap': 'wrap',
+            'padding': '10px 16px',
+            'backgroundColor': C['surface'],
+            'borderRadius': '10px',
+            'border': f'1px solid {C["border"]}',
         },
         children=[
             dcc.DatePickerRange(
@@ -37,25 +48,21 @@ def make_date_range_selector(
                 start_date=min_date,
                 end_date=max_date,
                 display_format='YYYY-MM-DD',
-                style={'backgroundColor': '#2d2d44', 'color': '#cdd6f4'},
                 className='dark-date-picker',
             ),
             html.Div(
-                style={'display': 'flex', 'gap': '6px'},
+                style={'display': 'flex', 'gap': '6px', 'marginLeft': 'auto'},
                 children=[
-                    html.Button(label, id=f'{id_prefix}-btn-{key}',
-                                n_clicks=0,
-                                style={
-                                    'backgroundColor': '#45475a',
-                                    'color': '#cdd6f4',
-                                    'border': 'none',
-                                    'borderRadius': '4px',
-                                    'padding': '4px 12px',
-                                    'cursor': 'pointer',
-                                    'fontSize': '13px',
-                                })
-                    for key, label in [('5y', '5年'), ('10y', '10年'),
-                                       ('20y', '20年'), ('all', '全部')]
+                    html.Button(
+                        label,
+                        id=f'{id_prefix}-btn-{key}',
+                        n_clicks=0,
+                        style=btn_style,
+                    )
+                    for key, label in [
+                        ('5y', '5Y'), ('10y', '10Y'),
+                        ('20y', '20Y'), ('all', '全部'),
+                    ]
                 ],
             ),
         ],
@@ -68,20 +75,29 @@ def make_city_selector(
 ) -> html.Div:
     """Multi-select dropdown for cities."""
     return html.Div(
-        style={'marginBottom': '16px'},
+        style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'gap': '10px',
+            'marginBottom': '16px',
+        },
         children=[
-            html.Label('选择城市:', style={'color': '#cdd6f4', 'marginRight': '8px'}),
+            html.Label(
+                '城市',
+                style={
+                    'color': C['text_2'],
+                    'fontSize': '13px',
+                    'fontWeight': '500',
+                    'fontFamily': FONT,
+                },
+            ),
             dcc.Dropdown(
                 id=f'{id_prefix}-city-selector',
                 options=[{'label': c, 'value': c} for c in cities],
-                value=cities[:4],  # default first 4
+                value=cities[:4],
                 multi=True,
-                style={
-                    'backgroundColor': '#2d2d44',
-                    'color': '#cdd6f4',
-                    'minWidth': '300px',
-                },
                 className='dark-dropdown',
+                style={'minWidth': '320px', 'flex': '1'},
             ),
         ],
     )
@@ -92,20 +108,32 @@ def make_phase_badge(
     color: str,
     label: str | None = None,
 ) -> html.Span:
-    """Compact badge showing a cycle phase name and coloured dot."""
+    """Glassmorphic phase badge with colored glow."""
     display = label or phase
     return html.Span(
         style={
-            'display': 'inline-flex', 'alignItems': 'center', 'gap': '6px',
-            'backgroundColor': '#2d2d44', 'borderRadius': '16px',
-            'padding': '4px 14px', 'marginRight': '8px',
-            'fontSize': '13px', 'color': '#cdd6f4',
-            'border': f'1px solid {color}',
+            'display': 'inline-flex',
+            'alignItems': 'center',
+            'gap': '7px',
+            'backgroundColor': f'{color}15',
+            'borderRadius': '20px',
+            'padding': '5px 14px',
+            'marginRight': '8px',
+            'fontSize': '12px',
+            'fontWeight': '500',
+            'color': C['text'],
+            'border': f'1px solid {color}30',
+            'fontFamily': FONT,
+            'backdropFilter': 'blur(8px)',
         },
         children=[
             html.Span(style={
-                'width': '8px', 'height': '8px', 'borderRadius': '50%',
-                'backgroundColor': color, 'display': 'inline-block',
+                'width': '7px',
+                'height': '7px',
+                'borderRadius': '50%',
+                'backgroundColor': color,
+                'display': 'inline-block',
+                'boxShadow': f'0 0 6px {color}80',
             }),
             display,
         ],

@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 
 from dashboard.db import load
-from dashboard.config import CHART_LAYOUT, DB_PATH
+from dashboard.config import C, CHART_LAYOUT, DB_PATH
 from dashboard.components.charts import make_dual_axis_line, make_range_slider
 from dashboard.components.controls import make_date_range_selector, make_city_selector
 from dashboard.components.layout import make_card, make_row
@@ -39,7 +39,7 @@ MAX_DATE = max(_hp['date'].max(), _lpr['date'].max()).strftime('%Y-%m-%d')
 # Chart builders
 # ---------------------------------------------------------------------------
 LINE_COLORS = [
-    '#1a73e8', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+    C['accent'], '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
     '#1abc9c', '#e67e22', '#3498db', '#e91e63', '#00bcd4',
 ]
 
@@ -113,7 +113,7 @@ def _leverage_vs_price(lev, hp, city):
     fig.add_trace(
         go.Scatter(x=merged['date'], y=merged['new_base'],
                    name=f'{city}新房指数', mode='lines',
-                   line=dict(color='#1a73e8', width=2)),
+                   line=dict(color=C['accent'], width=2)),
         secondary_y=True,
     )
     fig.update_layout(
@@ -142,17 +142,17 @@ def _lpr_trend_chart(lpr_df):
         dates_valid = lpr_df.loc[lpr5.index, 'date']
         fig.add_trace(go.Scatter(
             x=dates_valid, y=p90, name='90%分位',
-            mode='lines', line=dict(color='#45475a', width=1, dash='dot'),
+            mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
         ))
         fig.add_trace(go.Scatter(
             x=dates_valid, y=p10, name='10%分位',
-            mode='lines', line=dict(color='#45475a', width=1, dash='dot'),
+            mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
             fill='tonexty', fillcolor='rgba(69,71,90,0.2)',
         ))
 
     fig.add_trace(go.Scatter(
         x=lpr_df['date'], y=lpr_df['lpr_5y'], name='LPR 5年期',
-        mode='lines', line=dict(color='#1a73e8', width=2.5),
+        mode='lines', line=dict(color=C['accent'], width=2.5),
     ))
 
     fig.update_layout(
@@ -184,15 +184,15 @@ def _radar_chart(assessment):
         r=vals + [vals[0]],
         theta=dims + [dims[0]],
         fill='toself',
-        line=dict(color='#1a73e8'),
+        line=dict(color=C['accent']),
         fillcolor='rgba(26,115,232,0.2)',
     ))
     fig.update_layout(
         title=dict(text='房地产四维评估', x=0.5),
         polar=dict(
             radialaxis=dict(visible=True, range=[0, 1],
-                            gridcolor='#45475a', color='#cdd6f4'),
-            angularaxis=dict(gridcolor='#45475a', color='#cdd6f4'),
+                            gridcolor=C['border'], color=C['text']),
+            angularaxis=dict(gridcolor=C['border'], color=C['text']),
             bgcolor='rgba(30,30,46,0.8)',
         ),
         **CHART_LAYOUT,
@@ -202,20 +202,20 @@ def _radar_chart(assessment):
 
 def _assessment_text(assessment):
     if assessment is None or not isinstance(assessment, dict):
-        return html.P('房地产评估分析模块尚未就绪。', style={'color': '#a6adc8'})
+        return html.P('房地产评估分析模块尚未就绪。', style={'color': C['text_2']})
     text = assessment.get('summary', '暂无综合评估文本。')
     return html.Div(
         style={
-            'backgroundColor': '#2d2d44', 'borderRadius': '8px',
+            'backgroundColor': C['card'], 'borderRadius': '8px',
             'padding': '16px', 'marginTop': '12px',
             'borderLeft': '4px solid #1a73e8',
         },
         children=[
             html.H4('市场综合评估', style={
-                'color': '#cdd6f4', 'marginTop': '0', 'marginBottom': '8px',
+                'color': C['text'], 'marginTop': '0', 'marginBottom': '8px',
                 'fontSize': '15px',
             }),
-            html.P(text, style={'color': '#a6adc8', 'margin': '0', 'fontSize': '14px',
+            html.P(text, style={'color': C['text_2'], 'margin': '0', 'fontSize': '14px',
                                 'lineHeight': '1.6'}),
         ],
     )

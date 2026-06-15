@@ -1,7 +1,7 @@
-"""Reusable Plotly chart factory functions.
+"""Reusable Plotly chart factories — Terminal Fintech styled.
 
-Every factory returns a ``plotly.graph_objects.Figure`` that already has the
-dark-theme layout applied via :data:`dashboard.config.CHART_LAYOUT`.
+Every factory applies the design-system CHART_LAYOUT and returns a
+``plotly.graph_objects.Figure`` ready to render.
 """
 
 from __future__ import annotations
@@ -9,11 +9,11 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from dashboard.config import CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS
+from dashboard.config import CHART_LAYOUT, C, PHASE_COLORS, PHASE_LABELS
 
 
 def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
-    """Apply default CHART_LAYOUT and return the figure."""
+    """Merge CHART_LAYOUT defaults with any overrides."""
     layout = {**CHART_LAYOUT, **overrides}
     fig.update_layout(**layout)
     return fig
@@ -25,29 +25,40 @@ def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
 def make_dual_axis_line(
     dates, y1, y2,
     y1_name: str, y2_name: str, title: str,
-    y1_color: str = '#1a73e8', y2_color: str = '#e74c3c',
+    y1_color: str = C['accent'], y2_color: str = C['up'],
 ) -> go.Figure:
-    """Two lines sharing an x-axis but with independent y-axes."""
+    """Two lines with independent y-axes, gradient fill under primary."""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
+
     fig.add_trace(
-        go.Scatter(x=dates, y=y1, name=y1_name, mode='lines',
-                   line=dict(color=y1_color, width=2)),
+        go.Scatter(
+            x=dates, y=y1, name=y1_name, mode='lines',
+            line=dict(color=y1_color, width=2.5),
+            fill='tozeroy',
+            fillcolor=f'{y1_color}10',
+        ),
         secondary_y=False,
     )
     fig.add_trace(
-        go.Scatter(x=dates, y=y2, name=y2_name, mode='lines',
-                   line=dict(color=y2_color, width=2)),
+        go.Scatter(
+            x=dates, y=y2, name=y2_name, mode='lines',
+            line=dict(color=y2_color, width=2),
+        ),
         secondary_y=True,
     )
     fig.update_layout(
-        title=dict(text=title, x=0.5),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02,
-                    xanchor='right', x=1),
+        title=dict(text=title),
         xaxis=dict(rangeslider=dict(visible=False)),
     )
     _apply_layout(fig)
-    fig.update_yaxes(title_text=y1_name, secondary_y=False)
-    fig.update_yaxes(title_text=y2_name, secondary_y=True)
+    fig.update_yaxes(
+        title_text=y1_name, secondary_y=False,
+        tickfont=dict(size=11, color=C['text_3']),
+    )
+    fig.update_yaxes(
+        title_text=y2_name, secondary_y=True,
+        tickfont=dict(size=11, color=C['text_3']),
+    )
     return fig
 
 
@@ -61,21 +72,19 @@ def make_area_chart(
     colors_dict: dict[str, str] | None = None,
     stack: bool = True,
 ) -> go.Figure:
-    """Stacked (or overlapping) area chart for multiple series."""
+    """Stacked or overlapping area chart with semi-transparent fills."""
+    default_colors = [C['accent'], C['up'], C['down'], C['warn'], '#a78bfa']
     fig = go.Figure()
-    for name, values in values_dict.items():
-        color = (colors_dict or {}).get(name, '#1a73e8')
+    for i, (name, values) in enumerate(values_dict.items()):
+        color = (colors_dict or {}).get(name, default_colors[i % len(default_colors)])
         fig.add_trace(go.Scatter(
             x=dates, y=values, name=name, mode='lines',
-            fill='tonexty' if stack else None,
+            fill='tonexty' if stack else 'tozeroy',
+            fillcolor=f'{color}18',
             line=dict(color=color, width=1.5),
             stackgroup='one' if stack else None,
         ))
-    fig.update_layout(
-        title=dict(text=title, x=0.5),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02,
-                    xanchor='right', x=1),
-    )
+    fig.update_layout(title=dict(text=title))
     _apply_layout(fig)
     return fig
 
@@ -97,28 +106,28 @@ def make_scatter_quadrant(
     unique_phases = sorted(set(phases.dropna())) if hasattr(phases, 'dropna') else sorted(set(phases))
     for phase in unique_phases:
         label = PHASE_LABELS.get(phase, phase)
-        color = PHASE_COLORS.get(phase, '#888888')
+        color = PHASE_COLORS.get(phase, C['text_3'])
         mask = [p == phase for p in phases]
         fig.add_trace(go.Scatter(
             x=[xi for xi, m in zip(x, mask) if m],
             y=[yi for yi, m in zip(y, mask) if m],
             name=label, mode='markers',
-            marker=dict(color=color, size=6, opacity=0.8),
+            marker=dict(
+                color=color, size=8, opacity=0.85,
+                line=dict(color='rgba(255,255,255,0.2)', width=1),
+            ),
         ))
 
     # Reference lines
+    line_style = dict(line_dash='dot', line_color=C['text_3'], line_width=1, opacity=0.5)
     if hline_val is not None:
-        fig.add_hline(y=hline_val, line_dash='dash',
-                      line_color='#a6adc8', opacity=0.6)
+        fig.add_hline(y=hline_val, **line_style)
     if vline_val is not None:
-        fig.add_vline(x=vline_val, line_dash='dash',
-                      line_color='#a6adc8', opacity=0.6)
+        fig.add_vline(x=vline_val, **line_style)
 
     fig.update_layout(
-        title=dict(text=title, x=0.5),
+        title=dict(text=title),
         xaxis_title=x_label, yaxis_title=y_label,
-        legend=dict(orientation='h', yanchor='bottom', y=1.02,
-                    xanchor='right', x=1),
     )
     _apply_layout(fig)
     return fig
@@ -130,26 +139,26 @@ def make_scatter_quadrant(
 def make_bar_line_combo(
     dates, bars, line,
     bar_name: str, line_name: str, title: str,
-    bar_color: str = '#1a73e8', line_color: str = '#e74c3c',
+    bar_color: str = C['accent'], line_color: str = C['up'],
 ) -> go.Figure:
-    """Bars on the primary y-axis, line on the secondary y-axis."""
+    """Bars on primary y, line on secondary y."""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(
-        go.Bar(x=dates, y=bars, name=bar_name,
-               marker_color=bar_color, opacity=0.7),
+        go.Bar(
+            x=dates, y=bars, name=bar_name,
+            marker_color=bar_color, opacity=0.65,
+            marker_line_width=0,
+        ),
         secondary_y=False,
     )
     fig.add_trace(
-        go.Scatter(x=dates, y=line, name=line_name, mode='lines',
-                   line=dict(color=line_color, width=2)),
+        go.Scatter(
+            x=dates, y=line, name=line_name, mode='lines',
+            line=dict(color=line_color, width=2.5),
+        ),
         secondary_y=True,
     )
-    fig.update_layout(
-        title=dict(text=title, x=0.5),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02,
-                    xanchor='right', x=1),
-        barmode='overlay',
-    )
+    fig.update_layout(title=dict(text=title), barmode='overlay')
     _apply_layout(fig)
     fig.update_yaxes(title_text=bar_name, secondary_y=False)
     fig.update_yaxes(title_text=line_name, secondary_y=True)
@@ -160,6 +169,14 @@ def make_bar_line_combo(
 # Utility: add range slider
 # ---------------------------------------------------------------------------
 def make_range_slider(fig: go.Figure, visible: bool = True) -> go.Figure:
-    """Enable the range-slider on the primary x-axis of *fig*."""
-    fig.update_xaxes(rangeslider=dict(visible=visible))
+    """Enable the range-slider on the primary x-axis."""
+    fig.update_xaxes(
+        rangeslider=dict(
+            visible=visible,
+            bgcolor=C['range_slider'],
+            bordercolor=C['border'],
+            borderwidth=1,
+            thickness=0.08,
+        ),
+    )
     return fig

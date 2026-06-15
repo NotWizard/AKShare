@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 
 from dashboard.db import load
-from dashboard.config import CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
+from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import make_scatter_quadrant, make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row

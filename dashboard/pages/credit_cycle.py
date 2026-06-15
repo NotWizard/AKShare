@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 
 from dashboard.db import load
-from dashboard.config import CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
+from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import make_dual_axis_line, make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
@@ -43,7 +43,7 @@ def _m2_trend_chart(dm, cc_df):
         dates = cc_df['date'].tolist()
         for i in range(len(dates) - 1):
             phase = phases[i]
-            color = PHASE_COLORS.get(phase, '#45475a')
+            color = PHASE_COLORS.get(phase, C['border'])
             fig.add_vrect(
                 x0=dates[i], x1=dates[i + 1],
                 fillcolor=color, opacity=0.08, line_width=0,
@@ -52,7 +52,7 @@ def _m2_trend_chart(dm, cc_df):
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['m2_yoy'], name='M2同比',
-        mode='lines', line=dict(color='#1a73e8', width=2),
+        mode='lines', line=dict(color=C['accent'], width=2),
     ))
 
     # Trend line if available from analysis
@@ -97,7 +97,7 @@ def _m2_cpi_overlay(dm):
     return make_range_slider(make_dual_axis_line(
         dm['date'], dm['m2_yoy'], dm['cpi_yoy'],
         'M2同比', 'CPI同比', 'M2 与 CPI 领先滞后关系',
-        y1_color='#1a73e8', y2_color='#e74c3c',
+        y1_color=C['accent'], y2_color='#e74c3c',
     ))
 
 
@@ -113,9 +113,9 @@ def _current_phase_badge(cc_df):
     return html.Div(
         style={
             'display': 'inline-flex', 'alignItems': 'center', 'gap': '6px',
-            'backgroundColor': '#2d2d44', 'borderRadius': '16px',
+            'backgroundColor': C['card'], 'borderRadius': '16px',
             'padding': '6px 16px', 'marginBottom': '16px',
-            'border': f'1px solid {color}', 'color': '#cdd6f4',
+            'border': f'1px solid {color}', 'color': C['text'],
         },
         children=[
             html.Span(style={

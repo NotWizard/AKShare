@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 
 from dashboard.db import load
-from dashboard.config import CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
+from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import make_area_chart, make_range_slider
 from dashboard.components.controls import make_date_range_selector, make_phase_badge
 from dashboard.components.layout import make_card, make_row
@@ -48,7 +48,7 @@ def _leverage_stacked(lev):
         colors_dict={
             '居民杠杆': '#2ecc71',
             '非金融企业杠杆': '#e74c3c',
-            '政府杠杆': '#1a73e8',
+            '政府杠杆': C['accent'],
         },
     ))
 
@@ -67,7 +67,7 @@ def _leverage_change_speed(lev):
     for col, name, color in [
         ('household_dy', '居民', '#2ecc71'),
         ('non_fin_corp_dy', '非金融企业', '#e74c3c'),
-        ('gov_total_dy', '政府', '#1a73e8'),
+        ('gov_total_dy', '政府', C['accent']),
     ]:
         fig.add_trace(go.Bar(
             x=df['date'], y=df[col], name=name,
@@ -90,7 +90,7 @@ def _gov_breakdown(lev):
     if 'gov_central' in lev.columns and lev['gov_central'].notna().any():
         fig.add_trace(go.Scatter(
             x=lev['date'], y=lev['gov_central'], name='中央政府杠杆',
-            mode='lines', line=dict(color='#1a73e8', width=2),
+            mode='lines', line=dict(color=C['accent'], width=2),
             fill='tozeroy', fillcolor='rgba(26,115,232,0.15)',
         ))
     if 'gov_local' in lev.columns and lev['gov_local'].notna().any():
@@ -115,7 +115,7 @@ def _gov_breakdown(lev):
 def _phase_badges(dc_df):
     if dc_df is None or not len(dc_df):
         return html.Div(style={'marginBottom': '12px'},
-                        children=[html.Span('分析模块未就绪', style={'color': '#a6adc8'})])
+                        children=[html.Span('分析模块未就绪', style={'color': C['text_2']})])
 
     last = dc_df.iloc[-1]
     badges = []
@@ -126,7 +126,7 @@ def _phase_badges(dc_df):
         phase = last.get(col)
         if phase and phase is not np.nan:
             label = PHASE_LABELS.get(str(phase), str(phase))
-            color = PHASE_COLORS.get(str(phase), '#a6adc8')
+            color = PHASE_COLORS.get(str(phase), C['text_2'])
             badges.append(make_phase_badge(str(phase), color, f'{sector}: {label}'))
 
     return html.Div(style={'marginBottom': '12px', 'display': 'flex',
@@ -137,7 +137,7 @@ def _phase_badges(dc_df):
 def _dalio_assessment(dc_df, lev):
     """Generate a brief Dalio-framework text assessment."""
     if dc_df is None or not len(dc_df) or lev is None or not len(lev):
-        return html.P('债务周期分析模块尚未就绪。', style={'color': '#a6adc8'})
+        return html.P('债务周期分析模块尚未就绪。', style={'color': C['text_2']})
 
     last_lev = lev.iloc[-1]
     last_dc = dc_df.iloc[-1]
@@ -154,17 +154,17 @@ def _dalio_assessment(dc_df, lev):
 
     return html.Div(
         style={
-            'backgroundColor': '#2d2d44', 'borderRadius': '8px',
+            'backgroundColor': C['card'], 'borderRadius': '8px',
             'padding': '16px', 'marginTop': '12px',
             'borderLeft': '4px solid #1a73e8',
         },
         children=[
             html.H4('达里奥债务周期框架评估', style={
-                'color': '#cdd6f4', 'marginTop': '0', 'marginBottom': '8px',
+                'color': C['text'], 'marginTop': '0', 'marginBottom': '8px',
                 'fontSize': '15px',
             }),
         ] + [
-            html.P(line, style={'color': '#a6adc8', 'margin': '4px 0', 'fontSize': '14px'})
+            html.P(line, style={'color': C['text_2'], 'margin': '4px 0', 'fontSize': '14px'})
             for line in lines
         ],
     )

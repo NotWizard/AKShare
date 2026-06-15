@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 
 from dashboard.db import load
-from dashboard.config import CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
+from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import make_range_slider
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
@@ -43,7 +43,7 @@ def _pmi_chart(dm, ic_df):
         phases = ic_df['phase'].tolist()
         for i in range(len(dates) - 1):
             phase = phases[i]
-            color = PHASE_COLORS.get(phase, '#45475a')
+            color = PHASE_COLORS.get(phase, C['border'])
             fig.add_vrect(
                 x0=dates[i], x1=dates[i + 1],
                 fillcolor=color, opacity=0.08, line_width=0,
@@ -52,7 +52,7 @@ def _pmi_chart(dm, ic_df):
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['pmi_official'], name='官方PMI',
-        mode='lines', line=dict(color='#1a73e8', width=2),
+        mode='lines', line=dict(color=C['accent'], width=2),
     ))
     if 'pmi_ma6' in dm.columns and dm['pmi_ma6'].notna().any():
         fig.add_trace(go.Scatter(
@@ -83,7 +83,7 @@ def _ip_chart(dm, ic_df):
         phases = ic_df['phase'].tolist()
         for i in range(len(dates) - 1):
             phase = phases[i]
-            color = PHASE_COLORS.get(phase, '#45475a')
+            color = PHASE_COLORS.get(phase, C['border'])
             fig.add_vrect(
                 x0=dates[i], x1=dates[i + 1],
                 fillcolor=color, opacity=0.08, line_width=0,
@@ -92,7 +92,7 @@ def _ip_chart(dm, ic_df):
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['ip_yoy'], name='工业增加值同比',
-        mode='lines', line=dict(color='#1a73e8', width=2),
+        mode='lines', line=dict(color=C['accent'], width=2),
     ))
     if 'ip_trend' in dm.columns and dm['ip_trend'].notna().any():
         fig.add_trace(go.Scatter(
@@ -151,9 +151,9 @@ def _current_phase_badge(ic_df):
     return html.Div(
         style={
             'display': 'inline-flex', 'alignItems': 'center', 'gap': '6px',
-            'backgroundColor': '#2d2d44', 'borderRadius': '16px',
+            'backgroundColor': C['card'], 'borderRadius': '16px',
             'padding': '6px 16px', 'marginBottom': '16px',
-            'border': f'1px solid {color}', 'color': '#cdd6f4',
+            'border': f'1px solid {color}', 'color': C['text'],
         },
         children=[
             html.Span(style={
