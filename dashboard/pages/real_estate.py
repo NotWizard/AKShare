@@ -63,6 +63,7 @@ def _price_index_chart(hp, cities):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -85,6 +86,7 @@ def _used_price_chart(hp, cities):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -121,6 +123,7 @@ def _leverage_vs_price(lev, hp, city):
     )
     fig.update_yaxes(title_text='杠杆率 (%)', secondary_y=False)
     fig.update_yaxes(title_text='房价指数', secondary_y=True)
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -158,6 +161,7 @@ def _lpr_trend_chart(lpr_df):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -192,6 +196,7 @@ def _radar_chart(assessment):
             bgcolor='rgba(30,30,46,0.8)',
         ),
     )
+    _apply_layout(fig)
     return fig
 
 

@@ -70,6 +70,7 @@ def _m2_trend_chart(dm, cc_df):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -87,6 +88,7 @@ def _credit_impulse_chart(cc_df):
     fig.update_layout(
         title=dict(text='信用脉冲', x=0.5),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 

@@ -80,6 +80,7 @@ def _leverage_change_speed(lev):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
@@ -104,6 +105,7 @@ def _gov_breakdown(lev):
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 

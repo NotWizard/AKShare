@@ -65,6 +65,7 @@ def _quadrant_chart(dq, mc_df):
         ))
 
     fig.update_layout(height=500)
+    _apply_layout(fig)
     return fig
 
 
@@ -87,6 +88,7 @@ def _phase_pie(mc_df):
         title=dict(text='各阶段时间分布', x=0.5),
         showlegend=False,
     )
+    _apply_layout(fig)
     return fig
 
 
@@ -119,6 +121,7 @@ def _timeline_chart(mc_df):
         barmode='stack',
         yaxis=dict(showticklabels=False, title=''),
     )
+    _apply_layout(fig)
     return make_range_slider(fig)
 
 
