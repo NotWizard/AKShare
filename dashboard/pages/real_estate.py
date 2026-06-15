@@ -7,7 +7,6 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
-import numpy as np
 
 from dashboard.db import load
 from dashboard.config import CHART_LAYOUT, DB_PATH
@@ -172,10 +171,14 @@ def _radar_chart(assessment):
         return go.Figure().update_layout(
             **CHART_LAYOUT, title='房地产综合评估 (分析模块未就绪)')
 
-    dims = ['价格泡沫', '杠杆风险', '政策空间', '市场活跃度']
-    vals = []
-    for key in ['price_bubble', 'leverage_risk', 'policy_space', 'market_activity']:
-        vals.append(assessment.get(key, 0.5))
+    dims = ['价格动量', '杠杆空间', '利率环境', '综合评分']
+    key_map = {
+        '价格动量': 'price_momentum_score',
+        '杠杆空间': 'leverage_space_score',
+        '利率环境': 'rate_env_score',
+        '综合评分': 'composite_score',
+    }
+    vals = [assessment.get(key_map[d], 50) / 100.0 for d in dims]
 
     fig = go.Figure(go.Scatterpolar(
         r=vals + [vals[0]],

@@ -107,7 +107,7 @@ def _timeline_chart(mc_df):
         fig.add_trace(go.Bar(
             x=[d], y=[1], name=label if i == 0 else '',
             marker_color=color, showlegend=(i == 0),
-            width=30000000,  # ~1 quarter in ms
+            width=7776000,  # ~1 quarter in ms (90 days)
         ))
 
     # Deduplicate legend

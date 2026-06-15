@@ -43,11 +43,22 @@ PHASE_COLORS = {
     # Credit cycle
     'easing': '#2ecc71',
     'tightening': '#e74c3c',
+    'neutral': '#a6adc8',
     # Inventory cycle
     'active_restocking': '#2ecc71',
     'passive_restocking': '#f39c12',
     'active_destocking': '#e74c3c',
     'passive_destocking': '#3498db',
+    # Debt cycle
+    'leveraging': '#2ecc71',
+    'deleveraging': '#e74c3c',
+    'stable': '#f39c12',
+    'beautiful_deleveraging': '#2ecc71',
+    'ugly_deleveraging': '#e74c3c',
+    'leveraging_boom': '#f39c12',
+    'leveraging_bust': '#e74c3c',
+    'stable_growth': '#3498db',
+    'stable_contraction': '#a6adc8',
 }
 
 # Chinese labels for phases
@@ -58,10 +69,21 @@ PHASE_LABELS = {
     'recession': '衰退',
     'easing': '宽松',
     'tightening': '紧缩',
+    'neutral': '中性',
     'active_restocking': '主动补库',
     'passive_restocking': '被动补库',
     'active_destocking': '主动去库',
     'passive_destocking': '被动去库',
+    # Debt cycle
+    'leveraging': '加杠杆',
+    'deleveraging': '去杠杆',
+    'stable': '稳定',
+    'beautiful_deleveraging': '美丽去杠杆',
+    'ugly_deleveraging': '丑陋去杠杆',
+    'leveraging_boom': '加杠杆繁荣',
+    'leveraging_bust': '加杠杆崩溃',
+    'stable_growth': '稳定增长',
+    'stable_contraction': '稳定收缩',
 }
 
 # ---------------------------------------------------------------------------

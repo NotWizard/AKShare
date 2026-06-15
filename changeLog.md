@@ -1,5 +1,18 @@
 # Change Log
 
+## 2026-06-15 — 修复 Dashboard 6个审计 Bug
+
+### Bug 修复
+
+- **[严重] 房地产雷达图数据错误** (`real_estate.py`): 四维评估使用了不存在的 key，导致雷达图始终显示静态菱形。修复为正确的 key 映射并归一化到 0-1 范围
+- **[中等] 债务周期阶段标签缺失** (`config.py`): 缺少 `leveraging`/`deleveraging`/`beautiful_deleveraging` 等 9 个阶段的颜色和中文标签，导致徽章显示英文原文
+- **[轻微] 信用周期"中性"阶段无颜色** (`config.py`): 新增 `neutral` 颜色和中文标签
+- **[轻微] 美林时钟时间线条宽度错误** (`merrill_clock.py`): 宽度从 ~1 年修正为 ~1 季度
+- **[轻微] 债务周期页面死代码** (`debt_cycle.py`): 移除未使用的 `CITIES` 常量
+- **[轻微] 未使用的 import** (`credit_cycle.py`, `real_estate.py`): 清理
+
+---
+
 ## 2026-06-15 — 补全社会融资规模数据
 
 ### 数据补充

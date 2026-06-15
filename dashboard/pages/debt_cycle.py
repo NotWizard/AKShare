@@ -31,8 +31,6 @@ _lev = load('leverage')
 MIN_DATE = _lev['date'].min().strftime('%Y-%m-%d')
 MAX_DATE = _lev['date'].max().strftime('%Y-%m-%d')
 
-CITIES = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '天津']
-
 
 # ---------------------------------------------------------------------------
 # Chart builders

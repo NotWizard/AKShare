@@ -3,7 +3,6 @@
 import dash
 from dash import html, dcc, Input, Output, callback, ctx
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
