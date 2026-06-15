@@ -1,5 +1,15 @@
 # Change Log
 
+## 2026-06-15 — 修复 Plotly 8位 hex 颜色格式错误
+
+### Bug 修复
+
+- **[严重] Plotly 不支持 `#RRGGBBAA` 格式**: `f'{C["accent"]}10'` 生成 `#6366f110` 导致 scatter fillcolor `ValueError`
+- 新增 `_alpha(hex_color, opacity)` 辅助函数: hex + 透明度 → `rgba(r,g,b,a)` 格式
+- 修复 `charts.py` 2 处 + `overview.py` 3 处 + `controls.py` 3 处颜色拼接
+
+---
+
 ## 2026-06-15 — UI 全面重设计: Terminal Fintech 主题
 
 ### 设计系统重构 (`config.py`)

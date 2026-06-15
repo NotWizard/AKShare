@@ -10,7 +10,7 @@ import pandas as pd
 from dashboard.db import load
 from dashboard.config import CHART_LAYOUT, C, DB_PATH, FONT
 from dashboard.components.charts import (
-    make_dual_axis_line, make_area_chart, make_range_slider,
+    make_dual_axis_line, make_area_chart, make_range_slider, _alpha,
 )
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row, make_metric_tile, make_section
@@ -48,7 +48,7 @@ def _gdp_chart(dq):
             mode='lines+markers',
             line=dict(color=C['accent'], width=2.5),
             marker=dict(size=5, color=C['accent']),
-            fill='tozeroy', fillcolor=f'{C["accent"]}10',
+            fill='tozeroy', fillcolor=_alpha(C['accent'], 0.10),
         ))
     if 'gdp_yoy_smooth' in dq.columns and dq['gdp_yoy_smooth'].notna().any():
         fig.add_trace(go.Scatter(
@@ -87,7 +87,7 @@ def _spread_chart(dm):
         mode='lines',
         line=dict(color=C['accent'], width=2),
         fill='tozeroy',
-        fillcolor=f'{C["accent"]}15',
+        fillcolor=_alpha(C['accent'], 0.15),
     ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
     fig.update_layout(title=dict(text='M2-M1 剪刀差'), yaxis_title='pp')
@@ -100,7 +100,7 @@ def _pmi_chart(dm):
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['pmi_official'], name='官方PMI',
         mode='lines', line=dict(color=C['accent'], width=2.5),
-        fill='tozeroy', fillcolor=f'{C["accent"]}08',
+        fill='tozeroy', fillcolor=_alpha(C['accent'], 0.08),
     ))
     if 'pmi_ma6' in dm.columns and dm['pmi_ma6'].notna().any():
         fig.add_trace(go.Scatter(

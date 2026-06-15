@@ -110,19 +110,25 @@ def make_phase_badge(
 ) -> html.Span:
     """Glassmorphic phase badge with colored glow."""
     display = label or phase
+    # Convert hex color to rgba with 15% opacity (Plotly-safe)
+    _h = color.lstrip('#')
+    _r, _g, _b = int(_h[0:2], 16), int(_h[2:4], 16), int(_h[4:6], 16)
+    _bg = f'rgba({_r},{_g},{_b},0.15)'
+    _border = f'rgba({_r},{_g},{_b},0.30)'
+
     return html.Span(
         style={
             'display': 'inline-flex',
             'alignItems': 'center',
             'gap': '7px',
-            'backgroundColor': f'{color}15',
+            'backgroundColor': _bg,
             'borderRadius': '20px',
             'padding': '5px 14px',
             'marginRight': '8px',
             'fontSize': '12px',
             'fontWeight': '500',
             'color': C['text'],
-            'border': f'1px solid {color}30',
+            'border': f'1px solid {_border}',
             'fontFamily': FONT,
             'backdropFilter': 'blur(8px)',
         },
@@ -133,7 +139,7 @@ def make_phase_badge(
                 'borderRadius': '50%',
                 'backgroundColor': color,
                 'display': 'inline-block',
-                'boxShadow': f'0 0 6px {color}80',
+                'boxShadow': f'0 0 6px rgba({_r},{_g},{_b},0.5)',
             }),
             display,
         ],

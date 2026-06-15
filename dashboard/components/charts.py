@@ -12,6 +12,17 @@ from plotly.subplots import make_subplots
 from dashboard.config import CHART_LAYOUT, C, PHASE_COLORS, PHASE_LABELS
 
 
+def _alpha(hex_color: str, opacity: float) -> str:
+    """Convert a hex color + opacity to rgba string (Plotly-compatible).
+
+    >>> _alpha('#6366f1', 0.10)
+    'rgba(99,102,241,0.1)'
+    """
+    h = hex_color.lstrip('#')
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f'rgba({r},{g},{b},{opacity})'
+
+
 def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
     """Merge CHART_LAYOUT defaults with any overrides.
 
@@ -40,7 +51,7 @@ def make_dual_axis_line(
             x=dates, y=y1, name=y1_name, mode='lines',
             line=dict(color=y1_color, width=2.5),
             fill='tozeroy',
-            fillcolor=f'{y1_color}10',
+            fillcolor=_alpha(y1_color, 0.10),
         ),
         secondary_y=False,
     )
@@ -85,7 +96,7 @@ def make_area_chart(
         fig.add_trace(go.Scatter(
             x=dates, y=values, name=name, mode='lines',
             fill='tonexty' if stack else 'tozeroy',
-            fillcolor=f'{color}18',
+            fillcolor=_alpha(color, 0.12),
             line=dict(color=color, width=1.5),
             stackgroup='one' if stack else None,
         ))
