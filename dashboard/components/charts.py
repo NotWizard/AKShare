@@ -13,8 +13,13 @@ from dashboard.config import CHART_LAYOUT, C, PHASE_COLORS, PHASE_LABELS
 
 
 def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
-    """Merge CHART_LAYOUT defaults with any overrides."""
-    layout = {**CHART_LAYOUT, **overrides}
+    """Merge CHART_LAYOUT defaults with any overrides.
+
+    The ``title`` key is excluded from defaults — individual charts
+    always set their own title before calling this helper.
+    """
+    defaults = {k: v for k, v in CHART_LAYOUT.items() if k != 'title'}
+    layout = {**defaults, **overrides}
     fig.update_layout(**layout)
     return fig
 

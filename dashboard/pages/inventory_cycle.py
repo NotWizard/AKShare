@@ -113,7 +113,7 @@ def _ip_chart(dm, ic_df):
 def _phase_timeline(ic_df):
     """Horizontal bar showing inventory cycle phase transitions."""
     if ic_df is None or not len(ic_df) or 'phase' not in ic_df.columns:
-        return go.Figure().update_layout(**CHART_LAYOUT, title='库存周期阶段 (分析模块未就绪)')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='库存周期阶段 (分析模块未就绪)')
 
     fig = go.Figure()
     dates = ic_df['date'].tolist()

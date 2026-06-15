@@ -77,7 +77,7 @@ def _m2_trend_chart(dm, cc_df):
 def _credit_impulse_chart(cc_df):
     """Credit impulse as bar chart."""
     if cc_df is None or 'credit_impulse' not in cc_df.columns:
-        return go.Figure().update_layout(**CHART_LAYOUT, title='信用脉冲 (分析模块未就绪)')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='信用脉冲 (分析模块未就绪)')
 
     colors = ['#2ecc71' if v >= 0 else '#e74c3c'
               for v in cc_df['credit_impulse'].fillna(0)]

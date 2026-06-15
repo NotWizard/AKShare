@@ -94,7 +94,7 @@ def _leverage_vs_price(lev, hp, city):
     """Dual axis: household leverage vs city house price index."""
     city_data = hp[hp['city'] == city].sort_values('date')
     if not len(city_data) or not len(lev):
-        return go.Figure().update_layout(**CHART_LAYOUT, title='暂无数据')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无数据')
 
     # Merge on date (quarterly leverage, monthly prices — forward-fill leverage)
     merged = city_data[['date', 'new_base']].copy()
@@ -130,7 +130,7 @@ def _leverage_vs_price(lev, hp, city):
 def _lpr_trend_chart(lpr_df):
     """LPR 5Y trend with historical percentile bands."""
     if not len(lpr_df):
-        return go.Figure().update_layout(**CHART_LAYOUT, title='暂无LPR数据')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无LPR数据')
 
     fig = go.Figure()
     lpr5 = lpr_df['lpr_5y'].dropna()
@@ -169,7 +169,7 @@ def _radar_chart(assessment):
     """Radar chart for 4-dimension real estate assessment."""
     if assessment is None or not isinstance(assessment, dict):
         return go.Figure().update_layout(
-            **CHART_LAYOUT, title='房地产综合评估 (分析模块未就绪)')
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='房地产综合评估 (分析模块未就绪)')
 
     dims = ['价格动量', '杠杆空间', '利率环境', '综合评分']
     key_map = {

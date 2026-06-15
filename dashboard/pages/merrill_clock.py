@@ -71,7 +71,7 @@ def _quadrant_chart(dq, mc_df):
 def _phase_pie(mc_df):
     """Pie chart of time spent in each phase."""
     if mc_df is None or not len(mc_df):
-        return go.Figure().update_layout(**CHART_LAYOUT, title='暂无数据')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无数据')
 
     counts = mc_df['phase'].value_counts()
     labels = [PHASE_LABELS.get(p, p) for p in counts.index]
@@ -94,7 +94,7 @@ def _phase_pie(mc_df):
 def _timeline_chart(mc_df):
     """Horizontal bar timeline showing phase transitions."""
     if mc_df is None or not len(mc_df):
-        return go.Figure().update_layout(**CHART_LAYOUT, title='暂无数据')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无数据')
 
     fig = go.Figure()
     dates = mc_df['date'].tolist()

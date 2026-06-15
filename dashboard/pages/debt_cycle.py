@@ -56,7 +56,7 @@ def _leverage_stacked(lev):
 def _leverage_change_speed(lev):
     """Year-over-year change in leverage (Δ per year) as bar chart."""
     if len(lev) < 5:
-        return go.Figure().update_layout(**CHART_LAYOUT, title='暂无足够数据')
+        return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无足够数据')
 
     # Compute annual change (~4 quarters back for quarterly data)
     df = lev.copy().sort_values('date')

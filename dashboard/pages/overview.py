@@ -249,7 +249,7 @@ def update_overview_charts(start_date, end_date):
     dq = load('derived_quarterly', start_date=start_date, end_date=end_date)
     lev = load('leverage', start_date=start_date, end_date=end_date)
 
-    empty = go.Figure().update_layout(**CHART_LAYOUT, title='暂无数据')
+    empty = go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无数据')
     return (
         _gdp_chart(dq) if len(dq) else empty,
         _cpi_ppi_chart(dm) if len(dm) else empty,

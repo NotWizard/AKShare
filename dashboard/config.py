@@ -66,12 +66,6 @@ CHART_LAYOUT = dict(
         color=C['text_2'],
         size=12,
     ),
-    title=dict(
-        font=dict(family=FONT, color=C['text'], size=15, weight=600),
-        x=0.02,
-        xanchor='left',
-        pad=dict(t=0, b=12),
-    ),
     margin=dict(l=52, r=20, t=48, b=36),
     xaxis=dict(
         gridcolor=C['grid'],
