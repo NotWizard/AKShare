@@ -322,6 +322,34 @@ def fetch_house_price(conn):
 
 
 # ─────────────────────────────────────────────
+# 11. 新增人民币贷款（社融数据的信用替代指标）
+# ─────────────────────────────────────────────
+def fetch_new_credit(conn):
+    log("采集: 新增人民币贷款 ...")
+    try:
+        df = ak.macro_china_new_financial_credit()
+        # 解析月份: "2026年5月份" → "2026-05-01"
+        def parse_month(s):
+            import re
+            m = re.match(r"(\d{4})年(\d{1,2})月", str(s))
+            if m:
+                return f"{m.group(1)}-{int(m.group(2)):02d}-01"
+            return None
+        result = pd.DataFrame({
+            "date": [parse_month(x) for x in df["月份"]],
+            "new_rmb_loan": pd.to_numeric(df["当月"], errors="coerce"),
+        })
+        result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    except Exception as e:
+        log(f"  ⚠️ 新增信贷数据采集失败: {e}")
+        result = pd.DataFrame()
+
+    if not result.empty:
+        save_to_db(result, "new_credit", conn)
+    return result
+
+
+# ─────────────────────────────────────────────
 # 主流程
 # ─────────────────────────────────────────────
 def main():
@@ -343,6 +371,7 @@ def main():
         fetch_lpr,
         fetch_industrial,
         fetch_house_price,
+        fetch_new_credit,
     ]
 
     results = {}

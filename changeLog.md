@@ -1,5 +1,30 @@
 # Change Log
 
+## 2026-06-15 — 补充新增信贷数据，扩展信用周期指标
+
+### 数据补充
+
+- **新增人民币贷款** (`new_credit` 表): 221 行月度数据，来源东方财富，覆盖 2008-2026
+- **M2 年率** (`m2_yoy_jin10` 表): 337 行，来源金十数据，覆盖 1998-2026
+
+### 脚本更新
+
+- `scripts/01_fetch_data.py`: 新增 `fetch_new_credit()` 采集函数，加入标准采集流程
+- `scripts/02_compute_derived.py`: 新增信贷数据合并到月度衍生表，计算 `loan_yoy`（新增贷款同比）和 `loan_stock_yoy`（贷款存量同比增速）
+
+### 数据变化
+
+- `derived_monthly`: 23 列 → **26 列**，新增 `new_rmb_loan`、`loan_yoy`、`loan_stock_yoy`
+- 信用周期分析现在可使用新增贷款数据作为社融的补充指标
+
+### 环境说明
+
+- 社融数据源 `data.mofcom.gov.cn`（商务部）在当前环境无法连接
+- 使用 Python 3.12 (`/opt/homebrew/bin/python3.12`) + `DYLD_LIBRARY_PATH` 可解决本机 LibreSSL 兼容问题
+- 新增信贷数据源（东方财富）在 Python 3.9 和 3.12 下均可正常采集
+
+---
+
 ## 2026-06-15 — 初始化中国宏观经济数据分析平台
 
 ### 新增功能

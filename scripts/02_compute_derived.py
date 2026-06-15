@@ -38,6 +38,7 @@ def compute_derived(conn):
     pmi = load_table(conn, "pmi")
     leverage = load_table(conn, "leverage")
     social_fin = load_table(conn, "social_finance")
+    new_credit = load_table(conn, "new_credit")
     lpr = load_table(conn, "lpr")
     industrial = load_table(conn, "industrial")
 
@@ -98,6 +99,21 @@ def compute_derived(conn):
 
         monthly = monthly.merge(
             sf[["date", "total", "rmb_loan", "sf_stock_yoy", "sf_impulse"]],
+            on="date", how="left"
+        )
+
+    # ─── 新增人民币贷款（社融的补充信用指标）───
+    if not new_credit.empty:
+        nc = new_credit.copy()
+        nc["date"] = pd.to_datetime(nc["date"])
+        nc = nc.sort_values("date")
+        # 新增贷款同比增速（作为信用脉冲的替代）
+        nc["loan_yoy"] = nc["new_rmb_loan"].pct_change(12) * 100
+        # 新增贷款 12 月滚动累计
+        nc["loan_12m"] = nc["new_rmb_loan"].rolling(12, min_periods=1).sum()
+        nc["loan_stock_yoy"] = nc["loan_12m"].pct_change(12) * 100
+        monthly = monthly.merge(
+            nc[["date", "new_rmb_loan", "loan_yoy", "loan_stock_yoy"]],
             on="date", how="left"
         )
 
