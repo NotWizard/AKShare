@@ -225,31 +225,61 @@ app.index_string = f'''
       .dark-date-picker .DateRangePickerInput_arrow {{ color: {C["text_3"]}; }}
       .dark-date-picker .DayPickerKeyboardShortcutPanel {{ background: {C["surface"]}; }}
 
-      /* Dropdown dark overrides */
-      .dark-dropdown .Select-control {{
+      /* Dropdown dark overrides (React Select v1 + v5) */
+      .dark-dropdown .Select-control,
+      .dark-dropdown .select__control {{
         background: {C["card"]} !important;
         border-color: {C["border"]} !important;
         border-radius: 6px !important;
       }}
-      .dark-dropdown .Select-menu-outer {{
+      .dark-dropdown .Select-control:hover,
+      .dark-dropdown .select__control:hover,
+      .dark-dropdown .select__control--is-focused {{
+        border-color: {C["accent"]} !important;
+        box-shadow: 0 0 0 1px {C["accent"]}40 !important;
+      }}
+      .dark-dropdown .Select-menu-outer,
+      .dark-dropdown .select__menu {{
         background: {C["card"]} !important;
         border-color: {C["border"]} !important;
+        border-radius: 8px !important;
       }}
-      .dark-dropdown .Select-option {{
+      .dark-dropdown .Select-option,
+      .dark-dropdown .select__option {{
         background: {C["card"]} !important; color: {C["text_2"]} !important;
       }}
-      .dark-dropdown .Select-option:hover {{
+      .dark-dropdown .Select-option:hover,
+      .dark-dropdown .select__option:hover,
+      .dark-dropdown .select__option--is-focused {{
         background: {C["card_hover"]} !important;
       }}
-      .dark-dropdown .Select-value-label {{ color: {C["text"]}; font-size: 12px; }}
-      .dark-dropdown .Select-multi-value {{
+      .dark-dropdown .select__option--is-selected {{
+        background: {C["accent_glow"]} !important; color: {C["text"]} !important;
+      }}
+      .dark-dropdown .Select-value-label,
+      .dark-dropdown .select__single-value {{
+        color: {C["text"]} !important; font-size: 12px;
+      }}
+      .dark-dropdown .Select-multi-value,
+      .dark-dropdown .select__multi-value {{
         background: {C["accent_glow"]} !important;
         border: 1px solid {C["accent"]}40;
         border-radius: 4px;
       }}
-      .dark-dropdown .Select-multi-value__label {{ color: {C["text"]}; font-size: 11px; }}
-      .dark-dropdown .Select-multi-value__remove:hover {{ background: {C["down_bg"]}; }}
-      .dark-dropdown .Select-placeholder {{ color: {C["text_3"]}; }}
+      .dark-dropdown .Select-multi-value__label,
+      .dark-dropdown .select__multi-value__label {{
+        color: {C["text"]} !important; font-size: 11px;
+      }}
+      .dark-dropdown .Select-multi-value__remove:hover,
+      .dark-dropdown .select__multi-value__remove:hover {{
+        background: {C["down_bg"]} !important;
+        color: {C["text"]} !important;
+      }}
+      .dark-dropdown .Select-placeholder,
+      .dark-dropdown .select__placeholder {{
+        color: {C["text_3"]} !important;
+      }}
+      .dark-dropdown .select__input {{ color: {C["text"]} !important; }}
 
       /* Nav link hover */
       .nav-link:hover {{

@@ -11,7 +11,7 @@ import pandas as pd
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, DB_PATH
 from dashboard.components.charts import (
-    _apply_layout, make_dual_axis_line, make_range_slider,
+    _apply_layout, _alpha, make_dual_axis_line, make_range_slider,
     HOVER_PCT, HOVER_IDX, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector, make_city_selector
@@ -171,6 +171,45 @@ def _lpr_trend_chart(lpr_df):
     return make_range_slider(fig)
 
 
+def _hh_debt_to_income_chart(dq):
+    """Household debt / disposable income ratio — more realistic leverage gauge."""
+    if dq is None or 'hh_debt_to_income' not in dq.columns or dq['hh_debt_to_income'].isna().all():
+        return go.Figure().update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        )
+
+    fig = go.Figure()
+    s = dq['hh_debt_to_income'].dropna()
+    if len(s) > 10:
+        dates_valid = dq.loc[s.index, 'date']
+        p90 = s.expanding().quantile(0.90)
+        median = s.expanding().median()
+        fig.add_trace(go.Scatter(
+            x=dates_valid, y=p90, name='90%分位',
+            mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
+            hovertemplate=HOVER_PCT,
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates_valid, y=median, name='历史中位',
+            mode='lines', line=dict(color=C['warn'], width=1, dash='dot'),
+            hovertemplate=HOVER_PCT,
+        ))
+
+    fig.add_trace(go.Scatter(
+        x=dq['date'], y=dq['hh_debt_to_income'], name='债务/可支配收入',
+        mode='lines', line=dict(color=C['down'], width=2.5),
+        fill='tozeroy', fillcolor=_alpha(C['down'], 0.10),
+        hovertemplate=HOVER_PCT,
+    ))
+    fig.update_layout(
+        yaxis_title='%',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02,
+                    xanchor='right', x=1),
+    )
+    _apply_layout(fig)
+    return make_range_slider(fig)
+
+
 def _radar_chart(assessment):
     """Radar chart for 4-dimension real estate assessment."""
     if assessment is None or not isinstance(assessment, dict):
@@ -259,6 +298,11 @@ layout = html.Div(
                 tip='房贷利率基准；同时展示历史 10%/90% 分位区间，判断当前利率相对历史的高低。'
             ),
         ),
+        # Household real leverage
+        make_graph_card(
+            '居民真实杠杆率 (债务 / 可支配收入)', 're-hh-debt-graph',
+            tip='居民债务余额除以可支配收入，比债务/GDP 更真实反映居民偿债压力；数值越高负担越重。'
+        ),
         # Radar & assessment
         make_row(
             make_graph_card(
@@ -283,6 +327,7 @@ layout = html.Div(
     Output('re-used-graph', 'figure'),
     Output('re-lev-price-graph', 'figure'),
     Output('re-lpr-graph', 'figure'),
+    Output('re-hh-debt-graph', 'figure'),
     Output('re-radar-graph', 'figure'),
     Output('re-assessment-text', 'children'),
     Input('re-picker', 'start_date'),
@@ -296,6 +341,7 @@ def update_re_charts(start_date, end_date, cities):
     hp = load('house_price', start_date=start_date, end_date=end_date)
     lpr_df = load('lpr', start_date=start_date, end_date=end_date)
     lev = load('leverage', start_date=start_date, end_date=end_date)
+    dq = load('derived_quarterly', start_date=start_date, end_date=end_date)
 
     # Get analysis if available
     assessment = None
@@ -314,6 +360,7 @@ def update_re_charts(start_date, end_date, cities):
         _used_price_chart(hp, cities),
         _leverage_vs_price(lev, hp, primary_city),
         _lpr_trend_chart(lpr_df),
+        _hh_debt_to_income_chart(dq),
         _radar_chart(assessment),
         _assessment_text(assessment),
     )

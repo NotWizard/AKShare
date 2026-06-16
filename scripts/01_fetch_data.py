@@ -322,7 +322,87 @@ def fetch_house_price(conn):
 
 
 # ─────────────────────────────────────────────
-# 11. 新增人民币贷款（社融数据的信用替代指标）
+# 11. 居民人均可支配收入 / 人口（用于计算居民真实杠杆率）
+# ─────────────────────────────────────────────
+def fetch_household_income(conn):
+    """Fetch national household disposable income (per capita) and population.
+
+    Computes aggregate household disposable income (亿元) from NBS data.
+    Falls back to an empty DataFrame if NBS is unreachable (common in some
+    network environments due to SSL/geo-blocking).
+    """
+    log("采集: 居民可支配收入与人口 ...")
+
+    def _parse_year_col(col):
+        import re
+        m = re.match(r"(\d{4})年", str(col))
+        if m:
+            return f"{m.group(1)}-01-01"
+        return None
+
+    income_df = pd.DataFrame()
+    pop_df = pd.DataFrame()
+
+    # 1) 居民人均可支配收入（元/人）
+    try:
+        df = ak.macro_china_nbs_nation(
+            kind="年度数据",
+            path="人民生活 > 居民人均可支配收入",
+            period="LAST30",
+        )
+        # Find absolute-value per-capita row
+        idx = [i for i in df.index if "居民人均可支配收入" in str(i) and "累计" not in str(i)]
+        if idx:
+            row = df.loc[idx[0]]
+            records = []
+            for col, val in row.items():
+                d = _parse_year_col(col)
+                if d:
+                    records.append({"date": d, "income_per_capita": pd.to_numeric(val, errors="coerce")})
+            income_df = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
+            log(f"  ✅ 人均可支配收入: {len(income_df)} 年")
+        else:
+            log("  ⚠️ 未找到居民人均可支配收入指标行")
+    except Exception as e:
+        log(f"  ⚠️ 人均可支配收入采集失败: {e}")
+
+    # 2) 总人口（万人）
+    try:
+        df = ak.macro_china_nbs_nation(
+            kind="年度数据",
+            path="人口 > 总人口",
+            period="LAST30",
+        )
+        idx = [i for i in df.index if "总人口" in str(i)]
+        if idx:
+            row = df.loc[idx[0]]
+            records = []
+            for col, val in row.items():
+                d = _parse_year_col(col)
+                if d:
+                    records.append({"date": d, "population_10k": pd.to_numeric(val, errors="coerce")})
+            pop_df = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
+            log(f"  ✅ 总人口: {len(pop_df)} 年")
+        else:
+            log("  ⚠️ 未找到总人口指标行")
+    except Exception as e:
+        log(f"  ⚠️ 总人口采集失败: {e}")
+
+    # 3) Merge and compute aggregate income (亿元)
+    if income_df.empty or pop_df.empty:
+        log("  ⚠️ 居民可支配收入聚合数据不可用，跳过保存")
+        return pd.DataFrame()
+
+    merged = income_df.merge(pop_df, on="date", how="outer").sort_values("date")
+    # income_per_capita(元) * population_10k(万人) / 10000 = 亿元
+    merged["income_abs"] = merged["income_per_capita"] * merged["population_10k"] / 10000.0
+    result = merged.dropna(subset=["income_abs"]).reset_index(drop=True)
+    save_to_db(result[["date", "income_per_capita", "population_10k", "income_abs"]], "household_income", conn)
+    return result
+
+
+# ─────────────────────────────────────────────
+# 12. 新增人民币贷款（社融数据的信用替代指标）
 # ─────────────────────────────────────────────
 def fetch_new_credit(conn):
     log("采集: 新增人民币贷款 ...")
@@ -371,6 +451,7 @@ def main():
         fetch_lpr,
         fetch_industrial,
         fetch_house_price,
+        fetch_household_income,
         fetch_new_credit,
     ]
 

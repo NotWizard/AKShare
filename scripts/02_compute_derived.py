@@ -41,6 +41,7 @@ def compute_derived(conn):
     new_credit = load_table(conn, "new_credit")
     lpr = load_table(conn, "lpr")
     industrial = load_table(conn, "industrial")
+    hh_income = load_table(conn, "household_income")
 
     # ─── 构建月度主表 ───
     # 以 money_supply 的日期为锚（月度，最长序列）
@@ -156,6 +157,20 @@ def compute_derived(conn):
             quarterly["household_change"] = quarterly["household"] - quarterly["household"].shift(4)
             quarterly["gov_change"] = quarterly["gov_total"] - quarterly["gov_total"].shift(4)
             quarterly["corp_change"] = quarterly["non_fin_corp"] - quarterly["non_fin_corp"].shift(4)
+
+    # ─── 居民真实杠杆率（债务 / 可支配收入）───
+    if not hh_income.empty and not quarterly.empty and "gdp_abs" in quarterly.columns:
+        hi = hh_income.copy()
+        hi["date"] = pd.to_datetime(hi["date"])
+        # 年度 income_abs 前向填充到季度
+        quarterly = quarterly.merge(hi[["date", "income_abs"]], on="date", how="left")
+        quarterly["income_abs"] = quarterly["income_abs"].ffill()
+        if "household" in quarterly.columns:
+            # household leverage is % of GDP; debt_abs = household/100 * gdp_abs
+            quarterly["hh_debt_abs"] = quarterly["household"] / 100.0 * quarterly["gdp_abs"]
+            quarterly["hh_income_share"] = quarterly["income_abs"] / quarterly["gdp_abs"] * 100.0
+            quarterly["hh_debt_to_income"] = quarterly["hh_debt_abs"] / quarterly["income_abs"] * 100.0
+            log(f"  ✅ hh_debt_to_income: {quarterly['hh_debt_to_income'].notna().sum()} / {len(quarterly)} quarters")
 
     if not quarterly.empty:
         quarterly = quarterly.sort_values("date").reset_index(drop=True)
