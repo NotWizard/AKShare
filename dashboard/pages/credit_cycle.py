@@ -11,10 +11,10 @@ from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import (
     _apply_layout, make_dual_axis_line, make_range_slider,
-    add_phase_background, HOVER_PCT, HOVER_PP,
+    add_phase_background, HOVER_PCT, HOVER_PP, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector
-from dashboard.components.layout import make_card, make_row
+from dashboard.components.layout import make_card, make_row, make_graph_card
 
 dash.register_page(__name__, path='/credit-cycle', name='信用周期', order=2)
 
@@ -40,13 +40,15 @@ def _m2_trend_chart(dm, cc_df):
     """M2 growth with trend line, background shaded by easing/tightening."""
     fig = go.Figure()
 
-    # Background shading from credit cycle phases (merged segments)
+    # Background shading from credit cycle phases (skip neutral to reduce vrects)
     if cc_df is not None and len(cc_df) and 'phase' in cc_df.columns:
         add_phase_background(
             fig,
             cc_df['date'].tolist(),
             cc_df['phase'].tolist(),
             PHASE_COLORS,
+            skip_phases={'neutral'},
+            min_periods=2,
         )
 
     fig.add_trace(go.Scatter(
@@ -66,7 +68,6 @@ def _m2_trend_chart(dm, cc_df):
         ))
 
     fig.update_layout(
-        title=dict(text='M2同比增速与趋势', x=0.5),
         yaxis_title='%',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -88,9 +89,6 @@ def _credit_impulse_chart(cc_df):
         marker_color=colors,
         hovertemplate=HOVER_PP,
     ))
-    fig.update_layout(
-        title=dict(text='信用脉冲', x=0.5),
-    )
     _apply_layout(fig)
     return make_range_slider(fig)
 
@@ -99,7 +97,7 @@ def _m2_cpi_overlay(dm):
     """M2 vs CPI showing leading relationship."""
     return make_range_slider(make_dual_axis_line(
         dm['date'], dm['m2_yoy'], dm['cpi_yoy'],
-        'M2同比', 'CPI同比', 'M2 与 CPI 领先滞后关系',
+        'M2同比', 'CPI同比',
         y1_color=C['accent'], y2_color='#e74c3c',
     ))
 
@@ -133,24 +131,25 @@ def _current_phase_badge(cc_df):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
+
 layout = html.Div(
     style={'padding': '20px'},
     children=[
         make_date_range_selector(MIN_DATE, MAX_DATE, id_prefix='cc'),
         html.Div(id='cc-phase-badge'),
-        make_card(
-            [dcc.Graph(id='cc-m2-graph', config={'displayModeBar': False})],
-            title='M2同比增速',
+        make_graph_card(
+            'M2同比增速', 'cc-m2-graph',
+            tip='M2 是广义货币供应量；12 个月滚动均线代表中长期趋势，背景色区分宽松/紧缩/中性阶段。'
         ),
         html.Div(style={'height': '16px'}),
-        make_card(
-            [dcc.Graph(id='cc-impulse-graph', config={'displayModeBar': False})],
-            title='信用脉冲',
+        make_graph_card(
+            '信用脉冲', 'cc-impulse-graph',
+            tip='M2 同比增速相对其趋势的偏离，衡量货币政策松紧变化的边际力度。'
         ),
         html.Div(style={'height': '16px'}),
-        make_card(
-            [dcc.Graph(id='cc-m2cpi-graph', config={'displayModeBar': False})],
-            title='M2与CPI领先滞后关系',
+        make_graph_card(
+            'M2与CPI领先滞后关系', 'cc-m2cpi-graph',
+            tip='M2 通常是通胀的领先指标，该图对比两者走势观察货币到物价的政策传导。'
         ),
     ],
 )

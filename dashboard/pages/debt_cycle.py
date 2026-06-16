@@ -13,10 +13,10 @@ from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import (
     _apply_layout, make_area_chart, make_range_slider,
-    HOVER_PCT, HOVER_PP,
+    HOVER_PCT, HOVER_PP, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector, make_phase_badge
-from dashboard.components.layout import make_card, make_row
+from dashboard.components.layout import make_card, make_row, make_graph_card
 
 dash.register_page(__name__, path='/debt-cycle', name='债务周期', order=4)
 
@@ -47,7 +47,6 @@ def _leverage_stacked(lev):
             '非金融企业杠杆': lev['non_fin_corp'],
             '政府杠杆': lev['gov_total'],
         },
-        '宏观杠杆率构成 (占GDP比重 %)',
         colors_dict={
             '居民杠杆': '#2ecc71',
             '非金融企业杠杆': '#e74c3c',
@@ -80,7 +79,6 @@ def _leverage_change_speed(lev):
         ))
 
     fig.update_layout(
-        title=dict(text='杠杆率变化速度 (年度Δ)', x=0.5),
         barmode='group',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -107,7 +105,6 @@ def _gov_breakdown(lev):
             hovertemplate=HOVER_PCT,
         ))
     fig.update_layout(
-        title=dict(text='政府杠杆: 中央 vs 地方', x=0.5),
         yaxis_title='%',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -180,24 +177,25 @@ def _dalio_assessment(dc_df, lev):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
+
 layout = html.Div(
     style={'padding': '20px'},
     children=[
         make_date_range_selector(MIN_DATE, MAX_DATE, id_prefix='dc'),
         html.Div(id='dc-phase-badges'),
-        make_card(
-            [dcc.Graph(id='dc-stack-graph', config={'displayModeBar': False})],
-            title='宏观杠杆率构成',
+        make_graph_card(
+            '宏观杠杆率构成', 'dc-stack-graph',
+            tip='居民、企业、政府三大部门债务余额占 GDP 的比重堆叠展示，衡量经济体债务负担。'
         ),
         html.Div(style={'height': '16px'}),
         make_row(
-            make_card(
-                [dcc.Graph(id='dc-speed-graph', config={'displayModeBar': False})],
-                title='杠杆率变化速度',
+            make_graph_card(
+                '杠杆率变化速度', 'dc-speed-graph',
+                tip='各部门杠杆率相对 4 个季度前的变化，正值为加杠杆，负值为去杠杆。'
             ),
-            make_card(
-                [dcc.Graph(id='dc-gov-graph', config={'displayModeBar': False})],
-                title='政府杠杆拆分',
+            make_graph_card(
+                '政府杠杆拆分', 'dc-gov-graph',
+                tip='中央政府与地方政府杠杆率分别展示，观察债务在中央与地方之间的结构。'
             ),
         ),
         html.Div(id='dc-assessment'),

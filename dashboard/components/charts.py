@@ -20,6 +20,23 @@ HOVER_PP  = '<b>%{fullData.name}</b>: %{y:+.2f}pp<extra></extra>'
 HOVER_IDX = '<b>%{fullData.name}</b>: %{y:.1f}<extra></extra>'
 
 
+def empty_dark_fig(height: int = 300) -> go.Figure:
+    """Return a minimal dark empty figure used as dcc.Graph placeholder.
+
+    Prevents the white flash that occurs before callbacks populate real data.
+    """
+    fig = go.Figure()
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=height,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+    )
+    return fig
+
+
 def _alpha(hex_color: str, opacity: float) -> str:
     """Convert a hex color + opacity to rgba string (Plotly-compatible).
 
@@ -52,11 +69,21 @@ def add_phase_background(
     phases,
     color_map: dict,
     opacity: float = 0.08,
+    skip_phases: set | None = None,
+    min_periods: int = 2,
 ) -> go.Figure:
     """Shade the chart background by consecutive same-phase segments.
 
     Merging adjacent same-phase rows into a single ``add_vrect`` keeps the
     figure JSON small and the SVG tree manageable on long monthly series.
+
+    Parameters
+    ----------
+    skip_phases : set, optional
+        Phases to skip (e.g. {'neutral'}) to reduce vrect count.
+    min_periods : int
+        Minimum number of consecutive periods for a segment to be drawn.
+        Segments shorter than this are silently dropped.
     """
     dates = list(dates)
     phases = list(phases)
@@ -64,28 +91,37 @@ def add_phase_background(
     if n == 0:
         return fig
 
+    skip = skip_phases or set()
+
+    # Build segments first
+    segments = []  # (start_date, end_date, phase)
     seg_start = dates[0]
     cur = phases[0]
+    seg_len = 1
 
     for i in range(1, n):
         if phases[i] != cur:
-            color = color_map.get(cur)
-            if color:
-                fig.add_vrect(
-                    x0=seg_start, x1=dates[i],
-                    fillcolor=color, opacity=opacity,
-                    line_width=0, layer='below',
-                )
+            segments.append((seg_start, dates[i], cur, seg_len))
             seg_start = dates[i]
             cur = phases[i]
+            seg_len = 1
+        else:
+            seg_len += 1
+    segments.append((seg_start, dates[-1], cur, seg_len))
 
-    color = color_map.get(cur)
-    if color:
-        fig.add_vrect(
-            x0=seg_start, x1=dates[-1],
-            fillcolor=color, opacity=opacity,
-            line_width=0, layer='below',
-        )
+    # Draw only qualifying segments
+    for x0, x1, phase, length in segments:
+        if phase in skip:
+            continue
+        if length < min_periods:
+            continue
+        color = color_map.get(phase)
+        if color:
+            fig.add_vrect(
+                x0=x0, x1=x1,
+                fillcolor=color, opacity=opacity,
+                line_width=0, layer='below',
+            )
     return fig
 
 
@@ -94,7 +130,7 @@ def make_phase_timeline(
     phases,
     color_map: dict,
     label_map: dict,
-    title: str = '',
+    title: str | None = None,
 ) -> go.Figure:
     """Phase timeline as merged-segment Bar chart.
 
@@ -147,13 +183,15 @@ def make_phase_timeline(
             hovertemplate='%{customdata}<extra></extra>',
         ))
 
-    fig.update_layout(
-        title=dict(text=title, x=0.5),
+    layout_kwargs = dict(
         barmode='overlay',
         yaxis=dict(showticklabels=False, title='', range=[0, 1]),
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
+    if title:
+        layout_kwargs['title'] = dict(text=title, x=0.5)
+    fig.update_layout(**layout_kwargs)
     _apply_layout(fig)
     return fig
 
@@ -163,7 +201,7 @@ def make_phase_timeline(
 # ---------------------------------------------------------------------------
 def make_dual_axis_line(
     dates, y1, y2,
-    y1_name: str, y2_name: str, title: str,
+    y1_name: str, y2_name: str, title: str | None = None,
     y1_color: str = C['accent'], y2_color: str = C['up'],
     y1_hover: str = HOVER_PCT, y2_hover: str = HOVER_PCT,
 ) -> go.Figure:
@@ -188,10 +226,10 @@ def make_dual_axis_line(
         ),
         secondary_y=True,
     )
-    fig.update_layout(
-        title=dict(text=title),
-        xaxis=dict(rangeslider=dict(visible=False)),
-    )
+    layout_kwargs = dict(xaxis=dict(rangeslider=dict(visible=False)))
+    if title:
+        layout_kwargs['title'] = dict(text=title)
+    fig.update_layout(**layout_kwargs)
     _apply_layout(fig)
     fig.update_yaxes(
         title_text=y1_name, secondary_y=False,
@@ -221,7 +259,7 @@ def make_dual_axis_line(
 def make_area_chart(
     dates,
     values_dict: dict[str, list],
-    title: str,
+    title: str | None = None,
     colors_dict: dict[str, str] | None = None,
     stack: bool = True,
     hovertemplate: str = HOVER_PCT,
@@ -239,7 +277,8 @@ def make_area_chart(
             stackgroup='one' if stack else None,
             hovertemplate=hovertemplate,
         ))
-    fig.update_layout(title=dict(text=title))
+    if title:
+        fig.update_layout(title=dict(text=title))
     _apply_layout(fig)
     return fig
 
@@ -249,7 +288,7 @@ def make_area_chart(
 # ---------------------------------------------------------------------------
 def make_scatter_quadrant(
     x, y, phases,
-    title: str,
+    title: str | None = None,
     x_label: str = 'GDP同比 (%)',
     y_label: str = 'CPI同比 (%)',
     hline_val: float = 2.0,
@@ -285,10 +324,10 @@ def make_scatter_quadrant(
     if vline_val is not None:
         fig.add_vline(x=vline_val, **line_style)
 
-    fig.update_layout(
-        title=dict(text=title),
-        xaxis_title=x_label, yaxis_title=y_label,
-    )
+    layout_kwargs = dict(xaxis_title=x_label, yaxis_title=y_label)
+    if title:
+        layout_kwargs['title'] = dict(text=title)
+    fig.update_layout(**layout_kwargs)
     # Quadrant scatter: closest hover; spike crosshair would be misleading.
     _apply_layout(fig, hovermode='closest')
     fig.update_xaxes(showspikes=False)
@@ -301,7 +340,7 @@ def make_scatter_quadrant(
 # ---------------------------------------------------------------------------
 def make_bar_line_combo(
     dates, bars, line,
-    bar_name: str, line_name: str, title: str,
+    bar_name: str, line_name: str, title: str | None = None,
     bar_color: str = C['accent'], line_color: str = C['up'],
     bar_hover: str = HOVER_PCT, line_hover: str = HOVER_PCT,
 ) -> go.Figure:
@@ -324,7 +363,10 @@ def make_bar_line_combo(
         ),
         secondary_y=True,
     )
-    fig.update_layout(title=dict(text=title), barmode='overlay')
+    layout_kwargs = dict(barmode='overlay')
+    if title:
+        layout_kwargs['title'] = dict(text=title)
+    fig.update_layout(**layout_kwargs)
     _apply_layout(fig)
     fig.update_yaxes(title_text=bar_name, secondary_y=False)
     fig.update_yaxes(title_text=line_name, secondary_y=True)

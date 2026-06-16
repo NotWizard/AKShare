@@ -1,12 +1,14 @@
 """Layout primitives — cards, rows, sections, metric tiles."""
 
 from __future__ import annotations
-from dash import html
+from dash import html, dcc
 from dashboard.config import C, FONT
 
 
-def make_card(children, title: str | None = None, style: dict | None = None) -> html.Div:
-    """Elevated card with subtle border and refined header."""
+def make_card(children, title: str | None = None, tip: str | None = None, style: dict | None = None) -> html.Div:
+    """Elevated card with subtle border, optional title + chart tip."""
+    from dashboard.components.controls import make_chart_tip
+
     card_style = {
         'backgroundColor': C['card'],
         'borderRadius': '12px',
@@ -15,16 +17,17 @@ def make_card(children, title: str | None = None, style: dict | None = None) -> 
         'flex': '1 1 0',
         'minWidth': '0',
         'position': 'relative',
-        'overflow': 'hidden',
     }
     if style:
         card_style.update(style)
 
     body = []
     if title:
-        body.append(html.Div(
-            title,
+        title_row = html.Div(
             style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'space-between',
                 'color': C['text_2'],
                 'fontSize': '13px',
                 'fontWeight': '500',
@@ -34,13 +37,46 @@ def make_card(children, title: str | None = None, style: dict | None = None) -> 
                 'borderBottom': f'1px solid {C["border"]}',
                 'fontFamily': FONT,
             },
-        ))
+            children=[
+                html.Span(title),
+                make_chart_tip(tip) if tip else html.Span(),
+            ],
+        )
+        body.append(title_row)
     if isinstance(children, list):
         body.extend(children)
     else:
         body.append(children)
 
     return html.Div(style=card_style, children=body)
+
+
+def make_graph_card(title: str, graph_id: str, tip: str | None = None,
+                    placeholder=None) -> html.Div:
+    """Pre-styled card wrapping a dcc.Graph in dcc.Loading.
+
+    Provides a fixed min-height placeholder to reduce layout shift while
+    callbacks populate the real figure.
+    """
+    if placeholder is None:
+        from dashboard.components.charts import empty_dark_fig
+        placeholder = empty_dark_fig()
+    return make_card(
+        [dcc.Loading(
+            dcc.Graph(
+                id=graph_id,
+                figure=placeholder,
+                config={'displayModeBar': False},
+                style={'height': '320px'},
+            ),
+            type='dot',
+            color=C['accent'],
+            parent_style={'backgroundColor': 'transparent', 'minHeight': '320px'},
+        )],
+        title=title,
+        tip=tip,
+        style={'minHeight': '380px'},
+    )
 
 
 def make_row(*cards, gap: str = '16px') -> html.Div:

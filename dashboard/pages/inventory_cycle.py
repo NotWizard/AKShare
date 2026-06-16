@@ -11,10 +11,10 @@ from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import (
     _apply_layout, make_range_slider, add_phase_background,
-    make_phase_timeline, HOVER_PCT, HOVER_IDX,
+    make_phase_timeline, HOVER_PCT, HOVER_IDX, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector
-from dashboard.components.layout import make_card, make_row
+from dashboard.components.layout import make_card, make_row, make_graph_card
 
 dash.register_page(__name__, path='/inventory-cycle', name='库存周期', order=3)
 
@@ -65,7 +65,6 @@ def _pmi_chart(dm, ic_df):
                   annotation_text='荣枯线')
 
     fig.update_layout(
-        title=dict(text='PMI制造业指数与库存周期', x=0.5),
         yaxis_title='PMI',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -100,7 +99,6 @@ def _ip_chart(dm, ic_df):
         ))
 
     fig.update_layout(
-        title=dict(text='工业增加值同比与趋势', x=0.5),
         yaxis_title='%',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -119,7 +117,6 @@ def _phase_timeline(ic_df):
         ic_df['phase'].tolist(),
         PHASE_COLORS,
         PHASE_LABELS,
-        title='库存周期阶段时间线',
     )
     return make_range_slider(fig)
 
@@ -150,24 +147,25 @@ def _current_phase_badge(ic_df):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
+
 layout = html.Div(
     style={'padding': '20px'},
     children=[
         make_date_range_selector(MIN_DATE, MAX_DATE, id_prefix='ic'),
         html.Div(id='ic-phase-badge'),
         make_row(
-            make_card(
-                [dcc.Graph(id='ic-pmi-graph', config={'displayModeBar': False})],
-                title='PMI制造业指数',
+            make_graph_card(
+                'PMI制造业指数', 'ic-pmi-graph',
+                tip='PMI > 50 表示需求扩张；结合工业增加值趋势判断主动补库/被动补库/主动去库/被动去库。'
             ),
-            make_card(
-                [dcc.Graph(id='ic-ip-graph', config={'displayModeBar': False})],
-                title='工业增加值同比',
+            make_graph_card(
+                '工业增加值同比', 'ic-ip-graph',
+                tip='反映工业生产增长情况；对比 6 个月均线判断生产端 momentum。'
             ),
         ),
-        make_card(
-            [dcc.Graph(id='ic-timeline-graph', config={'displayModeBar': False})],
-            title='库存周期阶段',
+        make_graph_card(
+            '库存周期阶段', 'ic-timeline-graph',
+            tip='展示主动补库、被动补库、主动去库、被动去库四个阶段随时间的切换，帮助定位当前库存周期位置。'
         ),
     ],
 )

@@ -11,10 +11,10 @@ from dashboard.db import load
 from dashboard.config import CHART_LAYOUT, C, DB_PATH, FONT
 from dashboard.components.charts import (
     make_dual_axis_line, make_area_chart, make_range_slider, _alpha, _apply_layout,
-    HOVER_PCT, HOVER_PP, HOVER_IDX,
+    HOVER_PCT, HOVER_PP, HOVER_IDX, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector
-from dashboard.components.layout import make_card, make_row, make_metric_tile, make_section
+from dashboard.components.layout import make_card, make_row, make_metric_tile, make_section, make_graph_card
 
 dash.register_page(__name__, path='/', name='综合概览', order=0)
 
@@ -60,7 +60,7 @@ def _gdp_chart(dq):
             hovertemplate=HOVER_PCT,
         ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
-    fig.update_layout(title=dict(text='GDP 同比增长率'), yaxis_title='%')
+    fig.update_layout(yaxis_title='%')
     _apply_layout(fig)
     return make_range_slider(fig)
 
@@ -68,7 +68,7 @@ def _gdp_chart(dq):
 def _cpi_ppi_chart(dm):
     return make_range_slider(make_dual_axis_line(
         dm['date'], dm['cpi_yoy'], dm['ppi_yoy'],
-        'CPI同比', 'PPI同比', 'CPI / PPI 同比走势',
+        'CPI同比', 'PPI同比',
         y1_color=C['warn'], y2_color=C['info'],
     ))
 
@@ -76,7 +76,7 @@ def _cpi_ppi_chart(dm):
 def _m1_m2_chart(dm):
     return make_range_slider(make_dual_axis_line(
         dm['date'], dm['m1_yoy'], dm['m2_yoy'],
-        'M1同比', 'M2同比', 'M1 / M2 同比增速',
+        'M1同比', 'M2同比',
         y1_color=C['up'], y2_color=C['accent'],
     ))
 
@@ -94,7 +94,7 @@ def _spread_chart(dm):
         hovertemplate=HOVER_PP,
     ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
-    fig.update_layout(title=dict(text='M2-M1 剪刀差'), yaxis_title='pp')
+    fig.update_layout(yaxis_title='pp')
     _apply_layout(fig)
     return make_range_slider(fig)
 
@@ -117,7 +117,7 @@ def _pmi_chart(dm):
     fig.add_hline(y=50, line_dash='dash', line_color=C['down'], opacity=0.5,
                   annotation_text='荣枯线', annotation_font_color=C['text_3'],
                   annotation_font_size=10)
-    fig.update_layout(title=dict(text='PMI 制造业指数'))
+    fig.update_layout(yaxis_title='PMI')
     _apply_layout(fig)
     return make_range_slider(fig)
 
@@ -128,7 +128,6 @@ def _leverage_chart(lev):
         {'居民': lev['household'],
          '非金融企业': lev['non_fin_corp'],
          '政府': lev['gov_total']},
-        '宏观杠杆率构成 (占GDP %)',
         colors_dict={
             '居民': C['up'],
             '非金融企业': C['down'],
@@ -194,12 +193,6 @@ def _kpi_strip():
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
-def _card_with_graph(title, graph_id):
-    return make_card(
-        [dcc.Graph(id=graph_id, config={'displayModeBar': False})],
-        title=title,
-    )
-
 
 layout = html.Div(
     style={'padding': '24px 28px'},
@@ -222,18 +215,36 @@ layout = html.Div(
         _kpi_strip(),
         # Row 1 — GDP & CPI/PPI
         make_row(
-            _card_with_graph('GDP 同比增长率', 'ov-gdp-graph'),
-            _card_with_graph('CPI / PPI 同比走势', 'ov-cpi-graph'),
+            make_graph_card(
+                'GDP 同比增长率', 'ov-gdp-graph',
+                tip='国内生产总值相对去年同期的增长速度，反映整体经济景气度；4季度滚动均线用于平滑短期波动。'
+            ),
+            make_graph_card(
+                'CPI / PPI 同比走势', 'ov-cpi-graph',
+                tip='CPI 反映居民消费端通胀，PPI 反映工业生产者出厂价格；双轴对比消费端与生产端的价格压力。'
+            ),
         ),
         # Row 2 — M1/M2 & Spread
         make_row(
-            _card_with_graph('M1 / M2 同比增速', 'ov-m1m2-graph'),
-            _card_with_graph('M2-M1 剪刀差', 'ov-spread-graph'),
+            make_graph_card(
+                'M1 / M2 同比增速', 'ov-m1m2-graph',
+                tip='M2 为广义货币总量，M1 包含现金与活期存款；M1 增速通常领先企业投资与交易活跃度。'
+            ),
+            make_graph_card(
+                'M2-M1 剪刀差', 'ov-spread-graph',
+                tip='M2 同比减 M1 同比。差值扩大意味着定期存款占比上升、资金活化程度下降，经济活跃度偏弱。'
+            ),
         ),
         # Row 3 — PMI & Leverage
         make_row(
-            _card_with_graph('PMI 制造业指数', 'ov-pmi-graph'),
-            _card_with_graph('宏观杠杆率', 'ov-lev-graph'),
+            make_graph_card(
+                'PMI 制造业指数', 'ov-pmi-graph',
+                tip='采购经理人指数，50 为荣枯线；大于 50 表示制造业扩张，小于 50 表示收缩。'
+            ),
+            make_graph_card(
+                '宏观杠杆率', 'ov-lev-graph',
+                tip='居民、非金融企业、政府三个部门债务余额占 GDP 的比重，衡量经济体整体债务负担。'
+            ),
         ),
     ],
 )

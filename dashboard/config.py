@@ -68,7 +68,7 @@ CHART_LAYOUT = dict(
         color=C['text_2'],
         size=12,
     ),
-    margin=dict(l=52, r=20, t=48, b=36),
+    margin=dict(l=52, r=20, t=32, b=36),
     colorway=[C['accent'], C['up'], C['down'], C['warn'], '#a78bfa', '#06b6d4', '#f97316', '#ec4899'],
 )
 

@@ -12,10 +12,10 @@ from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, DB_PATH
 from dashboard.components.charts import (
     _apply_layout, make_dual_axis_line, make_range_slider,
-    HOVER_PCT, HOVER_IDX,
+    HOVER_PCT, HOVER_IDX, empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector, make_city_selector
-from dashboard.components.layout import make_card, make_row
+from dashboard.components.layout import make_card, make_row, make_graph_card
 
 dash.register_page(__name__, path='/real-estate', name='房地产市场', order=5)
 
@@ -62,7 +62,6 @@ def _price_index_chart(hp, cities):
             ))
 
     fig.update_layout(
-        title=dict(text='各城市新建住宅价格指数', x=0.5),
         yaxis_title='指数',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -86,7 +85,6 @@ def _used_price_chart(hp, cities):
             ))
 
     fig.update_layout(
-        title=dict(text='各城市二手住宅价格指数', x=0.5),
         yaxis_title='指数',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -124,7 +122,6 @@ def _leverage_vs_price(lev, hp, city):
         secondary_y=True,
     )
     fig.update_layout(
-        title=dict(text=f'居民杠杆率 vs {city}房价指数', x=0.5),
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
     )
@@ -166,7 +163,6 @@ def _lpr_trend_chart(lpr_df):
     ))
 
     fig.update_layout(
-        title=dict(text='LPR 5年期以上贷款利率走势', x=0.5),
         yaxis_title='%',
         legend=dict(orientation='h', yanchor='bottom', y=1.02,
                     xanchor='right', x=1),
@@ -199,7 +195,6 @@ def _radar_chart(assessment):
         hovertemplate='<b>%{theta}</b>: %{r:.2f}<extra></extra>',
     ))
     fig.update_layout(
-        title=dict(text='房地产四维评估', x=0.5),
         hovermode='closest',
         polar=dict(
             radialaxis=dict(visible=True, range=[0, 1],
@@ -236,6 +231,7 @@ def _assessment_text(assessment):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
+
 layout = html.Div(
     style={'padding': '20px'},
     children=[
@@ -243,35 +239,36 @@ layout = html.Div(
         make_city_selector(ALL_CITIES, id_prefix='re'),
         # Price charts
         make_row(
-            make_card(
-                [dcc.Graph(id='re-new-graph', config={'displayModeBar': False})],
-                title='新建住宅价格指数',
+            make_graph_card(
+                '新建住宅价格指数', 're-new-graph',
+                tip='以定基指数展示各城市新建住宅价格的长期走势，便于跨城市比较。'
             ),
-            make_card(
-                [dcc.Graph(id='re-used-graph', config={'displayModeBar': False})],
-                title='二手住宅价格指数',
+            make_graph_card(
+                '二手住宅价格指数', 're-used-graph',
+                tip='以定基指数展示各城市二手住宅价格的长期走势，反映二手市场热度。'
             ),
         ),
         # Leverage vs price & LPR
         make_row(
-            make_card(
-                [dcc.Graph(id='re-lev-price-graph', config={'displayModeBar': False})],
-                title='杠杆率 vs 房价',
+            make_graph_card(
+                '杠杆率 vs 房价', 're-lev-price-graph',
+                tip='对比居民部门杠杆率与重点城市房价指数，观察杠杆对房价的支撑空间。'
             ),
-            make_card(
-                [dcc.Graph(id='re-lpr-graph', config={'displayModeBar': False})],
-                title='LPR 5年期利率',
+            make_graph_card(
+                'LPR 5年期利率', 're-lpr-graph',
+                tip='房贷利率基准；同时展示历史 10%/90% 分位区间，判断当前利率相对历史的高低。'
             ),
         ),
         # Radar & assessment
         make_row(
-            make_card(
-                [dcc.Graph(id='re-radar-graph', config={'displayModeBar': False})],
-                title='综合评估雷达',
+            make_graph_card(
+                '综合评估雷达', 're-radar-graph',
+                tip='从价格动量、杠杆空间、利率环境、综合评分四个维度评估房地产市场整体健康度。'
             ),
             make_card(
                 [html.Div(id='re-assessment-text')],
                 title='市场评估',
+                tip='基于上述三维评分给出的综合结论，分数越高表示当前环境对住房需求越有利。',
             ),
         ),
     ],

@@ -58,5 +58,7 @@ echo "  ────────────────────────
 echo "  地址: http://localhost:$PORT"
 echo "  停止: Ctrl + C"
 echo ""
+echo "  提示: DASH_DEBUG=1 ./run_dashboard.sh 开启开发模式（热重载+调试工具）"
+echo ""
 
 python3 dashboard/app.py

@@ -145,3 +145,34 @@ def make_phase_badge(
             display,
         ],
     )
+
+
+def make_chart_tip(tip: str) -> html.Span:
+    """Small question-mark icon that shows a tooltip on hover.
+
+    Parameters
+    ----------
+    tip : str
+        Tooltip text explaining the chart logic / meaning.
+    """
+    return html.Span(
+        className='chart-tip',
+        **{'data-tip': tip},
+        children='?',
+        style={
+            'display': 'inline-flex',
+            'alignItems': 'center',
+            'justifyContent': 'center',
+            'width': '16px',
+            'height': '16px',
+            'borderRadius': '50%',
+            'backgroundColor': C['border_hi'],
+            'color': C['text_2'],
+            'fontSize': '10px',
+            'fontWeight': '700',
+            'fontFamily': FONT,
+            'cursor': 'help',
+            'lineHeight': '1',
+            'marginLeft': '8px',
+        },
+    )

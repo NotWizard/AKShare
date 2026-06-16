@@ -12,9 +12,10 @@ from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
 from dashboard.components.charts import (
     _apply_layout, make_scatter_quadrant, make_range_slider, make_phase_timeline,
+    empty_dark_fig,
 )
 from dashboard.components.controls import make_date_range_selector
-from dashboard.components.layout import make_card, make_row
+from dashboard.components.layout import make_card, make_row, make_graph_card
 
 dash.register_page(__name__, path='/merrill-clock', name='美林时钟', order=1)
 
@@ -52,7 +53,6 @@ def _quadrant_chart(dq, mc_df):
 
     fig = make_scatter_quadrant(
         x, y, phases,
-        title='美林时钟四象限图',
         x_label='GDP同比 (%)', y_label='CPI同比 (%)',
         hline_val=2.0, vline_val=gdp_trend,
     )
@@ -89,7 +89,6 @@ def _phase_pie(mc_df):
         hovertemplate='<b>%{label}</b>: %{value} 期 (%{percent})<extra></extra>',
     ))
     fig.update_layout(
-        title=dict(text='各阶段时间分布', x=0.5),
         showlegend=False,
         hovermode='closest',
     )
@@ -107,7 +106,6 @@ def _timeline_chart(mc_df):
         mc_df['phase'].tolist(),
         PHASE_COLORS,
         PHASE_LABELS,
-        title='经济周期阶段时间线',
     )
     return make_range_slider(fig)
 
@@ -115,23 +113,24 @@ def _timeline_chart(mc_df):
 # ---------------------------------------------------------------------------
 # Layout
 # ---------------------------------------------------------------------------
+
 layout = html.Div(
     style={'padding': '20px'},
     children=[
         make_date_range_selector(MIN_DATE, MAX_DATE, id_prefix='mc'),
         make_row(
-            make_card(
-                [dcc.Graph(id='mc-quadrant-graph', config={'displayModeBar': False})],
-                title='美林时钟四象限',
+            make_graph_card(
+                '美林时钟四象限', 'mc-quadrant-graph',
+                tip='横轴为 GDP 同比增速，纵轴为 CPI 同比增速；按增长/通胀高低划分复苏、过热、滞胀、衰退四个象限。'
             ),
-            make_card(
-                [dcc.Graph(id='mc-pie-graph', config={'displayModeBar': False})],
-                title='阶段分布',
+            make_graph_card(
+                '阶段分布', 'mc-pie-graph',
+                tip='统计历史样本中四个阶段出现的时长占比，帮助判断当前周期所处的位置。'
             ),
         ),
-        make_card(
-            [dcc.Graph(id='mc-timeline-graph', config={'displayModeBar': False})],
-            title='周期阶段时间线',
+        make_graph_card(
+            '周期阶段时间线', 'mc-timeline-graph',
+            tip='按年份展示经济周期阶段的演变，颜色对应复苏、过热、滞胀、衰退四个阶段。'
         ),
     ],
 )
