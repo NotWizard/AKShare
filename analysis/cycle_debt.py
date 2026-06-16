@@ -15,6 +15,7 @@ Combines with GDP growth for overall phase:
     Stable contraction:     stable + GDP declining
 """
 
+import functools
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -28,6 +29,7 @@ def _classify_sector(change: pd.Series) -> pd.Series:
     )
 
 
+@functools.lru_cache(maxsize=4)
 def classify_debt(db_path: str) -> pd.DataFrame:
     """Classify each quarter into a debt-cycle phase per sector and overall.
 

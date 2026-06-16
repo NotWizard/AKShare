@@ -11,6 +11,7 @@ Phases:
     Recession   (GDP↓ CPI↓)  → #3498db blue
 """
 
+import functools
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -23,6 +24,7 @@ PHASE_COLORS = {
 }
 
 
+@functools.lru_cache(maxsize=4)
 def classify_merrill(db_path: str) -> pd.DataFrame:
     """Classify each year into a Merrill Lynch investment-clock phase.
 

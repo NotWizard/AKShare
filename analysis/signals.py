@@ -19,6 +19,7 @@ Interpretation bands:
     −3 to −4 : strongly bearish
 """
 
+import functools
 import sys
 from pathlib import Path
 from typing import Dict
@@ -79,6 +80,7 @@ def _interpret(score: int) -> str:
         return "Strongly bearish — most cycles aligned in contraction"
 
 
+@functools.lru_cache(maxsize=4)
 def compute_signals(db_path: str) -> Dict:
     """Compute composite macro signals from all four cycle frameworks.
 

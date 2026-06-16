@@ -1,0 +1,160 @@
+/* ==========================================================================
+   Terminal Fintech — Dark theme overrides for Dash core components
+   Targets both legacy react-dates classes and new Dash 2.x radix-based picker.
+   ========================================================================== */
+
+/* ----- DatePickerRange: kill the white parent div Dash injects ----- */
+div:has(> .dash-datepicker-input-wrapper) {
+  background-color: transparent !important;
+}
+
+.dash-datepicker-input-wrapper {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  gap: 8px !important;
+}
+
+.dash-datepicker-input {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  font-family: -apple-system, "Inter", "PingFang SC", sans-serif !important;
+  border: none !important;
+  outline: none !important;
+  caret-color: #6366f1 !important;
+}
+
+.dash-datepicker-input::placeholder {
+  color: #64748b !important;
+}
+
+.dash-datepicker-range-arrow,
+.dash-datepicker-caret-icon {
+  color: #64748b !important;
+}
+
+.dash-datepicker-caret-icon:hover {
+  color: #f1f5f9 !important;
+}
+
+/* ----- DatePickerRange: Calendar popup (radix-based popover) ----- */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+.dash-datepicker-calendar {
+  background-color: #1a2332 !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+  color: #f1f5f9 !important;
+}
+
+.dash-datepicker-calendar button {
+  color: #f1f5f9 !important;
+}
+
+.dash-datepicker-calendar button:hover {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+}
+
+.dash-datepicker-calendar [data-selected] {
+  background-color: #6366f1 !important;
+  color: #fff !important;
+}
+
+.dash-datepicker-calendar [data-in-range] {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+/* ----- Dropdown (dcc.Dropdown) ----- */
+.Select-control,
+.dark-dropdown .Select-control {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+  border-radius: 8px !important;
+  min-height: 36px !important;
+  box-shadow: none !important;
+}
+
+.Select-control:hover {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+.is-focused:not(.is-open) > .Select-control {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2) !important;
+}
+
+.Select-value-label,
+.Select-placeholder,
+.Select-input > input {
+  color: #f1f5f9 !important;
+}
+
+.Select-menu-outer {
+  background-color: #1a2332 !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 8px !important;
+  margin-top: 4px !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+.VirtualizedSelectOption,
+.Select-option {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+.VirtualizedSelectFocusedOption,
+.Select-option.is-focused {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  color: #fff !important;
+}
+
+.Select-option.is-selected {
+  background-color: rgba(99, 102, 241, 0.25) !important;
+  color: #fff !important;
+}
+
+.Select--multi .Select-value {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+  border: 1px solid rgba(99, 102, 241, 0.35) !important;
+  color: #f1f5f9 !important;
+  border-radius: 4px !important;
+}
+
+.Select--multi .Select-value-icon {
+  border-right: 1px solid rgba(99, 102, 241, 0.35) !important;
+  color: #f1f5f9 !important;
+}
+
+.Select--multi .Select-value-icon:hover {
+  background-color: rgba(239, 68, 68, 0.25) !important;
+  color: #fca5a5 !important;
+}
+
+.Select-arrow {
+  border-top-color: #64748b !important;
+}
+
+.is-open > .Select-control .Select-arrow {
+  border-bottom-color: #64748b !important;
+  border-top-color: transparent !important;
+}
+
+.Select-clear {
+  color: #64748b !important;
+}
+
+/* ----- Plotly modebar (rangeslider area) — keep dark ----- */
+.modebar-btn path {
+  fill: #64748b !important;
+}
+.modebar-btn:hover path {
+  fill: #f1f5f9 !important;
+}

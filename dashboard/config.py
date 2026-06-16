@@ -49,8 +49,8 @@ C = {
     'info_bg':      'rgba(59,130,246,0.10)',
 
     # Chart-specific
-    'grid':         'rgba(148,163,184,0.06)',   # very subtle grid
-    'grid_hi':      'rgba(148,163,184,0.12)',   # zeroline / emphasis
+    'grid':         'rgba(148,163,184,0.05)',   # very subtle grid
+    'grid_hi':      'rgba(148,163,184,0.08)',   # zeroline / emphasis (kept faint)
     'chart_bg':     'rgba(0,0,0,0)',            # transparent chart bg
     'range_slider': '#1e293b',                  # range slider fill
 }
@@ -78,12 +78,26 @@ CHART_DEFAULTS = dict(
         zerolinecolor=C['grid_hi'],
         tickfont=dict(size=11, color=C['text_3']),
         linecolor=C['border'],
+        showspikes=True,
+        spikemode='across',
+        spikesnap='cursor',
+        spikethickness=0.8,
+        spikedash='dot',
+        spikecolor='rgba(148,163,184,0.35)',
+        zerolinewidth=1,
     ),
     yaxis=dict(
         gridcolor=C['grid'],
         zerolinecolor=C['grid_hi'],
         tickfont=dict(size=11, color=C['text_3']),
         linecolor=C['border'],
+        showspikes=True,
+        spikemode='across',
+        spikesnap='cursor',
+        spikethickness=0.8,
+        spikedash='dot',
+        spikecolor='rgba(148,163,184,0.35)',
+        zerolinewidth=1,
     ),
     legend=dict(
         font=dict(size=11, color=C['text_2']),
@@ -99,7 +113,11 @@ CHART_DEFAULTS = dict(
         bgcolor='#1e293b',
         bordercolor=C['border_hi'],
         font=dict(family=FONT, size=12, color=C['text']),
+        namelength=-1,
     ),
+    hovermode='x unified',
+    spikedistance=-1,
+    hoverdistance=100,
 )
 
 # ---------------------------------------------------------------------------

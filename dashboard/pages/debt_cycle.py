@@ -11,7 +11,10 @@ import numpy as np
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import _apply_layout, make_area_chart, make_range_slider
+from dashboard.components.charts import (
+    _apply_layout, make_area_chart, make_range_slider,
+    HOVER_PCT, HOVER_PP,
+)
 from dashboard.components.controls import make_date_range_selector, make_phase_badge
 from dashboard.components.layout import make_card, make_row
 
@@ -50,6 +53,7 @@ def _leverage_stacked(lev):
             '非金融企业杠杆': '#e74c3c',
             '政府杠杆': C['accent'],
         },
+        hovertemplate=HOVER_PCT,
     ))
 
 
@@ -72,6 +76,7 @@ def _leverage_change_speed(lev):
         fig.add_trace(go.Bar(
             x=df['date'], y=df[col], name=name,
             marker_color=color, opacity=0.8,
+            hovertemplate=HOVER_PP,
         ))
 
     fig.update_layout(
@@ -92,12 +97,14 @@ def _gov_breakdown(lev):
             x=lev['date'], y=lev['gov_central'], name='中央政府杠杆',
             mode='lines', line=dict(color=C['accent'], width=2),
             fill='tozeroy', fillcolor='rgba(26,115,232,0.15)',
+            hovertemplate=HOVER_PCT,
         ))
     if 'gov_local' in lev.columns and lev['gov_local'].notna().any():
         fig.add_trace(go.Scatter(
             x=lev['date'], y=lev['gov_local'], name='地方政府杠杆',
             mode='lines', line=dict(color='#f39c12', width=2),
             fill='tozeroy', fillcolor='rgba(243,156,18,0.15)',
+            hovertemplate=HOVER_PCT,
         ))
     fig.update_layout(
         title=dict(text='政府杠杆: 中央 vs 地方', x=0.5),

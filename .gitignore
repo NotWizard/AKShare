@@ -13,6 +13,8 @@ data/*.db
 .idea/
 .vscode/
 *.swp
+.codegraph/
+.qoder/
 
 # OS
 .DS_Store

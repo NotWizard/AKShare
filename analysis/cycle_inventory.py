@@ -10,6 +10,7 @@ Active destocking   (主动去库存): PMI < 50 AND ip_yoy < ip_trend
 Passive destocking  (被动去库存): PMI > 50 AND ip_yoy < ip_trend
 """
 
+import functools
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -22,6 +23,7 @@ PHASE_COLORS = {
 }
 
 
+@functools.lru_cache(maxsize=4)
 def classify_inventory(db_path: str) -> pd.DataFrame:
     """Classify each month into an inventory-cycle phase.
 

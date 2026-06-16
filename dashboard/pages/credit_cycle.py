@@ -9,7 +9,10 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import _apply_layout, make_dual_axis_line, make_range_slider
+from dashboard.components.charts import (
+    _apply_layout, make_dual_axis_line, make_range_slider,
+    add_phase_background, HOVER_PCT, HOVER_PP,
+)
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -37,22 +40,19 @@ def _m2_trend_chart(dm, cc_df):
     """M2 growth with trend line, background shaded by easing/tightening."""
     fig = go.Figure()
 
-    # Background shading from credit cycle phases
+    # Background shading from credit cycle phases (merged segments)
     if cc_df is not None and len(cc_df) and 'phase' in cc_df.columns:
-        phases = cc_df['phase'].tolist()
-        dates = cc_df['date'].tolist()
-        for i in range(len(dates) - 1):
-            phase = phases[i]
-            color = PHASE_COLORS.get(phase, C['border'])
-            fig.add_vrect(
-                x0=dates[i], x1=dates[i + 1],
-                fillcolor=color, opacity=0.08, line_width=0,
-                layer='below',
-            )
+        add_phase_background(
+            fig,
+            cc_df['date'].tolist(),
+            cc_df['phase'].tolist(),
+            PHASE_COLORS,
+        )
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['m2_yoy'], name='M2同比',
         mode='lines', line=dict(color=C['accent'], width=2),
+        hovertemplate=HOVER_PCT,
     ))
 
     # Trend line if available from analysis
@@ -62,6 +62,7 @@ def _m2_trend_chart(dm, cc_df):
         fig.add_trace(go.Scatter(
             x=merged['date'], y=merged['m2_trend'], name='M2趋势',
             mode='lines', line=dict(color='#f39c12', width=2, dash='dash'),
+            hovertemplate=HOVER_PCT,
         ))
 
     fig.update_layout(
@@ -83,7 +84,9 @@ def _credit_impulse_chart(cc_df):
               for v in cc_df['credit_impulse'].fillna(0)]
     fig = go.Figure(go.Bar(
         x=cc_df['date'], y=cc_df['credit_impulse'],
+        name='信用脉冲',
         marker_color=colors,
+        hovertemplate=HOVER_PP,
     ))
     fig.update_layout(
         title=dict(text='信用脉冲', x=0.5),

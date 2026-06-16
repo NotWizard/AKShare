@@ -11,6 +11,7 @@ from dashboard.db import load
 from dashboard.config import CHART_LAYOUT, C, DB_PATH, FONT
 from dashboard.components.charts import (
     make_dual_axis_line, make_area_chart, make_range_slider, _alpha, _apply_layout,
+    HOVER_PCT, HOVER_PP, HOVER_IDX,
 )
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row, make_metric_tile, make_section
@@ -49,12 +50,14 @@ def _gdp_chart(dq):
             line=dict(color=C['accent'], width=2.5),
             marker=dict(size=5, color=C['accent']),
             fill='tozeroy', fillcolor=_alpha(C['accent'], 0.10),
+            hovertemplate=HOVER_PCT,
         ))
     if 'gdp_yoy_smooth' in dq.columns and dq['gdp_yoy_smooth'].notna().any():
         fig.add_trace(go.Scatter(
             x=dq['date'], y=dq['gdp_yoy_smooth'], name='趋势(4Q均线)',
             mode='lines',
             line=dict(color=C['warn'], width=2, dash='dot'),
+            hovertemplate=HOVER_PCT,
         ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
     fig.update_layout(title=dict(text='GDP 同比增长率'), yaxis_title='%')
@@ -88,6 +91,7 @@ def _spread_chart(dm):
         line=dict(color=C['accent'], width=2),
         fill='tozeroy',
         fillcolor=_alpha(C['accent'], 0.15),
+        hovertemplate=HOVER_PP,
     ))
     fig.add_hline(y=0, line_dash='solid', line_color=C['grid_hi'], line_width=1)
     fig.update_layout(title=dict(text='M2-M1 剪刀差'), yaxis_title='pp')
@@ -101,12 +105,14 @@ def _pmi_chart(dm):
         x=dm['date'], y=dm['pmi_official'], name='官方PMI',
         mode='lines', line=dict(color=C['accent'], width=2.5),
         fill='tozeroy', fillcolor=_alpha(C['accent'], 0.08),
+        hovertemplate=HOVER_IDX,
     ))
     if 'pmi_ma6' in dm.columns and dm['pmi_ma6'].notna().any():
         fig.add_trace(go.Scatter(
             x=dm['date'], y=dm['pmi_ma6'], name='6月均线',
             mode='lines',
             line=dict(color=C['warn'], width=1.5, dash='dot'),
+            hovertemplate=HOVER_IDX,
         ))
     fig.add_hline(y=50, line_dash='dash', line_color=C['down'], opacity=0.5,
                   annotation_text='荣枯线', annotation_font_color=C['text_3'],
@@ -128,6 +134,7 @@ def _leverage_chart(lev):
             '非金融企业': C['down'],
             '政府': C['accent'],
         },
+        hovertemplate=HOVER_PCT,
     ))
 
 

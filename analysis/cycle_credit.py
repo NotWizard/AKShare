@@ -10,11 +10,13 @@ Tightening: impulse < 0 AND falling (current < previous)
 Neutral:    everything else
 """
 
+import functools
 import sqlite3
 import pandas as pd
 import numpy as np
 
 
+@functools.lru_cache(maxsize=4)
 def classify_credit(db_path: str) -> pd.DataFrame:
     """Classify each month into a credit-cycle phase.
 

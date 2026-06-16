@@ -10,7 +10,10 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, DB_PATH
-from dashboard.components.charts import _apply_layout, make_dual_axis_line, make_range_slider
+from dashboard.components.charts import (
+    _apply_layout, make_dual_axis_line, make_range_slider,
+    HOVER_PCT, HOVER_IDX,
+)
 from dashboard.components.controls import make_date_range_selector, make_city_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -55,6 +58,7 @@ def _price_index_chart(hp, cities):
                 x=city_data['date'], y=city_data['new_base'],
                 name=city, mode='lines',
                 line=dict(color=color, width=2),
+                hovertemplate=HOVER_IDX,
             ))
 
     fig.update_layout(
@@ -78,6 +82,7 @@ def _used_price_chart(hp, cities):
                 x=city_data['date'], y=city_data['used_base'],
                 name=city, mode='lines',
                 line=dict(color=color, width=2),
+                hovertemplate=HOVER_IDX,
             ))
 
     fig.update_layout(
@@ -107,13 +112,15 @@ def _leverage_vs_price(lev, hp, city):
     fig.add_trace(
         go.Scatter(x=merged['date'], y=merged['hh_lev'],
                    name='居民杠杆率', mode='lines',
-                   line=dict(color='#e74c3c', width=2)),
+                   line=dict(color='#e74c3c', width=2),
+                   hovertemplate=HOVER_PCT),
         secondary_y=False,
     )
     fig.add_trace(
         go.Scatter(x=merged['date'], y=merged['new_base'],
                    name=f'{city}新房指数', mode='lines',
-                   line=dict(color=C['accent'], width=2)),
+                   line=dict(color=C['accent'], width=2),
+                   hovertemplate=HOVER_IDX),
         secondary_y=True,
     )
     fig.update_layout(
@@ -143,16 +150,19 @@ def _lpr_trend_chart(lpr_df):
         fig.add_trace(go.Scatter(
             x=dates_valid, y=p90, name='90%分位',
             mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
+            hovertemplate=HOVER_PCT,
         ))
         fig.add_trace(go.Scatter(
             x=dates_valid, y=p10, name='10%分位',
             mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
             fill='tonexty', fillcolor='rgba(69,71,90,0.2)',
+            hovertemplate=HOVER_PCT,
         ))
 
     fig.add_trace(go.Scatter(
         x=lpr_df['date'], y=lpr_df['lpr_5y'], name='LPR 5年期',
         mode='lines', line=dict(color=C['accent'], width=2.5),
+        hovertemplate=HOVER_PCT,
     ))
 
     fig.update_layout(
@@ -186,9 +196,11 @@ def _radar_chart(assessment):
         fill='toself',
         line=dict(color=C['accent']),
         fillcolor='rgba(26,115,232,0.2)',
+        hovertemplate='<b>%{theta}</b>: %{r:.2f}<extra></extra>',
     ))
     fig.update_layout(
         title=dict(text='房地产四维评估', x=0.5),
+        hovermode='closest',
         polar=dict(
             radialaxis=dict(visible=True, range=[0, 1],
                             gridcolor=C['border'], color=C['text']),

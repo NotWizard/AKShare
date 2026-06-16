@@ -49,6 +49,7 @@ def make_date_range_selector(
                 end_date=max_date,
                 display_format='YYYY-MM-DD',
                 className='dark-date-picker',
+                style={'backgroundColor': 'transparent', 'flex': '1'},
             ),
             html.Div(
                 style={'display': 'flex', 'gap': '6px', 'marginLeft': 'auto'},

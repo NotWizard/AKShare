@@ -10,6 +10,7 @@ Dimensions scored 0–100 (100 = most favourable for housing demand):
                      (below median → higher score = cheaper credit)
 """
 
+import functools
 import sqlite3
 from typing import Dict, List, Optional
 
@@ -52,6 +53,25 @@ def analyze_real_estate(
     db_path: str,
     cities: Optional[List[str]] = None,
 ) -> Dict:
+    """Run a multi-dimensional real-estate assessment (cached).
+
+    Wrapper around :func:`_analyze_real_estate_impl` that converts ``cities`` to
+    a hashable tuple so results can be memoised.
+    """
+    if cities is None:
+        cities = ALL_CITIES
+    return _analyze_real_estate_cached(db_path, tuple(cities))
+
+
+@functools.lru_cache(maxsize=8)
+def _analyze_real_estate_cached(db_path: str, cities_tuple: tuple) -> Dict:
+    return _analyze_real_estate_impl(db_path, list(cities_tuple))
+
+
+def _analyze_real_estate_impl(
+    db_path: str,
+    cities: List[str],
+) -> Dict:
     """Run a multi-dimensional real-estate assessment.
 
     Parameters
@@ -67,9 +87,6 @@ def analyze_real_estate(
         Keys: leverage_df, price_df, lpr_df, assessment.
         assessment is a dict with scores 0–100 for each dimension plus a summary.
     """
-    if cities is None:
-        cities = ALL_CITIES
-
     conn = sqlite3.connect(db_path)
 
     # ── Household leverage (quarterly) ──────────────────────────────────────

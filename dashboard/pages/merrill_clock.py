@@ -10,7 +10,9 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import _apply_layout, make_scatter_quadrant, make_range_slider
+from dashboard.components.charts import (
+    _apply_layout, make_scatter_quadrant, make_range_slider, make_phase_timeline,
+)
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -62,6 +64,7 @@ def _quadrant_chart(dq, mc_df):
             name='当前', mode='markers',
             marker=dict(color='#f39c12', size=16, symbol='star',
                         line=dict(color='white', width=2)),
+            hovertemplate='<b>当前</b>: GDP %{x:.2f}% / CPI %{y:.2f}%<extra></extra>',
         ))
 
     fig.update_layout(height=500)
@@ -83,10 +86,12 @@ def _phase_pie(mc_df):
         marker=dict(colors=colors),
         textinfo='label+percent',
         hole=0.4,
+        hovertemplate='<b>%{label}</b>: %{value} 期 (%{percent})<extra></extra>',
     ))
     fig.update_layout(
         title=dict(text='各阶段时间分布', x=0.5),
         showlegend=False,
+        hovermode='closest',
     )
     _apply_layout(fig)
     return fig
@@ -97,31 +102,13 @@ def _timeline_chart(mc_df):
     if mc_df is None or not len(mc_df):
         return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='暂无数据')
 
-    fig = go.Figure()
-    dates = mc_df['date'].tolist()
-    phases = mc_df['phase'].tolist()
-
-    # Plot as colored segments
-    for i, (d, phase) in enumerate(zip(dates, phases)):
-        label = PHASE_LABELS.get(phase, phase)
-        color = PHASE_COLORS.get(phase, '#888')
-        fig.add_trace(go.Bar(
-            x=[d], y=[1], name=label if i == 0 else '',
-            marker_color=color, showlegend=(i == 0),
-            width=7776000,  # ~1 quarter in ms (90 days)
-        ))
-
-    # Deduplicate legend
-    seen = set()
-    fig.for_each_trace(lambda t: t.update(showlegend=False)
-                       if t.name in seen else seen.add(t.name))
-
-    fig.update_layout(
-        title=dict(text='经济周期阶段时间线', x=0.5),
-        barmode='stack',
-        yaxis=dict(showticklabels=False, title=''),
+    fig = make_phase_timeline(
+        mc_df['date'].tolist(),
+        mc_df['phase'].tolist(),
+        PHASE_COLORS,
+        PHASE_LABELS,
+        title='经济周期阶段时间线',
     )
-    _apply_layout(fig)
     return make_range_slider(fig)
 
 

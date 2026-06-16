@@ -9,7 +9,10 @@ import pandas as pd
 
 from dashboard.db import load
 from dashboard.config import C, CHART_LAYOUT, PHASE_COLORS, PHASE_LABELS, DB_PATH
-from dashboard.components.charts import _apply_layout, make_range_slider
+from dashboard.components.charts import (
+    _apply_layout, make_range_slider, add_phase_background,
+    make_phase_timeline, HOVER_PCT, HOVER_IDX,
+)
 from dashboard.components.controls import make_date_range_selector
 from dashboard.components.layout import make_card, make_row
 
@@ -37,27 +40,25 @@ def _pmi_chart(dm, ic_df):
     """PMI with 50-line and 6M MA, background shaded by inventory phase."""
     fig = go.Figure()
 
-    # Background shading
+    # Background shading (merged segments)
     if ic_df is not None and len(ic_df) and 'phase' in ic_df.columns:
-        dates = ic_df['date'].tolist()
-        phases = ic_df['phase'].tolist()
-        for i in range(len(dates) - 1):
-            phase = phases[i]
-            color = PHASE_COLORS.get(phase, C['border'])
-            fig.add_vrect(
-                x0=dates[i], x1=dates[i + 1],
-                fillcolor=color, opacity=0.08, line_width=0,
-                layer='below',
-            )
+        add_phase_background(
+            fig,
+            ic_df['date'].tolist(),
+            ic_df['phase'].tolist(),
+            PHASE_COLORS,
+        )
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['pmi_official'], name='官方PMI',
         mode='lines', line=dict(color=C['accent'], width=2),
+        hovertemplate=HOVER_IDX,
     ))
     if 'pmi_ma6' in dm.columns and dm['pmi_ma6'].notna().any():
         fig.add_trace(go.Scatter(
             x=dm['date'], y=dm['pmi_ma6'], name='PMI 6月均线',
             mode='lines', line=dict(color='#f39c12', width=1.5, dash='dot'),
+            hovertemplate=HOVER_IDX,
         ))
 
     fig.add_hline(y=50, line_dash='dash', line_color='#e74c3c', opacity=0.6,
@@ -77,27 +78,25 @@ def _ip_chart(dm, ic_df):
     """Industrial production YoY with trend, background by phase."""
     fig = go.Figure()
 
-    # Background shading
+    # Background shading (merged segments)
     if ic_df is not None and len(ic_df) and 'phase' in ic_df.columns:
-        dates = ic_df['date'].tolist()
-        phases = ic_df['phase'].tolist()
-        for i in range(len(dates) - 1):
-            phase = phases[i]
-            color = PHASE_COLORS.get(phase, C['border'])
-            fig.add_vrect(
-                x0=dates[i], x1=dates[i + 1],
-                fillcolor=color, opacity=0.08, line_width=0,
-                layer='below',
-            )
+        add_phase_background(
+            fig,
+            ic_df['date'].tolist(),
+            ic_df['phase'].tolist(),
+            PHASE_COLORS,
+        )
 
     fig.add_trace(go.Scatter(
         x=dm['date'], y=dm['ip_yoy'], name='工业增加值同比',
         mode='lines', line=dict(color=C['accent'], width=2),
+        hovertemplate=HOVER_PCT,
     ))
     if 'ip_trend' in dm.columns and dm['ip_trend'].notna().any():
         fig.add_trace(go.Scatter(
             x=dm['date'], y=dm['ip_trend'], name='工业趋势',
             mode='lines', line=dict(color='#f39c12', width=2, dash='dash'),
+            hovertemplate=HOVER_PCT,
         ))
 
     fig.update_layout(
@@ -115,30 +114,13 @@ def _phase_timeline(ic_df):
     if ic_df is None or not len(ic_df) or 'phase' not in ic_df.columns:
         return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='库存周期阶段 (分析模块未就绪)')
 
-    fig = go.Figure()
-    dates = ic_df['date'].tolist()
-    phases = ic_df['phase'].tolist()
-
-    seen = set()
-    for i, (d, phase) in enumerate(zip(dates, phases)):
-        label = PHASE_LABELS.get(phase, phase)
-        color = PHASE_COLORS.get(phase, '#888')
-        show = label not in seen
-        seen.add(label)
-        fig.add_trace(go.Bar(
-            x=[d], y=[1], name=label if show else '',
-            marker_color=color, showlegend=show,
-            width=25000000,
-        ))
-
-    fig.update_layout(
-        title=dict(text='库存周期阶段时间线', x=0.5),
-        barmode='stack',
-        yaxis=dict(showticklabels=False, title=''),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02,
-                    xanchor='right', x=1),
+    fig = make_phase_timeline(
+        ic_df['date'].tolist(),
+        ic_df['phase'].tolist(),
+        PHASE_COLORS,
+        PHASE_LABELS,
+        title='库存周期阶段时间线',
     )
-    _apply_layout(fig)
     return make_range_slider(fig)
 
 
