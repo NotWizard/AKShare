@@ -1,0 +1,583 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Macro Analysis API",
+    "description": "中国宏观经济分析 API — 包装不变的 analysis 核心引擎",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/derived/monthly": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Derived Monthly",
+        "operationId": "derived_monthly_api_v1_derived_monthly_get",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "cols",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma-separated column subset",
+              "title": "Cols"
+            },
+            "description": "comma-separated column subset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DerivedFrame"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/derived/quarterly": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Derived Quarterly",
+        "operationId": "derived_quarterly_api_v1_derived_quarterly_get",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DerivedFrame"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cycles/{name}": {
+      "get": {
+        "tags": [
+          "cycles"
+        ],
+        "summary": "Get Cycle",
+        "operationId": "get_cycle_api_v1_cycles__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CycleFrame"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/signals": {
+      "get": {
+        "tags": [
+          "signals"
+        ],
+        "summary": "Signals",
+        "description": "Composite [-4,+4] signal + per-framework latest phase.",
+        "operationId": "signals_api_v1_signals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/refresh/status": {
+      "get": {
+        "tags": [
+          "refresh"
+        ],
+        "summary": "Status",
+        "description": "Last-refresh manifest summary + whether a refresh is already running.",
+        "operationId": "status_api_v1_refresh_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/refresh": {
+      "post": {
+        "tags": [
+          "refresh"
+        ],
+        "summary": "Trigger",
+        "description": "Run the fetch pipeline (blocks ~30s; cleared caches on success).",
+        "operationId": "trigger_api_v1_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/refresh/stream": {
+      "get": {
+        "tags": [
+          "refresh"
+        ],
+        "summary": "Stream",
+        "description": "SSE: real-time progress (0.0 → 1.0) then the final result.\n\nRuns the blocking refresh on a worker thread and polls a queue from the\ngenerator so progress lines stream as the fetcher emits them (not buffered\nuntil completion).",
+        "operationId": "stream_api_v1_refresh_stream_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CycleFrame": {
+        "properties": {
+          "series": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "latest_phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Phase"
+          },
+          "latest_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Value"
+          },
+          "value_col": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Col"
+          }
+        },
+        "type": "object",
+        "required": [
+          "series"
+        ],
+        "title": "CycleFrame",
+        "description": "A classified cycle series + its latest-phase summary."
+      },
+      "DerivedFrame": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "columns",
+          "records"
+        ],
+        "title": "DerivedFrame",
+        "description": "A derived table slice (monthly/quarterly)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "RefreshResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "busy",
+              "error",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "updated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Updated",
+            "default": []
+          },
+          "kept_previous": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Kept Previous",
+            "default": []
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "msg"
+        ],
+        "title": "RefreshResult"
+      },
+      "SignalSummary": {
+        "properties": {
+          "merrill": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Merrill"
+          },
+          "credit": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Credit"
+          },
+          "inventory": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inventory"
+          },
+          "debt": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Debt"
+          },
+          "cross_lags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cross Lags"
+          },
+          "composite_score": {
+            "type": "integer",
+            "title": "Composite Score"
+          },
+          "interpretation": {
+            "type": "string",
+            "title": "Interpretation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merrill",
+          "credit",
+          "inventory",
+          "debt",
+          "cross_lags",
+          "composite_score",
+          "interpretation"
+        ],
+        "title": "SignalSummary"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

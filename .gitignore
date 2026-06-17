@@ -29,3 +29,7 @@ Thumbs.db
 .venv312/
 env/
 venv/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
