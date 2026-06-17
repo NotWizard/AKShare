@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dash import html, dcc
-from dashboard.config import C, FONT
+from dashboard.config import C, FONT, MONO
 
 
 def make_card(children, title: str | None = None, tip: str | None = None, style: dict | None = None) -> html.Div:
@@ -113,7 +113,7 @@ def make_metric_tile(label: str, value: str, delta: str | None = None,
         html.Div(value, style={
             'fontSize': '28px', 'fontWeight': '700',
             'color': val_color, 'lineHeight': '1.1',
-            'fontFamily': FONT,
+            'fontFamily': MONO,
             'fontVariantNumeric': 'tabular-nums',
         }),
     ]

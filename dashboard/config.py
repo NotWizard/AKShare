@@ -12,11 +12,14 @@ import os
 # ---------------------------------------------------------------------------
 # Typography
 # ---------------------------------------------------------------------------
+# Geist (self-hosted @font-face in dashboard/assets/fonts.css) leads for Latin
+# and numerals; CJK glyphs fall back to the system stack (PingFang/Noto/YaHei),
+# since Geist ships Latin-only. See fonts.css.
 FONT = (
-    '-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", '
+    '"Geist", -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", '
     '"Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif'
 )
-MONO = '"SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", monospace'
+MONO = '"Geist Mono", "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", monospace'
 
 # ---------------------------------------------------------------------------
 # Color tokens (Light Analytics SaaS — off-white canvas, single trust-blue accent)

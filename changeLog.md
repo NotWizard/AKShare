@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-06-17 — 自托管 Geist 字体（Sans + Mono）
+
+### 新功能
+
+- **[新功能] `dashboard/assets/fonts/`**: 自托管 Geist Sans（400/500/600/700）+ Geist Mono（400/500/600），共 7 个 latin 子集 woff2（~112KB），来源 `@fontsource/geist@5.2.9` / `@fontsource/geist-mono@5.2.8`
+- **[新功能] `dashboard/assets/fonts.css`**: `@font-face` 声明（`font-display: swap` 避免字体加载期文字不可见），Dash 自动加载；保留 CJK 系统回退（PingFang/Noto/YaHei，Geist 仅含 latin）
+- **[优化] `dashboard/config.py`**: `FONT` 首选 Geist、`MONO` 首选 Geist Mono，均保留系统回退栈
+- **[优化] `dashboard/components/layout.py`**: `make_metric_tile` 数值改用 Geist Mono + `tabular-nums`（fintech 数据等宽对齐），delta 保持 Sans（可能为文案句）
+
+### 说明
+
+- 离线优先：字体随仓库分发，无需运行时联网；jsdelivr 仅首次获取二进制时使用
+- 踩坑：jsdelivr 对 `@latest` 的 GET 返回 "Invalid URL"（HEAD 却 200，迷惑），**pinned 版本才正常下载**
+
+### 验证
+
+- py_compile + 导入通过；FONT/MONO 已引用 Geist；服务器 `/assets/fonts.css` 200、woff2 经 Dash 托管后 magic=`wOF2` 真实、HTML 注入 fonts.css link + font-family 含 Geist
+
+### New Feature (English)
+
+- [feat] `dashboard/assets/fonts/`: self-host Geist Sans (400/500/600/700) + Geist Mono (400/500/600), 7 latin-subset woff2 (~112KB), from `@fontsource/geist@5.2.9` / `@fontsource/geist-mono@5.2.8`
+- [feat] `dashboard/assets/fonts.css`: @font-face with `font-display: swap` (no invisible-text flash); Dash auto-loads; CJK system fallback retained (Geist is Latin-only)
+- [opt] `dashboard/config.py`: FONT leads with Geist, MONO leads with Geist Mono, both keep system fallbacks
+- [opt] `dashboard/components/layout.py`: metric-tile value → Geist Mono + tabular-nums (fintech numeric alignment); delta stays Sans
+
+### Notes (English)
+
+- Offline-first: fonts ship with the repo, no runtime network; jsdelivr used only to fetch binaries once
+- Gotcha: jsdelivr returns "Invalid URL" for `@latest` GET (but HEAD 200, misleading); a pinned version downloads correctly
+
+### Verification (English)
+
+- py_compile + import pass; FONT/MONO reference Geist; server `/assets/fonts.css` 200, woff2 served with magic=`wOF2`, HTML injects fonts.css link + Geist in font-family
+
+---
+
 ## 2026-06-17 — 仪表盘浅色 SaaS 样式重构（Terminal Fintech 暗色 → Light Analytics SaaS）
 
 ### 重构
