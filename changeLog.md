@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-06-17 — 架构升级：Dash+Plotly → FastAPI + Vue 3 + ECharts
+
+### 架构
+
+- **[升级]** 按 `docs/architecture-upgrade.md` 全量迁移：前端 **Vue 3 + Vite + TS + ECharts + Pinia**，后端全新 **FastAPI + Pydantic**；`analysis/` 分析核心、`scripts/_pipeline.py` 采集管道、刷新逻辑**零改动保值**
+- **[新增]** `backend/app/`：FastAPI（api/v1: data/cycles/signals/refresh/real-estate）+ Pydantic schema 契约 + core(db/cache/refresh 迁自旧 dashboard) + golden test
+- **[新增]** `frontend/`：Vue 3 SPA — 6 页视图（Overview/Merrell/Credit/Inventory/Debt/RealEstate）、Pinia 全局联动、ECharts 图表组件（connectNulls 原生跨接断线、markArea 阶段背景与 M2 空洞标注）、useCountUp 微交互、SSE 刷新进度
+- **[新增]** `run_app.sh`：一键起 FastAPI(:8000) + Vue preview(:5173)；PWA manifest
+- **[保留]** 旧 `dashboard/`(Dash) 作 legacy 回退（`run_dashboard.sh`），未删除——待全量视觉 parity 确认后再下线
+
+### 阶段与验证（每阶段独立 commit）
+
+- **P0 FastAPI 地基**：golden test 6/6（/derived/monthly 与 db.load 逐字节一致）；uvicorn 全端点 200；OpenAPI 导出
+- **P1 Vue 骨架 + 旗舰页**：vue-tsc 0 error + Vite 打包 603 模块；信用周期页数据一致 + M2 connectNulls 原生跨接 + 1991–1996 空洞标注在位；FastAPI+Vite E2E
+- **P2 其余 5 页**：6 页 parity；7 端点全 200（merrill=recovery/inventory=active_destocking/debt=leveraging_boom/real-estate composite 59.6）；golden 6/6 无回归
+- **P3 横切极致**：全局日期联动 + SSE 刷新（15 progress 事件 0→1）+ count-up 微交互 + 路由过渡
+- **P4 切换**：Vue 为默认入口、README/启动脚本更新、PWA manifest、最终全量测试
+
+### Architecture upgrade: Dash+Plotly → FastAPI + Vue 3 + ECharts
+
+- [upgrade] full migration per docs/architecture-upgrade.md: Vue 3 + Vite + TS + ECharts + Pinia frontend, new FastAPI + Pydantic backend; analysis core, pipeline, refresh logic unchanged
+- [feat] backend/app: FastAPI (data/cycles/signals/refresh/real-estate) + Pydantic schema + core (db/cache/refresh migrated) + golden tests
+- [feat] frontend: Vue 3 SPA, 6 pages, Pinia global linking, ECharts (native connectNulls, markArea phase bg + M2 gap marker), useCountUp, SSE refresh
+- [feat] run_app.sh one-click (FastAPI :8000 + Vue :5173); PWA manifest
+- [keep] legacy dashboard/ (Dash) retained as fallback, not deleted — pending full visual parity
+
+### Phases & verification (separate commit per phase)
+
+- P0 backend: golden 6/6 (/derived/monthly byte-identical to db.load), uvicorn 200, OpenAPI exported
+- P1 scaffold + flagship: vue-tsc 0 errors, Vite 603 modules, credit-cycle parity + native connectNulls + 1991-1996 gap marker, FastAPI+Vite E2E
+- P2 remaining 5 pages: 6-page parity, 7 endpoints 200, golden 6/6 no regression
+- P3 cross-cutting: global date linking + SSE refresh (15 events 0→1) + count-up + route transitions
+- P4 cutover: Vue default entry, README/scripts, PWA, final full test
+
+---
+
 ## 2026-06-17 — 修复图表范围滑块拖动时主图区逐次变窄
 
 ### Bug 修复
