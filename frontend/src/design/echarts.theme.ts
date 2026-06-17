@@ -45,7 +45,13 @@ const dataZoomForCategory = (option: Record<string, any>) => {
       textStyle: { color: COLORS.text3, fontSize: 9 },
       labelFormatter: (v: string) => (v ? String(v).slice(0, 7) : ''),
     },
-    { type: 'inside', xAxisIndex: 0 },
+    // inside: drag-to-pan/zoom stays, but the mouse wheel is disabled so it
+    // can't be triggered by accident while scrolling the page. Zoom via the
+    // slider (below) or a click-drag on the chart instead.
+    {
+      type: 'inside', xAxisIndex: 0,
+      zoomOnMouseWheel: false, moveOnMouseWheel: false,
+    },
   ]
 }
 
