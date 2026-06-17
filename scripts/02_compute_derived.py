@@ -20,11 +20,20 @@ def log(msg):
 
 
 def load_table(conn, table):
-    """从 SQLite 加载表"""
+    """从 SQLite 加载表
+
+    若表含 date 列，按 date 去重（保留最后写入的一行）。
+    源表（如 pmi 多次采集、lpr 月内多行）可能存在重复日期，
+    不去重会导致后续 on="date" 的 left merge 产生笛卡尔积、行数膨胀。
+    本脚本加载的所有表均为「日期单粒度」时序，去重安全。
+    """
     try:
-        return pd.read_sql(f"SELECT * FROM {table}", conn)
+        df = pd.read_sql(f"SELECT * FROM {table}", conn)
     except Exception:
         return pd.DataFrame()
+    if "date" in df.columns:
+        df = df.drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+    return df
 
 
 def compute_derived(conn):

@@ -16,6 +16,22 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+# allow `import _pipeline` whether run as a script or imported
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _pipeline import (  # noqa: E402
+    DB_PATH as _LIVE_DB,
+    STAGING_PATH as _STAGING,
+    iso_ts,
+    backup_db,
+    open_staging,
+    commit_staging,
+    discard_staging,
+    write_manifest,
+    run_derived,
+    table_distinct_dates,
+    validate,
+)
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
 
@@ -23,10 +39,36 @@ def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 
+# Per-run audit manifest, populated by save_to_db and flushed by main().
+_MANIFEST = {"ts": None, "akshare": None, "tables": {}}
+
+
 def save_to_db(df, table_name, conn, if_exists="replace"):
-    """将 DataFrame 写入 SQLite 表"""
+    """Validation-gated write to the STAGING connection.
+
+    A fetched df must clear validate() (non-empty, min_rows, required cols not
+    all-NaN, no distinct-date erosion) before it may replace the table. On any
+    failure the previously-good staging table is kept and the outcome recorded
+    in _MANIFEST — bad data never overwrites good data.
+    """
+    prev = table_distinct_dates(conn, table_name)
+    ok, reason = validate(df, table_name, prev)
+    if not ok:
+        _MANIFEST["tables"][table_name] = {
+            "status": "kept_previous",
+            "reason": reason,
+            "prev_distinct_dates": prev,
+        }
+        log(f"  ⏭️  {table_name}: kept previous (prev {prev} dates) — {reason}")
+        return
     df.to_sql(table_name, conn, if_exists=if_exists, index=False)
-    log(f"  ✅ {table_name}: {len(df)} rows → SQLite")
+    _MANIFEST["tables"][table_name] = {
+        "status": "updated",
+        "new_rows": int(len(df)),
+        "prev_distinct_dates": prev,
+        "checks": "pass",
+    }
+    log(f"  ✅ {table_name}: {len(df)} rows → staging (prev {prev} dates)")
 
 
 # ─────────────────────────────────────────────
@@ -229,8 +271,7 @@ def fetch_social_finance(conn):
         log(f"  → 请在正式 Python 环境中重新运行")
         result = pd.DataFrame()
 
-    if not result.empty:
-        save_to_db(result, "social_finance", conn)
+    save_to_db(result, "social_finance", conn)
     return result
 
 
@@ -252,8 +293,7 @@ def fetch_lpr(conn):
         log(f"  ⚠️ LPR 数据采集失败 (SSL问题): {e}")
         result = pd.DataFrame()
 
-    if not result.empty:
-        save_to_db(result, "lpr", conn)
+    save_to_db(result, "lpr", conn)
     return result
 
 
@@ -316,8 +356,7 @@ def fetch_house_price(conn):
     else:
         result = pd.DataFrame()
 
-    if not result.empty:
-        save_to_db(result, "house_price", conn)
+    save_to_db(result, "house_price", conn)
     return result
 
 
@@ -388,17 +427,18 @@ def fetch_household_income(conn):
     except Exception as e:
         log(f"  ⚠️ 总人口采集失败: {e}")
 
-    # 3) Merge and compute aggregate income (亿元)
-    if income_df.empty or pop_df.empty:
-        log("  ⚠️ 居民可支配收入聚合数据不可用，跳过保存")
-        return pd.DataFrame()
-
-    merged = income_df.merge(pop_df, on="date", how="outer").sort_values("date")
-    # income_per_capita(元) * population_10k(万人) / 10000 = 亿元
-    merged["income_abs"] = merged["income_per_capita"] * merged["population_10k"] / 10000.0
-    result = merged.dropna(subset=["income_abs"]).reset_index(drop=True)
-    save_to_db(result[["date", "income_per_capita", "population_10k", "income_abs"]], "household_income", conn)
-    return result
+    # 3) Merge and compute aggregate income (亿元).
+    # Merge only when both sub-fetches returned data — a schema-less empty
+    # DataFrame has no columns, so operating on it would raise KeyError. Empty
+    # either way still flows through save_to_db, where the gate records it.
+    merged = pd.DataFrame()
+    if not income_df.empty and not pop_df.empty:
+        merged = income_df.merge(pop_df, on="date", how="outer").sort_values("date")
+        # income_per_capita(元) * population_10k(万人) / 10000 = 亿元
+        merged["income_abs"] = merged["income_per_capita"] * merged["population_10k"] / 10000.0
+        merged = merged.dropna(subset=["income_abs"]).reset_index(drop=True)
+    save_to_db(merged, "household_income", conn)
+    return merged
 
 
 # ─────────────────────────────────────────────
@@ -424,8 +464,7 @@ def fetch_new_credit(conn):
         log(f"  ⚠️ 新增信贷数据采集失败: {e}")
         result = pd.DataFrame()
 
-    if not result.empty:
-        save_to_db(result, "new_credit", conn)
+    save_to_db(result, "new_credit", conn)
     return result
 
 
@@ -434,11 +473,19 @@ def fetch_new_credit(conn):
 # ─────────────────────────────────────────────
 def main():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    global _MANIFEST
 
     log("=" * 50)
-    log("中国宏观经济数据采集开始")
+    log("中国宏观经济数据采集开始 (staged + atomic)")
     log("=" * 50)
+
+    # ① backup the live DB (recoverable)
+    backup_db()
+    # ② copy live → staging (old good data already present inside staging)
+    staging = open_staging()
+    conn = sqlite3.connect(staging)
+
+    _MANIFEST = {"ts": iso_ts(), "akshare": getattr(ak, "__version__", "?"), "tables": {}}
 
     fetchers = [
         fetch_money_supply,
@@ -455,24 +502,39 @@ def main():
         fetch_new_credit,
     ]
 
-    results = {}
     for f in fetchers:
+        name = f.__name__.replace("fetch_", "")
         try:
-            name = f.__name__.replace("fetch_", "")
-            results[name] = f(conn)
+            f(conn)
         except Exception as e:
-            log(f"  ❌ {f.__name__} 失败: {e}")
+            log(f"  ❌ {f.__name__} 异常: {e}")
+            _MANIFEST["tables"].setdefault(
+                name, {"status": "kept_previous", "reason": f"{type(e).__name__}: {e}"}
+            )
 
+    # ③ recompute derived tables ON staging (raw + derived atomic together)
+    try:
+        run_derived(conn)
+        _MANIFEST["derived"] = "recomputed"
+    except Exception as e:
+        log(f"  ⚠️ 衍生计算失败 (保留旧衍生表): {e}")
+        _MANIFEST["derived"] = f"failed: {e}"
+
+    conn.commit()
     conn.close()
 
-    log("=" * 50)
-    log("采集完成！数据存储到: " + os.path.abspath(DB_PATH))
-    log("=" * 50)
+    # ④ atomic promote staging → live (production DB touched exactly once)
+    commit_staging()
+    # ⑤ audit trail
+    write_manifest(_MANIFEST)
 
-    # 汇总
-    for name, df in results.items():
-        status = "✅" if not df.empty else "⚠️ 空"
-        print(f"  {status} {name}: {len(df)} rows")
+    log("=" * 50)
+    log("采集完成 (atomic commit): " + os.path.abspath(DB_PATH))
+    updated = [t for t, v in _MANIFEST["tables"].items() if v.get("status") == "updated"]
+    kept = [t for t, v in _MANIFEST["tables"].items() if v.get("status") == "kept_previous"]
+    log(f"  updated {len(updated)}: {', '.join(updated) or '-'}")
+    log(f"  kept_previous {len(kept)}: {', '.join(kept) or '-'}")
+    log("=" * 50)
 
 
 if __name__ == "__main__":

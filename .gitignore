@@ -8,6 +8,9 @@ build/
 
 # Data (database too large for git)
 data/*.db
+data/*.db.staging
+data/backups/
+data/last_run.json
 
 # IDE
 .idea/

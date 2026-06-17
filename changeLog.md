@@ -1,5 +1,85 @@
 # Change Log
 
+## 2026-06-17 — 方案 D：暂存快照 + 校验闸门 + 原子切换（根治采集覆写风险）
+
+### 架构
+
+- **[新增] `scripts/_pipeline.py`**: 暂存快照 + 校验闸门 + 原子切换的根因修复。生产库在最终 `os.replace` 原子切换前**一字节不被触碰**：备份 → 复制生产库到暂存库 → fetcher 全部写暂存库(逐表过闸) → 衍生表在暂存库重算 → 原子 rename 暂存→生产 → 写审计 manifest
+- **[重构] `scripts/01_fetch_data.py`**: `save_to_db()` 改为**校验闸门出口**（唯一落库路径，零 fetcher 改动覆盖全部 12 表）；`main()` 重写为暂存+原子流程，删散装结果统计
+
+### 治本点
+
+- **校验闸门**：每表 `TABLE_SPECS` 契约（min_rows / required cols / 反缩水）。空结果、低于 min、缺列、关键列全 NaN、distinct-date 萎缩 → 一律拒绝 replace，暂存库保留旧好表
+- **反缩水用唯一日期数而非行数**：LPR 原始表有 1534 行但仅 152 个唯一月，按行数判会误拒正确数据；按 distinct dates 对所有表公平（实战验证 lpr/pmi/industrial 均正确放行）
+- **崩溃安全**：硬崩溃只损坏暂存文件，生产库未动；事后 `os.replace` 不发生 → 零损失
+- **全量备份**：每次采集前归档 `data/backups/macro_data_<ts>.db`，保留最近 10 份
+- **可审计**：`data/last_run.json` 记录每表 updated/kept_previous + 行数 + 闸门结果 + akshare 版本 + 时间戳
+- **闸门即唯一空处理出口**：移除 5 处 fetcher 内冗余的 `if not result.empty: save_to_db(...)` 散装 guard（social_finance / lpr / house_price / new_credit / household_income），全部改为无条件走 `save_to_db` → 闸门统一裁决。household_income 现在也进 manifest（NBS 403 采空 → kept_previous/empty result），审计覆盖全部 12 表，单一真相源不再并存两套空处理
+
+### 验证
+
+- **离线确定性测试** `scripts/_pipeline_test.py`：15/15 通过（validate 全分支 + 暂存继承好数据 + 空/部分/萎缩采集被拒 + commit 前生产库未动 + 原子切换后正确更新）
+- **真实端到端**：11 个可联网表全部 updated，household_income 因 NBS 403 优雅降级（未污染现有数据），衍生表在暂存库重算 581 行，原子切换成功，生产库零回归（derived_monthly 仍 581/581/0 重复）
+
+### 说明
+
+- 问题 1 根因已取证确认：`ak.macro_china_nbs_nation` 返回 HTTP 403，响应体含 `Client IP: 140.205.85.146`——本沙箱**出口 IP 被 NBS 阿里云 WAF 封禁**，与 akshare 代码 / SSL / UA 无关（加浏览器 UA 仍 403；同期东方财富源正常）。换出口 IP 即解封，**代码无需改**。household_income 在 NBS 可达网络跑 `python3 scripts/01_fetch_data.py` 即落库
+
+### Architecture
+
+- [new] `scripts/_pipeline.py`: root-cure for silent data loss via staged snapshot + validation gate + atomic swap. The production DB is touched only by a final atomic `os.replace`; bad/empty/partial/eroded fetches are rejected at the gate so staging keeps the previously-good table
+- [refactor] `scripts/01_fetch_data.py`: `save_to_db()` is now the validation-gate write path (sole write path; covers all 12 fetchers with zero per-fetcher changes); `main()` rewritten as staged+atomic flow
+
+### Root-cure details
+
+- **Validation gate**: per-table `TABLE_SPECS` (min_rows / required cols / shrink guard). Empty / below-min / missing-col / all-NaN / distinct-date erosion → reject replace, staging keeps previous good table
+- **Shrink guard by distinct dates, not rows**: LPR raw table has 1534 rows but only 152 distinct months — row-count shrink would false-reject correct data; distinct-date basis is grain-fair for all tables (verified: lpr/pmi/industrial correctly admitted)
+- **Crash-safe**: a hard crash only damages the staging file; the live DB is untouched until the final atomic rename
+- **Backups**: every run snapshots to `data/backups/macro_data_<ts>.db` (keeps last 10)
+- **Auditable**: `data/last_run.json` records per-table updated/kept_previous + counts + gate result + akshare version + timestamp
+
+### Verification
+
+- **Offline deterministic test** `scripts/_pipeline_test.py`: 15/15 passed (all validate branches + staging inherits good data + empty/partial/eroded fetches rejected + live untouched pre-commit + atomic commit updates correctly)
+- **Real end-to-end**: 11 network-reachable tables updated, household_income gracefully degraded (NBS 403, no corruption), derived recomputed on staging (581 rows), atomic commit succeeded, production DB zero-regression (derived_monthly still 581/581/0 dup)
+
+### Note
+
+- Problem-1 root cause forensically confirmed: `ak.macro_china_nbs_nation` returns HTTP 403 with `Client IP: 140.205.85.146` in the body — the sandbox **egress IP is WAF-blocked by NBS (Alibaba Cloud)**, unrelated to akshare code / SSL / UA (browser UA still 403; eastmoney sources fine in parallel). Changing egress IP unblocks it; **no code change needed**. Run `python3 scripts/01_fetch_data.py` on a network where NBS is reachable to materialize household_income
+
+---
+
+## 2026-06-17 — 修复 derived_monthly 行膨胀、清理死表、补齐 household_income 管道
+
+### Bug 修复
+
+- **[严重] `scripts/02_compute_derived.py`**: `derived_monthly` 因 `on="date"` 的 left merge 命中源表重复日期（pmi 73 行、lpr 1382 行重复）触发笛卡尔积，行数从 581 膨胀到 2651（同日期最多重复 92 次），污染滚动均线 / 阶段分类 / 阶段背景着色。在 `load_table()` 内读取后按 `date` 列 `drop_duplicates(keep="last")` 单点去重，重算后 `derived_monthly` 恢复 581 行、0 重复日期
+- **[修复] LPR 列稀疏**: 同一处去重一并修复——LPR（月频、月内多行重复）去重后每个有值月份恰好一行，不再被笛卡尔积污染；`lpr_1y`/`lpr_5y`/`real_rate` 正确反映源覆盖范围（LPR 改革始于 2013/2019，1978–2013 本就无数据）
+- **[清理] `data/macro_data.db`**: 删除 `m2_yoy_jin10` 死表（旧版 fetcher 已从代码删除、全仓库零引用，仅在 DB 残留 337 行死数据）。DB 总表数 14 → 13
+
+### 说明
+
+- **`household_income` 采集管道已验证正确但本环境不可达**: 定向调用 `fetch_household_income()` 走通无报错、降级行为符合设计（无崩溃、未污染现有数据）。但 `ak.macro_china_nbs_nation`（国家统计局 data.stats.gov.cn）在本沙箱返回非 JSON 被拦截（0.3s 快速失败），同环境下东方财富等源可正常采集（akshare 1.18.64）。在 NBS 可达的网络运行 `python3 scripts/01_fetch_data.py` + `02_compute_derived.py` 即可让 `derived_quarterly` 出现 `hh_debt_abs`/`hh_income_share`/`hh_debt_to_income`
+
+### Verification
+
+- derived_monthly: 2651 → 581 行，581 distinct dates，dup_groups=0
+- 原最差日期 2017-03-01: 92 行 → 1 行
+- LPR 去重后有值月份: 152（每月一行）
+- m2_yoy_jin10: 已删除
+
+### Bug Fixes
+
+- [critical] `scripts/02_compute_derived.py`: `derived_monthly` inflated 581→2651 rows because date-keyed left merges hit duplicate dates in pmi(73)/lpr(1382), causing cartesian explosion (worst date repeated 92×), polluting rolling means / phase classification / phase background painting. Added `drop_duplicates(keep="last")` by date inside `load_table()` — single-point fix; recompute yields 581 rows, 0 duplicate dates
+- [fix] LPR column sparsity: same dedup fixes it — LPR (monthly, duplicated ~10× per month) now has exactly one row per value-month instead of being inflated; `lpr_1y`/`lpr_5y`/`real_rate` correctly reflect source coverage (LPR reform began 2013/2019, no data 1978–2013)
+- [chore] `data/macro_data.db`: drop dead `m2_yoy_jin10` table (fetcher removed from code long ago, zero repo references, 337 stale rows). Total tables 14 → 13
+
+### Note
+
+- **`household_income` pipeline verified correct but unreachable in this sandbox**: targeted call to `fetch_household_income()` ran without error and degraded gracefully (no crash, no data corruption). But `ak.macro_china_nbs_nation` (NBS data.stats.gov.cn) returns non-JSON / blocked here (0.3s fast-fail), while eastmoney-style sources fetch fine (akshare 1.18.64). Run `python3 scripts/01_fetch_data.py` + `02_compute_derived.py` on a network where NBS is reachable to materialize `hh_debt_abs`/`hh_income_share`/`hh_debt_to_income` in `derived_quarterly`
+
+---
+
 ## 2026-06-16 — 新增居民真实杠杆率指标（债务 / 可支配收入）
 
 ### 新功能
