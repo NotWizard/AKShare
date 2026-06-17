@@ -10,6 +10,9 @@ import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
 const loading = ref(true)
+// Read the leverage table DIRECTLY (quarterly, non-null). derived_quarterly's
+// leverage columns are null because gdp is annual (YYYY-01-01) and leverage is
+// quarterly (YYYY-03/06/09/12) — an exact-date merge hits 0 rows.
 const dq = ref<Record<string, string | number | null>[]>([])
 const cycle = ref<CycleFrame | null>(null)
 let reqId = 0
@@ -18,7 +21,7 @@ async function load() {
   loading.value = true
   try {
     const [q, c] = await Promise.all([
-      api.getDerivedQuarterly(filters.start ?? undefined, filters.end ?? undefined),
+      api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined),
       api.getCycle('debt', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
