@@ -72,19 +72,26 @@ export function buildCreditImpulseChart(cycle: Rec[]): Record<string, any> {
   })
 }
 
-/** Dual-axis line — two series on one category axis (e.g. CPI vs PPI, M1 vs M2). */
+/** Dual-axis line — two series on TWO independent y-axes (different units).
+ *  CPI vs PPI share the % axis; PMI (~50) vs IP-yoy (~5%) need separate axes. */
 export function buildDualAxisLine(
   derived: Rec[], a: string, b: string,
   aColor = COLORS.accent, bColor = COLORS.up,
+  aName?: string, bName?: string,
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
-    yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
+    yAxis: [
+      { type: 'value', name: aName ?? a, scale: true, ...baseAxis() },
+      { type: 'value', name: bName ?? b, scale: true, ...baseAxis({ splitLine: { show: false } }) },
+    ],
     series: [
-      { name: a, type: 'line', connectNulls: true, symbol: 'none', data: derived.map((r) => r[a]),
+      { name: a, type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
+        data: derived.map((r) => r[a]),
         lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
-      { name: b, type: 'line', connectNulls: true, symbol: 'none', data: derived.map((r) => r[b]),
+      { name: b, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
+        data: derived.map((r) => r[b]),
         lineStyle: { color: bColor, width: 2 } },
     ],
   })
@@ -108,7 +115,9 @@ export function buildStackedArea(
   })
 }
 
-/** Scatter quadrant — x vs y coloured by phase (Merrill clock / inventory). */
+/** Scatter quadrant — x vs y coloured by phase (Merrill clock / inventory).
+ *  Reference lines (PMI 50 / CPI 2% / …) live as markLine on an empty helper
+ *  series — ECharts only renders markLine that is a child of a series. */
 export function buildScatterQuadrant(
   cycle: Rec[], xKey: string, yKey: string,
   xLabel: string, yLabel: string, hline = 0, vline = 0,
@@ -122,17 +131,66 @@ export function buildScatterQuadrant(
     if (!byPhase.has(p)) byPhase.set(p, [])
     byPhase.get(p)!.push([x, y])
   }
+  const refLines: any[] = []
+  if (hline) refLines.push({ yAxis: hline })
+  if (vline) refLines.push({ xAxis: vline })
+
   return applyTheme({
     xAxis: { type: 'value', name: xLabel, ...baseAxis({ name: xLabel }) },
     yAxis: { type: 'value', name: yLabel, ...baseAxis({ name: yLabel }) },
     tooltip: { trigger: 'item' },
-    series: Array.from(byPhase.entries()).map(([p, data]) => ({
-      name: phaseLabel(p), type: 'scatter', data, symbolSize: 8,
-      itemStyle: { color: phaseColor(p), opacity: 0.85 },
-    })),
-    markLine: {
-      silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: COLORS.text3 },
-      data: [hline ? [{ yAxis: hline }, { yAxis: hline }] : [], vline ? [{ xAxis: vline }, { xAxis: vline }] : []].flat(),
-    } as any,
+    series: [
+      ...Array.from(byPhase.entries()).map(([p, data]) => ({
+        name: phaseLabel(p), type: 'scatter', data, symbolSize: 8,
+        itemStyle: { color: phaseColor(p), opacity: 0.85 },
+      })),
+      // invisible helper series carrying the threshold cross-hairs
+      {
+        type: 'scatter', data: [], silent: true,
+        markLine: {
+          silent: true, symbol: 'none',
+          lineStyle: { type: 'dashed', color: COLORS.text3, width: 1 },
+          data: refLines,
+        },
+      },
+    ],
+  })
+}
+
+/** Radar — real-estate 3D assessment (leverage space / price momentum / rate env). */
+export function buildRadar(assessment: {
+  leverage_space_score?: number
+  price_momentum_score?: number
+  rate_env_score?: number
+}): Record<string, any> {
+  return applyTheme({
+    tooltip: { trigger: 'item' },
+    legend: { show: false },
+    radar: {
+      indicator: [
+        { name: '杠杆空间', max: 100 },
+        { name: '价格动能', max: 100 },
+        { name: '利率环境', max: 100 },
+      ],
+      radius: '62%',
+      axisName: { color: COLORS.text2, fontSize: 11 },
+      splitArea: { areaStyle: { color: ['rgba(148,163,184,0.03)', 'rgba(148,163,184,0.06)'] } },
+      splitLine: { lineStyle: { color: COLORS.grid } },
+      axisLine: { lineStyle: { color: COLORS.grid } },
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: [
+          assessment.leverage_space_score ?? 0,
+          assessment.price_momentum_score ?? 0,
+          assessment.rate_env_score ?? 0,
+        ],
+        name: '当前评分',
+        areaStyle: { color: hexA(COLORS.accent, 0.25) },
+        lineStyle: { color: COLORS.accent, width: 2 },
+        itemStyle: { color: COLORS.accent },
+      }],
+    }],
   })
 }

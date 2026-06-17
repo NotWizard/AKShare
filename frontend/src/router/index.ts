@@ -12,5 +12,6 @@ export const router = createRouter({
     { path: '/inventory-cycle', component: lazy('InventoryCycle'), meta: { title: '库存周期', icon: '▣' } },
     { path: '/debt-cycle', component: lazy('DebtCycle'), meta: { title: '债务周期', icon: '◆' } },
     { path: '/real-estate', component: lazy('RealEstate'), meta: { title: '房地产市场', icon: '▧' } },
+    { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
 })

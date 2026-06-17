@@ -32,3 +32,16 @@ export interface RefreshResult {
   busy?: boolean
   detail?: string | null
 }
+
+export interface RealEstateAssessment {
+  leverage_space_score?: number
+  price_momentum_score?: number
+  rate_env_score?: number
+  composite_score?: number
+  summary?: string
+}
+
+export interface RealEstateResponse {
+  assessment?: RealEstateAssessment
+  [k: string]: unknown
+}

@@ -11,10 +11,16 @@ import type { CycleFrame } from '@/api/types'
 const filters = useFiltersStore()
 const loading = ref(true)
 const merrill = ref<CycleFrame | null>(null)
+let reqId = 0
 async function load() {
+  const mine = ++reqId
   loading.value = true
-  try { merrill.value = await api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined) }
-  finally { loading.value = false }
+  try {
+    const r = await api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined)
+    if (mine !== reqId) return
+    merrill.value = r
+  }
+  finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
 </script>

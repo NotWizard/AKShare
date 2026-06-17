@@ -13,6 +13,7 @@ const filters = useFiltersStore()
 const loading = ref(true)
 const dm = ref<Rec[]>([])
 const signals = ref<SignalSummary | null>(null)
+let reqId = 0   // request token: rapid preset changes can race; only the latest result applies
 
 function latest(col: string): number | null {
   for (const r of dm.value) {
@@ -23,15 +24,17 @@ function latest(col: string): number | null {
 }
 
 async function load() {
+  const mine = ++reqId
   loading.value = true
   try {
     const [d, s] = await Promise.all([
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,cpi_yoy,ppi_yoy,m1_yoy,pmi_official,m2_m1_spread'),
       api.getSignals(),
     ])
+    if (mine !== reqId) return  // superseded by a newer request
     dm.value = d.records.slice().reverse()  // latest first
     signals.value = s
-  } finally { loading.value = false }
+  } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
 

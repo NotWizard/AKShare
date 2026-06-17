@@ -11,7 +11,7 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
 </script>
 
 <template>
-  <div class="sticky top-0 z-50 flex items-center gap-3 px-6 py-2 bg-surface/85 backdrop-blur border-b border-border">
+  <div class="sticky top-0 z-[110] flex items-center gap-3 px-6 py-2 ml-[200px] bg-surface/85 backdrop-blur border-b border-border">
     <!-- GLOBAL date-range presets: one change links every chart on every page -->
     <div class="flex gap-1.5">
       <button

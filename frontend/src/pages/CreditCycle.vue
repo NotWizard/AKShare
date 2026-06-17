@@ -13,18 +13,21 @@ const filters = useFiltersStore()
 const loading = ref(true)
 const derived = ref<Record<string, string | number | null>[]>([])
 const credit = ref<CycleFrame | null>(null)
+let reqId = 0   // request token: only the latest preset's result applies
 
 async function load() {
+  const mine = ++reqId
   loading.value = true
   try {
     const [dm, cc] = await Promise.all([
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy'),
       api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined),
     ])
+    if (mine !== reqId) return
     derived.value = dm.records
     credit.value = cc
   } finally {
-    loading.value = false
+    if (mine === reqId) loading.value = false
   }
 }
 

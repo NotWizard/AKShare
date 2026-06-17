@@ -12,15 +12,18 @@ const filters = useFiltersStore()
 const loading = ref(true)
 const dm = ref<Record<string, string | number | null>[]>([])
 const cycle = ref<CycleFrame | null>(null)
+let reqId = 0
 async function load() {
+  const mine = ++reqId
   loading.value = true
   try {
     const [d, c] = await Promise.all([
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy'),
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
+    if (mine !== reqId) return
     dm.value = d.records; cycle.value = c
-  } finally { loading.value = false }
+  } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
 </script>

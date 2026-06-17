@@ -29,15 +29,39 @@ export const baseAxis = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
+// Default dataZoom — slider (bottom) + inside (drag on chart). Applied only to
+// category (time) axes so scatter/radar are unaffected.
+const dataZoomForCategory = (option: Record<string, any>) => {
+  const xa = option.xAxis
+  const isCategory = Array.isArray(xa) ? xa.some((x) => x?.type === 'category') : xa?.type === 'category'
+  if (!isCategory) return undefined
+  return [
+    {
+      type: 'slider', xAxisIndex: 0, bottom: 6, height: 16,
+      borderColor: 'transparent', backgroundColor: 'transparent',
+      fillerColor: 'rgba(99,102,241,0.15)',
+      handleStyle: { color: COLORS.accent, borderColor: COLORS.accent },
+      moveHandleStyle: { color: 'rgba(99,102,241,0.4)' },
+      textStyle: { color: COLORS.text3, fontSize: 9 },
+      labelFormatter: (v: string) => (v ? String(v).slice(0, 7) : ''),
+    },
+    { type: 'inside', xAxisIndex: 0 },
+  ]
+}
+
 // Chart "layout" defaults merged into every chart option (≈ _apply_layout).
+// tooltip / legend are deep-merged so a builder that sets its own tooltip
+// (e.g. scatter trigger:'item') keeps the theme's colors/confine.
 export function applyTheme(option: Record<string, any>): Record<string, any> {
-  return {
+  const base = {
     backgroundColor: 'transparent',
     color: PALETTE,
     textStyle: { color: COLORS.text2, fontFamily: 'inherit', fontSize: 12 },
-    grid: { left: 52, right: 20, top: 32, bottom: 36 },
+    grid: { left: 52, right: 24, top: 32, bottom: 60 },   // +bottom room for the dataZoom slider
     tooltip: {
       trigger: 'axis',
+      confine: true,        // keep tooltip inside the chart container (fix: clipped tooltips)
+      appendToBody: true,    // render to <body> so ancestor overflow can't clip it
       backgroundColor: '#1e293b',
       borderColor: 'rgba(255,255,255,0.10)',
       textStyle: { color: COLORS.text, fontSize: 12 },
@@ -53,8 +77,12 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
       itemWidth: 12,
       itemHeight: 12,
     },
-    ...option,
   }
+  const merged: Record<string, any> = { ...base, ...option }
+  merged.tooltip = { ...base.tooltip, ...(option.tooltip || {}) }
+  merged.legend = { ...base.legend, ...(option.legend || {}) }
+  merged.dataZoom = option.dataZoom ?? dataZoomForCategory(option)
+  return merged
 }
 
 // Line series default — connectNulls:true bridges gaps natively (the Dash

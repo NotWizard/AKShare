@@ -27,8 +27,12 @@ def _jsonable(obj):
 
 
 @router.get("")
-def real_estate(cities: str | None = Query(None)):
-    """3D real-estate assessment (leverage space / rate / price momentum)."""
-    city_list = [c.strip() for c in cities.split(",")] if cities else _DEFAULT_CITIES
+def real_estate(cities: list[str] | None = Query(default=None)):
+    """3D real-estate assessment (leverage space / rate / price momentum).
+
+    Accepts repeated ``?cities=A&cities=B`` params (robust vs proxies that
+    don't decode commas); defaults to the 10 default cities when omitted.
+    """
+    city_list = cities or _DEFAULT_CITIES
     result = analyze_real_estate(str(db.DB_PATH), city_list)
     return _jsonable(result)

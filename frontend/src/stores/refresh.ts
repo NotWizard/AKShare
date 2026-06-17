@@ -1,4 +1,4 @@
-// Refresh store — drives the SSE progress bar + manifest result (P3 wires UI).
+// Refresh store — drives the SSE progress bar + manifest result.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '../api/client'
@@ -9,9 +9,14 @@ export const useRefreshStore = defineStore('refresh', () => {
   const lastResult = ref<{ msg: string; ts: string | null } | null>(null)
 
   async function loadStatus() {
-    const r = await api.getRefreshStatus()
-    lastResult.value = { msg: r.msg, ts: r.ts }
-    running.value = !!r.busy
+    try {
+      const r = await api.getRefreshStatus()
+      lastResult.value = { msg: r.msg, ts: r.ts }
+      running.value = !!r.busy
+    } catch {
+      // offline / backend down — don't crash onMounted
+      lastResult.value = { msg: '后端未连接', ts: null }
+    }
   }
 
   // SSE-driven refresh: open /api/v1/refresh/stream, parse progress + done.
@@ -21,10 +26,14 @@ export const useRefreshStore = defineStore('refresh', () => {
     progress.value = 0
     try {
       const resp = await fetch('/api/v1/refresh/stream')
-      const reader = resp.body?.getReader()
+      if (!resp.ok || !resp.body) {
+        lastResult.value = { msg: `刷新失败: HTTP ${resp.status}`, ts: null }
+        return
+      }
+      const reader = resp.body.getReader()
       const dec = new TextDecoder()
       let buf = ''
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buf += dec.decode(value, { stream: true })
@@ -33,14 +42,23 @@ export const useRefreshStore = defineStore('refresh', () => {
         for (const ev of events) {
           const line = ev.split('\n').find((l) => l.startsWith('data: '))
           if (!line) continue
-          const payload = JSON.parse(line.slice(6))
-          if (payload.progress !== undefined) progress.value = payload.progress
-          if (payload.done) lastResult.value = { msg: payload.result?.msg ?? '', ts: payload.result?.ts ?? null }
+          // a single malformed event must not kill the whole stream
+          try {
+            const payload = JSON.parse(line.slice(6))
+            if (payload.progress !== undefined) progress.value = payload.progress
+            if (payload.done) {
+              lastResult.value = {
+                msg: payload.result?.msg ?? '刷新完成',
+                ts: payload.result?.ts ?? null,
+              }
+            }
+          } catch { /* skip unparseable SSE event */ }
         }
       }
+    } catch (e) {
+      lastResult.value = { msg: `刷新异常: ${(e as Error).message}`, ts: null }
     } finally {
       running.value = false
-      progress.value = 1
     }
   }
 

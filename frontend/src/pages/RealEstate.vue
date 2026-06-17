@@ -5,6 +5,7 @@ import { useFiltersStore } from '@/stores/filters'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
+import { buildRadar } from '@/components/charts/options'
 
 const filters = useFiltersStore()
 const loading = ref(true)
@@ -12,16 +13,19 @@ const hp = ref<Record<string, string | number | null>[]>([])
 const assessment = ref<Record<string, any>>({})
 
 const CITIES = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '天津']
+let reqId = 0
 
 async function load() {
+  const mine = ++reqId
   loading.value = true
   try {
     const [h, a] = await Promise.all([
       api.getTable('house_price', filters.start ?? undefined, filters.end ?? undefined),
       api.getRealEstate(CITIES),
     ])
+    if (mine !== reqId) return
     hp.value = h.records; assessment.value = a
-  } finally { loading.value = false }
+  } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
 
@@ -46,6 +50,9 @@ function priceOption(): Record<string, any> {
     series,
   })
 }
+
+// the assessment dict may be nested under response.assessment or at top-level
+const scores = () => assessment.value.assessment ?? assessment.value
 </script>
 
 <template>
@@ -56,8 +63,13 @@ function priceOption(): Record<string, any> {
     <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading">
       <EChart :option="priceOption()" height="380px" />
     </GraphCard>
-    <GraphCard title="房地产三维评估" tip="杠杆空间 / 利率环境 / 价格动能 三维评分（0–1）。" :loading="loading">
-      <pre v-if="assessment" class="text-xs text-text-2 whitespace-pre-wrap">{{ JSON.stringify(assessment.assessment ?? assessment, null, 2) }}</pre>
+    <GraphCard title="房地产三维评估" tip="杠杆空间 / 利率环境 / 价格动能 三维评分（0–100，越高越支撑）。" :loading="loading">
+      <EChart :option="buildRadar(scores())" height="360px" />
+      <p v-if="scores()?.summary" class="text-xs text-text-2 mt-3">
+        {{ scores().summary }}<span v-if="scores()?.composite_score">
+          · 综合 {{ Number(scores().composite_score).toFixed(0) }}
+        </span>
+      </p>
     </GraphCard>
   </div>
 </template>

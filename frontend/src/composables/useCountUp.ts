@@ -1,5 +1,5 @@
 // Animated count-up for numeric KPI tiles (micro-interaction, no heavy dep).
-import { ref, watch, type Ref } from 'vue'
+import { ref, watch, onScopeDispose, type Ref } from 'vue'
 
 export function useCountUp(source: Ref<number | null | undefined>, duration = 600) {
   const display = ref<string>('—')
@@ -23,6 +23,9 @@ export function useCountUp(source: Ref<number | null | undefined>, duration = 60
     if (typeof v === 'number') animate(v)
     else display.value = '—'
   }, { immediate: true })
+
+  // cancel any pending frame when the owner scope is disposed
+  onScopeDispose(() => cancelAnimationFrame(raf))
 
   return display
 }

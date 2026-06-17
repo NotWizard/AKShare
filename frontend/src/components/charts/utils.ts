@@ -24,7 +24,7 @@ export function mergePhaseSegments(
   for (const r of rows) {
     const d = r[dateKey] as string | null
     const p = (r[phaseKey] as string) ?? ''
-    if (!d) continue
+    if (!d || !p) continue          // skip null dates and empty/unknown phases
     if (p !== cur) {
       if (cur && start && prev) segs.push({ x0: start, x1: prev, phase: cur })
       cur = p
