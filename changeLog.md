@@ -1,5 +1,51 @@
 # Change Log
 
+## 2026-06-17 — 仪表盘「刷新数据」按钮（后台回调 + 真进度 + 缓存失效 + 单飞）
+
+### 新功能
+
+- **[新功能] `dashboard/refresh.py`**: 仪表盘内一键刷新数据。以**子进程**方式调用 `scripts/01_fetch_data.py`（复用闸门管道，绝不 import akshare 进 web 进程）；流式读 stdout 数 `✅` 行 → 真进度回调；成功后清空全部 7 处 lru_cache（`db._load_full` + 6 个 cycle/signals/real_estate 分类器）；`read_manifest_summary()` 把 `last_run.json` 渲染成「已更新 N 表 / 跳过 X」回显
+- **[新功能] `dashboard/app.py`**: 侧边栏 footer 加「🔄 刷新数据」按钮 + 状态行 + 进度条（全局、每页可见）；接入 `DiskcacheManager`（`dash[diskcache]` + psutil）做**后台回调**，~30s 采集不阻塞 UI；`running` 禁用按钮 + lockfile 双重**单飞**防重入；刷新完成后 `dcc.Store(data-version)` bump → clientside `window.location.reload()` 强制用清空缓存后的新数据重渲；页面加载时显示「上次刷新」摘要
+
+### 关键设计
+
+- **缓存失效是命脉**：所有 lru_cache 按 db_path 字符串缓存，而原子切换不改路径 → 不清缓存会显示刷新前的旧数据（"成功但没变"）。`clear_all_caches()` 统一清 7 处
+- **子进程而非进程内**：隔离崩溃、复用现成管道、akshare/tqdm 不污染 web 进程、app 启动更快
+- **真进度**：流式解析 fetcher 的 `✅ table → staging` 日志，进度 0→100% 平滑（非假 spinner）
+
+### 验证
+
+- **离线**：app 导入无异常、DiskcacheManager 接入、refresh-btn 在 sidebar、clear_all_caches 清 7 缓存、manifest 读取正确、lockfile 单飞返回 busy
+- **真实 E2E**：`run_refresh` 跑通 22.7s，进度 0.0→1.0 平滑，缓存 1→0 项（清空生效），manifest「已更新 9 表 / 跳过 3（gdp/leverage 季频无新数据 + household_income NBS 403）」闸门正确
+- **服务器冒烟**：HTTP 200（首页 + `_dash-layout`），启动日志无异常
+
+### 依赖
+
+- `requirements.txt`: 新增 `dash[diskcache]>=2.14`（含 psutil）、`diskcache>=5.5`
+
+### New Feature
+
+- [feat] `dashboard/refresh.py`: one-click in-dashboard refresh. Spawns `scripts/01_fetch_data.py` as a **subprocess** (reuses the gated pipeline, never imports akshare into the web process); streams stdout and counts `✅` lines for real progress; on success clears all 7 lru_caches (`db._load_full` + 6 cycle/signals/real_estate classifiers); `read_manifest_summary()` renders `last_run.json` as "updated N / skipped X"
+- [feat] `dashboard/app.py`: sidebar footer gets a refresh button + status + progress bar (global); `DiskcacheManager` (`dash[diskcache]` + psutil) powers a **background callback** so the ~30s fetch doesn't block the UI; `running` disables the button + a lockfile double-guard **single-flight**; on completion a `dcc.Store(data-version)` bump triggers clientside `window.location.reload()` so the cleared caches repopulate with fresh data; page load shows the last-refresh summary
+
+### Key design
+
+- **Cache invalidation is mandatory**: lru_caches key by the db_path string, which doesn't change on atomic swap → without clearing, the dashboard serves pre-refresh data ("success but unchanged"). `clear_all_caches()` clears all 7
+- **Subprocess, not in-process**: crash isolation, reuses the pipeline, keeps akshare/tqdm out of the web process, faster app startup
+- **Real progress**: streams fetcher `✅ table → staging` lines, progress 0→100% smooth (not a fake spinner)
+
+### Verification
+
+- **Offline**: app imports cleanly, DiskcacheManager wired, refresh-btn in sidebar, clear_all_caches clears 7 caches, manifest reads correctly, lockfile single-flight returns busy
+- **Real E2E**: `run_refresh` runs 22.7s, progress 0.0→1.0 smooth, cache 1→0 items (cleared), manifest "updated 9 / skipped 3 (gdp/leverage quarterly no-new-data + household_income NBS 403)" gate correct
+- **Server smoke**: HTTP 200 (home + `_dash-layout`), clean startup log
+
+### Dependencies
+
+- `requirements.txt`: add `dash[diskcache]>=2.14` (includes psutil), `diskcache>=5.5`
+
+---
+
 ## 2026-06-17 — 方案 D：暂存快照 + 校验闸门 + 原子切换（根治采集覆写风险）
 
 ### 架构

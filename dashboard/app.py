@@ -2,19 +2,25 @@
 
 import os
 import sys
+import time
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import dash
+import diskcache
 from dash import html, dcc, Input, Output, callback
 
 from dashboard.config import C, FONT
+from dashboard.refresh import run_refresh, read_manifest_summary
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
+# DiskcacheManager backs background callbacks (the ~30s refresh) so the request
+# thread is never blocked and the UI stays responsive.
+_CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', '.dashcache'))
 app = dash.Dash(
     __name__,
     use_pages=True,
@@ -22,6 +28,7 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     title='宏观经济分析平台',
     update_title=None,
+    background_callback_manager=dash.DiskcacheManager(diskcache.Cache(_CACHE_DIR)),
 )
 
 # ---------------------------------------------------------------------------
@@ -122,6 +129,29 @@ def _sidebar():
                     'lineHeight': '1.5',
                 },
                 children=[
+                    # --- refresh control (global, on every page) ---
+                    html.Button(
+                        '🔄 刷新数据',
+                        id='refresh-btn',
+                        n_clicks=0,
+                        style={
+                            'width': '100%', 'marginBottom': '8px',
+                            'padding': '8px 10px', 'fontSize': '12px',
+                            'fontWeight': '600', 'color': C['text'],
+                            'backgroundColor': C['card'],
+                            'border': f'1px solid {C["border_hi"]}',
+                            'borderRadius': '8px', 'cursor': 'pointer',
+                            'fontFamily': FONT, 'transition': 'all 0.15s ease',
+                        },
+                    ),
+                    html.Progress(
+                        id='refresh-progress', max=1, value=0,
+                        style={'width': '100%', 'height': '4px', 'marginBottom': '6px',
+                               'accentColor': C['accent'], 'display': 'none'},
+                    ),
+                    html.Div(id='refresh-status', style={'marginBottom': '8px', 'fontSize': '10px',
+                                                          'color': C['text_2'], 'lineHeight': '1.4'}),
+                    # --- data source (unchanged) ---
                     html.Div('数据来源'),
                     html.Div('AKShare · 国家统计局 · 中国人民银行', style={'marginTop': '2px', 'opacity': '0.7'}),
                 ],
@@ -143,6 +173,10 @@ app.layout = html.Div(
                    'backgroundColor': C['bg']},
             children=dash.page_container,
         ),
+        # refresh plumbing: data-version bump (post-refresh) drives a page
+        # reload so the cleared caches repopulate with fresh data.
+        dcc.Store(id='data-version', storage_type='memory'),
+        html.Div(id='reload-sentinel', style={'display': 'none'}),
     ],
 )
 
@@ -162,6 +196,67 @@ def highlight_nav(pathname):
         else:
             styles.append(_BASE_LINK)
     return styles
+
+
+# ---------------------------------------------------------------------------
+# Data refresh (background)
+#   Spawns the gated fetch pipeline (scripts/01_fetch_data.py) as a subprocess,
+#   streams real progress, clears every lru_cache on success, then bumps
+#   data-version → the clientside callback reloads the page so the cleared
+#   caches repopulate with fresh data. DiskcacheManager keeps it off the
+#   request thread; the button is disabled while running (single-flight UI,
+#   backed by a lockfile in run_refresh).
+# ---------------------------------------------------------------------------
+@callback(
+    Output('refresh-status', 'children'),
+    Output('data-version', 'data'),
+    Input('refresh-btn', 'n_clicks'),
+    background=True,
+    progress=Output('refresh-progress', 'value'),
+    running=[
+        (Output('refresh-btn', 'disabled'), True, False),
+        (Output('refresh-progress', 'style'), {'width': '100%', 'height': '4px',
+                                                'marginBottom': '6px', 'accentColor': C['accent']},
+         {'width': '100%', 'height': '4px', 'marginBottom': '6px',
+          'accentColor': C['accent'], 'display': 'none'}),
+        (Output('refresh-status', 'children'), '🔄 采集中…（约 30s，含 12 指标）', '…'),
+    ],
+    prevent_initial_call=True,
+)
+def refresh_data(set_progresss, n_clicks):
+    result = run_refresh(progress_cb=set_progresss)
+    status = result.get('msg', '')
+    if result.get('status') in ('ok', 'busy'):
+        # success → bump version → reload picks up cleared caches
+        return status, {'v': time.time()}
+    return status, dash.no_update  # error: show message, don't reload
+
+
+# Reload the page once a refresh completes. storage_type='memory' resets the
+# store to None on reload → no reload loop.
+app.clientside_callback(
+    """
+    function(version) {
+        if (version && version.v) { window.location.reload(); }
+        return dash_clientside.no_update;
+    }
+    """,
+    Output('reload-sentinel', 'children'),
+    Input('data-version', 'data'),
+    prevent_initial_call=True,
+)
+
+
+# Show the last-refresh summary (and timestamp) on page load.
+@callback(
+    Output('refresh-status', 'children', allow_duplicate=True),
+    Input('url', 'pathname'),
+    prevent_initial_call=True,
+)
+def show_last_refresh(_path):
+    m = read_manifest_summary()
+    ts = m.get('ts')
+    return f"{m.get('msg', '')} · {ts}" if ts else m.get('msg', '')
 
 
 # ---------------------------------------------------------------------------
