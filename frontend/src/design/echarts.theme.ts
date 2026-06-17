@@ -29,6 +29,36 @@ export const baseAxis = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
+// Format a date-ish axis value to YYYY-MM-DD (drop any time component).
+// Tolerates Date objects, ISO strings, and plain date strings; passes through
+// anything that isn't date-like (so value axes / scatter are unaffected).
+export function fmtDate(v: unknown): string {
+  if (v == null) return ''
+  const s = v instanceof Date ? v.toISOString() : String(v)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : s
+}
+
+// Axis tooltip formatter — forces the date header to YYYY-MM-DD (no H:M:S,
+// which ECharts can otherwise inject when the category looks date-like) and
+// renders each series with a clean number. Only used for trigger:'axis'.
+function fmtNum(v: unknown): string {
+  if (v == null || v === '' || (typeof v === 'number' && Number.isNaN(v))) return '—'
+  return typeof v === 'number' ? v.toFixed(2) : String(v)
+}
+const axisTooltipFormatter = (params: any): string => {
+  const arr = Array.isArray(params) ? params : [params]
+  if (!arr.length) return ''
+  const p0 = arr[0]
+  const header = fmtDate(p0.axisValue ?? p0.name)
+  let html = `<div style="font-weight:600;margin-bottom:4px">${header}</div>`
+  for (const p of arr) {
+    const v = (Array.isArray(p.value) ? p.value[p.value.length - 1] : p.value)
+    html += `<div>${p.marker ?? ''} ${p.seriesName ?? ''}: <b>${fmtNum(v)}</b></div>`
+  }
+  return html
+}
+
 // Default dataZoom — slider (bottom) + inside (drag on chart). Applied only to
 // category (time) axes so scatter/radar are unaffected.
 const dataZoomForCategory = (option: Record<string, any>) => {
@@ -43,7 +73,7 @@ const dataZoomForCategory = (option: Record<string, any>) => {
       handleStyle: { color: COLORS.accent, borderColor: COLORS.accent },
       moveHandleStyle: { color: 'rgba(99,102,241,0.4)' },
       textStyle: { color: COLORS.text3, fontSize: 9 },
-      labelFormatter: (v: string) => (v ? String(v).slice(0, 7) : ''),
+      labelFormatter: (v: unknown) => fmtDate(v),
     },
     // inside: drag-to-pan/zoom stays, but the mouse wheel is disabled so it
     // can't be triggered by accident while scrolling the page. Zoom via the
@@ -53,6 +83,18 @@ const dataZoomForCategory = (option: Record<string, any>) => {
       zoomOnMouseWheel: false, moveOnMouseWheel: false,
     },
   ]
+}
+
+// Force category axes whose data looks date-like to render as YYYY-MM-DD.
+const applyDateFormat = (merged: Record<string, any>) => {
+  const xa = merged.xAxis
+  const fmt = (ax: any) => {
+    if (!ax || ax.type !== 'category' || !Array.isArray(ax.data) || !ax.data.length) return
+    if (!/^\d{4}-\d{2}-\d{2}/.test(String(ax.data[0]))) return
+    ax.axisLabel = { ...(ax.axisLabel || {}), formatter: fmtDate }
+  }
+  if (Array.isArray(xa)) xa.forEach(fmt)
+  else fmt(xa)
 }
 
 // Chart "layout" defaults merged into every chart option (≈ _apply_layout).
@@ -88,6 +130,17 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
   merged.tooltip = { ...base.tooltip, ...(option.tooltip || {}) }
   merged.legend = { ...base.legend, ...(option.legend || {}) }
   merged.dataZoom = option.dataZoom ?? dataZoomForCategory(option)
+  // force the date header (no H:M:S) in axis tooltips + the crosshair axis label
+  if (merged.tooltip?.trigger === 'axis' && !option.tooltip?.formatter) {
+    merged.tooltip.formatter = axisTooltipFormatter
+  }
+  if (merged.tooltip?.axisPointer) {
+    merged.tooltip.axisPointer.label = {
+      ...(merged.tooltip.axisPointer.label || {}),
+      formatter: (p: any) => fmtDate(p.value),
+    }
+  }
+  applyDateFormat(merged)
   return merged
 }
 
