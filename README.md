@@ -1,8 +1,7 @@
 # 中国宏观经济数据分析平台
 
-> **2026-06 架构升级**：前端升级为 **Vue 3 + ECharts**，后端 **FastAPI**；`analysis/` 分析核心与采集管道零改动保值。
-> - **新版（默认）**：`./run_app.sh` — FastAPI(:8000) + Vue(:5173)，详见 `docs/architecture-upgrade.md`
-> - **旧版（legacy）**：`./run_dashboard.sh` — Dash + Plotly（保留为回退）
+> **2026-06 架构升级**：前端 **Vue 3 + ECharts**，后端 **FastAPI**；`analysis/` 分析核心与采集管道零改动保值。旧 Dash+Plotly 已下线移除。
+> - 启动：`./run_app.sh`（或双击 `启动面板.command`）— FastAPI(:8000) + Vue(:5173)，详见 `docs/architecture-upgrade.md`
 
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
@@ -10,9 +9,9 @@
 [![ECharts](https://img.shields.io/badge/ECharts-5.5-aa344d)](https://echarts.apache.org/)
 [![AKShare](https://img.shields.io/badge/Data-AKShare-green)](https://www.akshare.xyz/)
 
-一个基于 **Python + FastAPI + Vue 3 + ECharts** 构建的**中国宏观经济数据分析平台**（旧 Dash+Plotly 保留为 legacy），采用 **Terminal Fintech** 暗色主题。项目通过 [`AKShare`](https://www.akshare.xyz/) 自动采集国家统计局、中国人民银行等权威数据源，计算四大经典周期分析框架与综合宏观信号，并以高度交互的可视化方式呈现。
+一个基于 **Python + FastAPI + Vue 3 + ECharts** 构建的**中国宏观经济数据分析平台**，采用 **Terminal Fintech** 暗色主题。项目通过 [`AKShare`](https://www.akshare.xyz/) 自动采集国家统计局、中国人民银行等权威数据源，计算四大经典周期分析框架与综合宏观信号，并以高度交互的可视化方式呈现。
 
-## 架构（新版）
+## 架构
 
 ```
 Vue 3 + ECharts (:5173) ──HTTP/SSE── FastAPI + Pydantic (:8000) ──同进程── analysis/* (零改动)

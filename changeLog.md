@@ -1,5 +1,31 @@
 # Change Log
 
+## 2026-06-17 — 下线移除 Dash+Plotly（legacy 清理）
+
+### 清理
+
+- **[移除] `dashboard/`**（18 文件：app/db/refresh/config/components/pages/callbacks）——旧 Dash+Plotly 前端整体删除。取证确认 `analysis/`、`scripts/`、`backend/` 对 `dashboard/` 零真实依赖（`dashboard/db.py`、`refresh.py` 已在 P0 迁为 `backend/app/core/` 独立副本），可安全删
+- **[移除] `run_dashboard.sh`** —— Dash 启动脚本；新栈以 `run_app.sh` 为唯一入口
+- **[移除] `requirements.txt` Dash 依赖** —— plotly / dash / dash[diskcache] / diskcache / dash-bootstrap-components（5 行）；新栈后端用 `backend/pyproject.toml`，刷新走 SSE 不再需 diskcache。保留 akshare/pandas/numpy/scipy/statsmodels（analysis/scripts 仍需）
+- **[变更] `启动面板.command`** —— 双击入口保留，底层改为委托 `run_app.sh`（FastAPI+Vue），体验不变
+- **[文档] README** 去掉 legacy Dash 回退说明；changeLog 记录本次下线
+
+### 验证
+
+- `grep import dash/plotly` 残留 = 0（backend/analysis/scripts）
+- backend golden test 6/6 仍通过（证明 core 脱离 dashboard 独立工作）
+- 前端 build 仍绿
+
+### Removal: retire Dash + Plotly (legacy cleanup)
+
+- [remove] `dashboard/` (18 files) — old Dash+Plotly frontend deleted; verified zero real dependency from analysis/scripts/backend (db.py/refresh.py already migrated to backend/app/core/ as independent copies in P0)
+- [remove] `run_dashboard.sh`; `run_app.sh` is now the only entrypoint
+- [remove] Dash deps from requirements.txt (plotly/dash/dash[diskcache]/diskcache/dash-bootstrap); new backend uses backend/pyproject.toml, refresh via SSE
+- [change] `启动面板.command` keeps the double-click entry, now delegates to run_app.sh (FastAPI+Vue)
+- [docs] README drops legacy fallback note; changeLog records the retirement
+
+---
+
 ## 2026-06-17 — 架构升级：Dash+Plotly → FastAPI + Vue 3 + ECharts
 
 ### 架构
