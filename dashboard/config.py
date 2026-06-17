@@ -72,6 +72,11 @@ C = {
 CHART_LAYOUT = dict(
     paper_bgcolor=C['chart_bg'],
     plot_bgcolor=C['chart_bg'],
+    # Fixed height matches the dcc.Graph container (320px — every chart routes
+    # through make_graph_card). A stable layout.height stops Plotly's responsive
+    # autosize from recomputing the y-axis domain on rangeslider relayout, which
+    # otherwise shrank the plot on each slider interaction.
+    height=320,
     font=dict(
         family=FONT,
         color=C['text_2'],

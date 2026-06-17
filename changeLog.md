@@ -1,5 +1,25 @@
 # Change Log
 
+## 2026-06-17 — 修复图表范围滑块拖动时主图区逐次变窄
+
+### Bug 修复
+
+- **[修复] `dashboard/config.py`**: `CHART_LAYOUT` 增加 `height=320`。根因：每个图表都开 rangeslider 但 figure 无固定高度、靠 320px 容器 responsive 自适应；拖滑块触发 `relayout` 时 Plotly 重算 y 轴 domain，滑块区逐次蚕食主图 → 内容上滑、高度越来越窄（经典 Plotly rangeslider 自适应反馈环）。固定高度与全仓库唯一的 320px `dcc.Graph`（`make_graph_card`）精确匹配，消除自适应重算
+
+### 验证
+
+- py_compile 通过；`make_range_slider(make_dual_axis_line(...)).layout.height == 320` 断言通过（高度确已固化进 figure）
+
+### Bug Fix (English)
+
+- [fix] `dashboard/config.py`: add `height=320` to `CHART_LAYOUT`. Root cause: every chart enables a rangeslider but no figure had a fixed height (relied on the 320px container's responsive autosize); on slider drag, `relayout` re-derived the y-axis domain and the slider region ate into the plot each cycle, shrinking it. A fixed height matching the repo's single 320px `dcc.Graph` (make_graph_card) breaks the autosize feedback loop
+
+### Verification (English)
+
+- py_compile passes; `make_range_slider(make_dual_axis_line(...)).layout.height == 320` asserted (height baked into figure)
+
+---
+
 ## 2026-06-17 — 修复图表断线（connectgaps 统一连线 + M2 空洞标注）
 
 ### Bug 修复
