@@ -1,5 +1,39 @@
 # Change Log
 
+## 2026-06-17 — 修复信用周期页 M2 趋势线不渲染（derived 日期重复列）
+
+### Bug 修复
+
+- **[严重] `backend/app/api/v1/data.py`**: 信用周期页「M2 同比与趋势」的 **M2 趋势线不显示**。根因：`derived_monthly()` 的 `keep = ["date"] + cols.split(",")` 在 `cols='date,m2_yoy'` 时产生**重复 date 列**，使 `df['date']` 退化为 DataFrame（非 Series），`df_to_records` 的 `is_datetime64_any_dtype` 判 False → `strftime('%Y-%m-%d')` 被跳过 → 日期以 ISO `'2020-01-01T00:00:00'` 序列化。而 `/cycles/credit` 的日期是纯 `'2020-01-01'`，前端 `buildCreditM2Chart` 按日期精确字符串 join 取趋势 → **全 miss → 趋势数组全 null → 线不画**。M2 同比不受影响（按数组下标取，不依赖 join）
+- **[修复]** `keep` 用 `dict.fromkeys` 去重保序——一处同时修复日期格式化 + payload 重复列
+
+### 验证
+
+- 真实 API：`/derived/monthly?cols=date,m2_yoy` 修复后 `columns=['date','m2_yoy']`（无重复）、`date='2020-01-01'`（纯日期），与 `/cycles/credit` 的 `'2020-01-01'` 一致 → 前端 join 命中
+- golden test 6/6 通过（契约 API==db.load 无回归）
+
+### 说明
+
+- 仅改一处（外科原则）；未动 `core/serial.py`（共享序列化器，多端点依赖，风险更大）
+- 可选加固（未做）：`serial.df_to_records` 入口加 `out.loc[:, ~out.columns.duplicated()]` 防御性去重，杜绝任何重复列静默降级日期格式
+
+### Bug Fix (English)
+
+- [critical] `backend/app/api/v1/data.py`: M2 trend line in the credit-cycle "M2 trend" chart was not rendering. Root cause: `derived_monthly()` built `keep = ["date"] + cols.split(",")`, so `cols='date,m2_yoy'` produced a duplicate date column; `df['date']` then became a DataFrame (not a Series), `df_to_records`' `is_datetime64_any_dtype` check returned False, `strftime('%Y-%m-%d')` was skipped, and the date serialized as ISO `'2020-01-01T00:00:00'`. Against `/cycles/credit`'s plain `'2020-01-01'`, the frontend's exact-string date-key join in `buildCreditM2Chart` missed every point → trend array all-null → line not drawn. M2 YoY was unaffected (index-aligned, no join)
+- [fix] dedupe `keep` with `dict.fromkeys` (order-preserving) — fixes date formatting + the duplicate column in one place
+
+### Verification (English)
+
+- Real API: `/derived/monthly?cols=date,m2_yoy` now returns `columns=['date','m2_yoy']` (no dup) and `date='2020-01-01'` (plain), matching `/cycles/credit`'s `'2020-01-01'` → frontend join hits
+- golden test 6/6 pass (no regression to the API==db.load contract)
+
+### Notes (English)
+
+- Single-file surgical fix; `core/serial.py` untouched (shared serializer, broader blast radius)
+- Optional hardening (not applied): `out.loc[:, ~out.columns.duplicated()]` at the top of `df_to_records` to defend against any duplicate-column DataFrame silently downgrading date formatting
+
+---
+
 ## 2026-06-17 — 下线移除 Dash+Plotly（legacy 清理）
 
 ### 清理
