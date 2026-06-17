@@ -21,14 +21,16 @@ HOVER_IDX = '<b>%{fullData.name}</b>: %{y:.1f}<extra></extra>'
 
 
 def empty_dark_fig(height: int = 300) -> go.Figure:
-    """Return a minimal dark empty figure used as dcc.Graph placeholder.
+    """Minimal placeholder figure used as a dcc.Graph default.
 
-    Prevents the white flash that occurs before callbacks populate real data.
+    Light theme: white plot so the empty state matches the populated chart
+    background and prevents a flash before callbacks fill real data.
+    Name retained for import compatibility (8 call sites); content is light.
     """
     fig = go.Figure()
     fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor=C['chart_bg'],
+        plot_bgcolor=C['chart_bg'],
         height=height,
         margin=dict(l=0, r=0, t=0, b=0),
         xaxis=dict(visible=False),
@@ -40,8 +42,8 @@ def empty_dark_fig(height: int = 300) -> go.Figure:
 def _alpha(hex_color: str, opacity: float) -> str:
     """Convert a hex color + opacity to rgba string (Plotly-compatible).
 
-    >>> _alpha('#6366f1', 0.10)
-    'rgba(99,102,241,0.1)'
+    >>> _alpha('#2563eb', 0.10)
+    'rgba(37,99,235,0.1)'
     """
     h = hex_color.lstrip('#')
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -265,7 +267,7 @@ def make_area_chart(
     hovertemplate: str = HOVER_PCT,
 ) -> go.Figure:
     """Stacked or overlapping area chart with semi-transparent fills."""
-    default_colors = [C['accent'], C['up'], C['down'], C['warn'], '#a78bfa']
+    default_colors = [C['accent'], C['up'], C['down'], C['warn'], '#7c3aed']
     fig = go.Figure()
     for i, (name, values) in enumerate(values_dict.items()):
         color = (colors_dict or {}).get(name, default_colors[i % len(default_colors)])
@@ -308,7 +310,7 @@ def make_scatter_quadrant(
             name=label, mode='markers',
             marker=dict(
                 color=color, size=8, opacity=0.85,
-                line=dict(color='rgba(255,255,255,0.2)', width=1),
+                line=dict(color='rgba(15,23,42,0.18)', width=1),
             ),
             hovertemplate=(
                 '<b>' + label + '</b><br>'

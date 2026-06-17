@@ -63,7 +63,7 @@ def _m2_trend_chart(dm, cc_df):
         merged = dm.merge(cc_df[['date', 'm2_trend']], on='date', how='left')
         fig.add_trace(go.Scatter(
             x=merged['date'], y=merged['m2_trend'], name='M2趋势',
-            mode='lines', line=dict(color='#f39c12', width=2, dash='dash'),
+            mode='lines', line=dict(color=C['warn'], width=2, dash='dash'),
             hovertemplate=HOVER_PCT,
         ))
 
@@ -81,7 +81,7 @@ def _credit_impulse_chart(cc_df):
     if cc_df is None or 'credit_impulse' not in cc_df.columns:
         return go.Figure().update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', title='信用脉冲 (分析模块未就绪)')
 
-    colors = ['#2ecc71' if v >= 0 else '#e74c3c'
+    colors = [C['up'] if v >= 0 else C['down']
               for v in cc_df['credit_impulse'].fillna(0)]
     fig = go.Figure(go.Bar(
         x=cc_df['date'], y=cc_df['credit_impulse'],
@@ -98,7 +98,7 @@ def _m2_cpi_overlay(dm):
     return make_range_slider(make_dual_axis_line(
         dm['date'], dm['m2_yoy'], dm['cpi_yoy'],
         'M2同比', 'CPI同比',
-        y1_color=C['accent'], y2_color='#e74c3c',
+        y1_color=C['accent'], y2_color=C['down'],
     ))
 
 

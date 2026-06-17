@@ -18,7 +18,7 @@ def make_date_range_selector(
     """
     btn_style = {
         'backgroundColor': 'transparent',
-        'color': C['text_3'],
+        'color': C['text_2'],
         'border': f'1px solid {C["border"]}',
         'borderRadius': '6px',
         'padding': '5px 14px',
@@ -109,12 +109,16 @@ def make_phase_badge(
     color: str,
     label: str | None = None,
 ) -> html.Span:
-    """Glassmorphic phase badge with colored glow."""
+    """Solid phase chip with colored dot and tinted background.
+
+    Light theme: no glassmorphism (backdrop-filter) — a flat solid chip reads
+    crisper against white and keeps the data legible.
+    """
     display = label or phase
     # Convert hex color to rgba with 15% opacity (Plotly-safe)
     _h = color.lstrip('#')
     _r, _g, _b = int(_h[0:2], 16), int(_h[2:4], 16), int(_h[4:6], 16)
-    _bg = f'rgba({_r},{_g},{_b},0.15)'
+    _bg = f'rgba({_r},{_g},{_b},0.12)'
     _border = f'rgba({_r},{_g},{_b},0.30)'
 
     return html.Span(
@@ -131,7 +135,6 @@ def make_phase_badge(
             'color': C['text'],
             'border': f'1px solid {_border}',
             'fontFamily': FONT,
-            'backdropFilter': 'blur(8px)',
         },
         children=[
             html.Span(style={
@@ -140,7 +143,6 @@ def make_phase_badge(
                 'borderRadius': '50%',
                 'backgroundColor': color,
                 'display': 'inline-block',
-                'boxShadow': f'0 0 6px rgba({_r},{_g},{_b},0.5)',
             }),
             display,
         ],

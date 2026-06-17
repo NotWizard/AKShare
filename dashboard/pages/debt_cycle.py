@@ -48,8 +48,8 @@ def _leverage_stacked(lev):
             '政府杠杆': lev['gov_total'],
         },
         colors_dict={
-            '居民杠杆': '#2ecc71',
-            '非金融企业杠杆': '#e74c3c',
+            '居民杠杆': C['up'],
+            '非金融企业杠杆': C['down'],
             '政府杠杆': C['accent'],
         },
         hovertemplate=HOVER_PCT,
@@ -68,8 +68,8 @@ def _leverage_change_speed(lev):
 
     fig = make_subplots()
     for col, name, color in [
-        ('household_dy', '居民', '#2ecc71'),
-        ('non_fin_corp_dy', '非金融企业', '#e74c3c'),
+        ('household_dy', '居民', C['up']),
+        ('non_fin_corp_dy', '非金融企业', C['down']),
         ('gov_total_dy', '政府', C['accent']),
     ]:
         fig.add_trace(go.Bar(
@@ -94,14 +94,14 @@ def _gov_breakdown(lev):
         fig.add_trace(go.Scatter(
             x=lev['date'], y=lev['gov_central'], name='中央政府杠杆',
             mode='lines', line=dict(color=C['accent'], width=2),
-            fill='tozeroy', fillcolor='rgba(26,115,232,0.15)',
+            fill='tozeroy', fillcolor='rgba(37,99,235,0.12)',
             hovertemplate=HOVER_PCT,
         ))
     if 'gov_local' in lev.columns and lev['gov_local'].notna().any():
         fig.add_trace(go.Scatter(
             x=lev['date'], y=lev['gov_local'], name='地方政府杠杆',
-            mode='lines', line=dict(color='#f39c12', width=2),
-            fill='tozeroy', fillcolor='rgba(243,156,18,0.15)',
+            mode='lines', line=dict(color=C['warn'], width=2),
+            fill='tozeroy', fillcolor='rgba(217,119,6,0.12)',
             hovertemplate=HOVER_PCT,
         ))
     fig.update_layout(
@@ -160,7 +160,7 @@ def _dalio_assessment(dc_df, lev):
         style={
             'backgroundColor': C['card'], 'borderRadius': '8px',
             'padding': '16px', 'marginTop': '12px',
-            'borderLeft': '4px solid #1a73e8',
+            'borderLeft': f'4px solid {C["accent"]}',
         },
         children=[
             html.H4('达里奥债务周期框架评估', style={

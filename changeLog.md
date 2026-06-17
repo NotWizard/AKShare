@@ -1,5 +1,55 @@
 # Change Log
 
+## 2026-06-17 — 仪表盘浅色 SaaS 样式重构（Terminal Fintech 暗色 → Light Analytics SaaS）
+
+### 重构
+
+- **[重构] `dashboard/config.py`**: 设计 token 由暗色翻为浅色——off-white 页面底 `#f8fafc`、白卡片表面 `#ffffff`、近黑文字 `#0f172a`、单一信任蓝强调 `#2563eb`（blue-600）、浅色友好语义色（涨 `#16a34a` / 跌 `#dc2626` / 警 `#d97706`）。图表 `plot_bg` 透明→白、`hoverlabel` 深底→白、colorway 首色改蓝。`PHASE_COLORS` 全部引用 token，自动适配
+- **[重构] `dashboard/app.py` + `dashboard/assets/dark-theme.css`**: 全局 CSS 与 Dash 核心组件（DatePickerRange radix 弹窗、Dropdown）整体浅色化；`.chart-tip` tooltip 由深底纯黑阴影→白底 + tinted slate 阴影（`rgba(15,23,42,0.08)`，遵循浅底禁纯黑阴影原则）
+- **[重构] `dashboard/components/`**: 阶段徽章去毛玻璃（`backdrop-filter`）→ 实色 chip；散点四象限与美林星标的白描边→深色（浅底白描边会消失）；`empty_dark_fig` 占位改白底
+- **[重构] 6 个页面**: 清零绕过 token 的扁平 UI 调色板（`#2ecc71`/`#e74c3c`/`#f39c12`/`#1a73e8` 等统一映射到语义 token）；`real_estate.py` 的 9 色调色板换为浅色克制 `-600` 色系；LPR 分位带、极坐标雷达盘的深色 rgba 填充/背景改浅
+
+### 优化
+
+- **[优化] `dashboard/components/layout.py`**: `make_metric_tile` 数值与 delta 加 `font-variant-numeric: tabular-nums`，KPI 数字等宽对齐
+
+### 说明
+
+- 业务逻辑、数据采集管线（方案 D）、周期分类器、Dash 回调**零改动**，仅视觉层重构
+- 旧强调色 `#6366f1`（indigo-500）即典型「AI 紫蓝」默认，本次彻底替换为信任蓝
+- Geist 字体自托管作为可选后续迭代，本次保留系统字体栈 + tabular-nums 作为基线
+
+### 验证
+
+- `py_compile` 全部通过；app + 6 页导入无报错；渲染断言（`plot_bg/paper_bg/hoverlabel`=`#ffffff`、colorway 首色 `#2563eb`、散点描边非白、占位白、area 调色板浅色）全部通过
+- 服务器 HTTP 200，首页 HTML 含浅色 token、真正暗色（`#0a0e17`/`#111827`/`#1a2332`/`#6366f1`）零残留
+- 全局清扫：除有意保留的浅色中性灰 `#64748b`（slate-500）外无遗漏硬编码色
+
+### Refactor (English)
+
+- [refactor] `dashboard/config.py`: design tokens flipped dark → light (off-white canvas, white surfaces, near-black ink, single trust-blue accent `#2563eb`, light-friendly semantic colors). Chart plot bg → white, hoverlabel → white, colorway leads with accent; `PHASE_COLORS` auto-adapts via tokens
+- [refactor] `dashboard/app.py` + `dashboard/assets/dark-theme.css`: global CSS and Dash core components (DatePickerRange radix popup, Dropdown) fully light-themed; chart-tip tooltip dark bg + pure-black shadow → white bg + tinted slate shadow
+- [refactor] `dashboard/components/`: phase badges drop glassmorphism → solid chips; white marker strokes on scatter/star → dark; empty placeholder → white
+- [refactor] 6 pages: mapped flat-UI hex palette (`#2ecc71`/`#e74c3c`/`#f39c12`/`#1a73e8`) to semantic tokens; replaced `real_estate.py` 9-color palette with restrained light `-600` colors; lightened dark rgba fills and polar radar backdrop
+
+### Optimization (English)
+
+- [opt] `dashboard/components/layout.py`: add `tabular-nums` to metric-tile values and deltas for aligned numerics
+
+### Notes (English)
+
+- Zero changes to business logic, data pipeline (Plan D), cycle classifiers, or Dash callbacks — visual layer only
+- The old `#6366f1` (indigo-500) was a textbook AI-purple default; replaced with trust-blue
+- Self-hosted Geist deferred as an optional follow-up; system font stack + tabular-nums kept as baseline
+
+### Verification (English)
+
+- `py_compile` passes; app + 6 pages import cleanly; render assertions (white plot/paper/hoverlabel, accent-led colorway, non-white marker stroke, white placeholder, light area palette) all pass
+- Server returns HTTP 200; served HTML contains light tokens with zero true-dark residue (`#0a0e17`/`#111827`/`#1a2332`/`#6366f1`)
+- Global sweep clean: only intentional light neutral `#64748b` remains
+
+---
+
 ## 2026-06-17 — 仪表盘「刷新数据」按钮（后台回调 + 真进度 + 缓存失效 + 单飞）
 
 ### 新功能

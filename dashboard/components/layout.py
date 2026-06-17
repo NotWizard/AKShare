@@ -114,6 +114,7 @@ def make_metric_tile(label: str, value: str, delta: str | None = None,
             'fontSize': '28px', 'fontWeight': '700',
             'color': val_color, 'lineHeight': '1.1',
             'fontFamily': FONT,
+            'fontVariantNumeric': 'tabular-nums',
         }),
     ]
     if delta:
@@ -122,6 +123,7 @@ def make_metric_tile(label: str, value: str, delta: str | None = None,
         children.append(html.Div(delta, style={
             'fontSize': '12px', 'fontWeight': '500',
             'color': delta_color, 'marginTop': '4px',
+            'fontVariantNumeric': 'tabular-nums',
         }))
 
     return html.Div(
