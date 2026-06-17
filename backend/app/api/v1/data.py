@@ -18,7 +18,16 @@ def derived_monthly(
 ):
     df = db.load("derived_monthly", start, end)
     if cols:
-        keep = ["date"] + [c.strip() for c in cols.split(",") if c.strip()]
+        # Dedupe: callers pass 'date' in cols (e.g. CreditCycle.vue uses
+        # cols='date,m2_yoy'), which would otherwise make 'date' appear twice.
+        # A duplicate date column turns df['date'] into a DataFrame (not a
+        # Series), so df_to_records' is_datetime64 check fails and the date
+        # stays ISO ('2020-01-01T00:00:00') instead of '2020-01-01'. That format
+        # mismatch breaks the frontend's date-key join → series (e.g. M2 trend)
+        # render all-null. Dedup fixes the join + drops the dup column.
+        keep = list(dict.fromkeys(
+            ["date"] + [c.strip() for c in cols.split(",") if c.strip()]
+        ))
         df = df[[c for c in keep if c in df.columns]]
     return DerivedFrame(
         table="derived_monthly",
