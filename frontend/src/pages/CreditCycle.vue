@@ -39,20 +39,10 @@ const presets = ['5Y', '10Y', '20Y', 'ALL'] as const
 
 <template>
   <div class="p-6 space-y-5 ml-[200px]">
-    <header class="flex items-center justify-between">
+    <header>
       <div>
         <h1 class="text-xl font-bold text-text">信用周期</h1>
         <p class="text-xs text-text-3 mt-1">M2 同比 vs 12 月均线（信贷脉冲）｜社融信贷脉冲</p>
-      </div>
-      <div class="flex gap-1.5">
-        <button
-          v-for="p in presets" :key="p"
-          class="px-2.5 py-1 text-[11px] rounded border transition-all"
-          :class="filters.preset === p
-            ? 'border-accent text-text bg-[rgba(99,102,241,0.15)]'
-            : 'border-border text-text-3 hover:border-border-hi'"
-          @click="filters.applyPreset(p)"
-        >{{ p }}</button>
       </div>
     </header>
 

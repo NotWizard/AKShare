@@ -5,6 +5,7 @@ import { useFiltersStore } from '@/stores/filters'
 import { buildDualAxisLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
+import MetricTile from '@/components/layout/MetricTile.vue'
 import type { SignalSummary } from '@/api/types'
 
 type Rec = Record<string, string | number | null>
@@ -49,20 +50,10 @@ const tiles = [
       <p class="text-xs text-text-3 mt-1">关键宏观指标 + 综合信号</p>
     </header>
 
-    <!-- KPI tiles -->
-    <div class="grid grid-cols-4 gap-3">
-      <div v-for="t in tiles" :key="t.col" class="bg-card border border-border rounded-xl p-4">
-        <div class="text-xs text-text-3">{{ t.label }}</div>
-        <div class="text-2xl font-bold text-text mt-1">
-          {{ loading ? '…' : (latest(t.col)?.toFixed(1) ?? '—') }}<span v-if="t.suffix" class="text-sm text-text-3 ml-0.5">{{ t.suffix }}</span>
-        </div>
-      </div>
-      <div class="bg-card border border-border rounded-xl p-4">
-        <div class="text-xs text-text-3">综合信号</div>
-        <div class="text-2xl font-bold mt-1" :class="(signals?.composite_score ?? 0) >= 0 ? 'text-up' : 'text-down'">
-          {{ signals?.composite_score ?? '—' }}
-        </div>
-      </div>
+    <!-- KPI tiles with count-up micro-interaction -->
+    <div class="grid grid-cols-5 gap-3">
+      <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" />
+      <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent />
     </div>
     <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
 
