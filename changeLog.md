@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-06-17 — 修复图表断线（connectgaps 统一连线 + M2 空洞标注）
+
+### Bug 修复
+
+- **[严重] 图表线在 NaN 处断开**: 全 dashboard 无任何 trace 设 connectgaps，导致稀疏/早期系列（M2 1992–1996 年度结存段、工业增加值每年 2 月合并发布、cpi/ppi/pmi/lpr 起始前导等）在 NaN 处出现明显断线。根因取证：M2 1992–1995 源（东方财富）只有每年 12 月结存、月度统计 ~1996 才连续；ip_yoy 缺口全在 2 月（NBS 1-2 月合并发布）。实测 3 个 akshare M2 源均无 1992–1995 月度数据 → 真值不可补
+- **[修复] `dashboard/components/charts.py`**: 在 `_apply_layout()` 内加 `fig.update_traces(connectgaps=True)`——由于全部 6 页 16 个图构建函数都经此咽喉点，**一处修复全部线图**；新增 `add_gap_marker()` helper，用半透明条+文字标注已知源数据空洞
+- **[修复] `dashboard/pages/credit_cycle.py`**: M2 同比主图加 `add_gap_marker('1991-01','1996-12','此段 M2 仅有年度结存，月度源数据缺失')`，让 connectgaps 跨接的真实年度锚点不致被误读为连续月度数据
+
+### 关键设计
+
+- **踩中咽喉点**：connectgaps 是 trace 属性不能全局设，但所有图都走 `_apply_layout` → 在此一处 `update_traces(connectgaps=True)` 覆盖全部 16 图，避免逐 trace 改 20+ 处
+- **诚实而非造假**：M2 空洞无法补真值（3 源实测），故用真实存在的 5 个年度锚点连线 + 标注条明示，而非填假数据
+
+### 验证
+
+- 离线：connectgaps 确实注入全部 trace、add_gap_marker 正确渲染 vrect+annotation、M2 图函数含标注、py_compile 通过
+- 服务器冒烟：HTTP 200（首页 + _dash-layout），启动无异常
+
+### Bug Fixes
+
+- [critical] chart lines broke at NaN: no trace anywhere set connectgaps, so sparse/early series (M2 annual-snapshot 1992–1996, Feb-combined industrial prints, leading NaN for cpi/ppi/pmi/lpr) rendered broken lines. Forensics: the M2 source only carries year-end snapshots 1992–1995 (monthly begins ~1996); ip_yoy gaps are all February (NBS Jan-Feb combined). All 3 akshare M2 sources lack 1992–1995 monthly → real data is un-backfillable
+- [fix] `dashboard/components/charts.py`: add `fig.update_traces(connectgaps=True)` inside `_apply_layout()` — since every figure on all 6 pages flows through this chokepoint, **one line fixes every line chart**; add `add_gap_marker()` helper to disclose known source-data gaps
+- [fix] `dashboard/pages/credit_cycle.py`: M2 chart calls `add_gap_marker('1991-01','1996-12','此段 M2 仅年度结存，月度源数据缺失')` so the connectgaps-bridged real annual anchors aren't misread as continuous monthly data
+
+### Key design
+
+- **Chokepoint**: connectgaps is a trace property (not settable globally), but every figure flows through `_apply_layout` → one `update_traces(connectgaps=True)` covers all 16 figures, avoiding 20+ per-trace edits
+- **Honest not fabricated**: the M2 void has no real data (verified across 3 sources), so it's bridged with the 5 real annual anchors + a disclosure band, not filled with fabricated data
+
+### Verification
+
+- Offline: connectgaps confirmed injected on all traces, add_gap_marker renders vrect+annotation, M2 chart includes the marker, py_compile passes
+- Server smoke: HTTP 200 (home + _dash-layout), clean boot
+
+---
+
 ## 2026-06-17 — 自托管 Geist 字体（Sans + Mono）
 
 ### 新功能

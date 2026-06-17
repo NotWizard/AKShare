@@ -55,7 +55,13 @@ def _apply_layout(fig: go.Figure, **overrides) -> go.Figure:
 
     CHART_DEFAULTS keys are skipped if the caller already provides them
     in ``overrides``, so pages can freely set their own legend/axis.
+
+    Also bridges line gaps across NaN so a sparse/early series (e.g. M2 before
+    1996, LPR from 2013, Feb-combined industrial prints) renders a continuous
+    line connecting real adjacent points instead of breaking. Every figure in
+    every page flows through this function, so it's the single chokepoint.
     """
+    fig.update_traces(connectgaps=True)
     layout = {**CHART_LAYOUT}
     for key, val in CHART_DEFAULTS.items():
         if key not in overrides:
@@ -388,5 +394,23 @@ def make_range_slider(fig: go.Figure, visible: bool = True) -> go.Figure:
             borderwidth=1,
             thickness=0.08,
         ),
+    )
+    return fig
+
+
+def add_gap_marker(fig: go.Figure, x0: str, x1: str, label: str) -> go.Figure:
+    """Mark a known source-data gap with a translucent band + caption.
+
+    Use for spans where the underlying series genuinely has no monthly data
+    (e.g. M2 is annual-only 1991–1996) so a connectgaps-bridged line doesn't
+    read as if continuous data existed there. Pure disclosure — no data change.
+    """
+    import pandas as _pd
+    mid = _pd.Timestamp(x0) + (_pd.Timestamp(x1) - _pd.Timestamp(x0)) / 2
+    fig.add_vrect(x0=x0, x1=x1, fillcolor=C['warn'], opacity=0.07,
+                  line_width=0, layer='below')
+    fig.add_annotation(
+        x=mid, y=1, yref='paper', text=label, showarrow=False,
+        font=dict(size=10, color=C['text_3']),
     )
     return fig
