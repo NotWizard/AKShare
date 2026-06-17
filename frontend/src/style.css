@@ -17,16 +17,6 @@ html, body, #app {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-.chart-tip { position: relative; cursor: help; }
-.chart-tip::after {
-  content: attr(data-tip);
-  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
-  width: max-content; max-width: 320px;
-  background: #1e293b; color: #f1f5f9;
-  border: 1px solid rgba(255,255,255,0.10); border-radius: 8px;
-  padding: 10px 12px; font-size: 12px; line-height: 1.5;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-  opacity: 0; visibility: hidden; pointer-events: none;
-  transition: opacity .15s ease, visibility .15s ease; z-index: 1000; white-space: normal;
-}
-.chart-tip:hover::after { opacity: 1; visibility: visible; }
+/* ChartTip (ⓘ) is now a Teleport-based component (controls/ChartTip.vue) — it
+   renders to <body> with its own scoped .chart-tip-pop styles, so it can never
+   be clipped by an ancestor. */
