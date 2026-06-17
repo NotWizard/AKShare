@@ -2,7 +2,7 @@
 // option out. Each applies the Terminal Fintech theme (≈ _apply_layout).
 
 import { applyTheme, baseAxis, COLORS } from '@/design/echarts.theme'
-import { phaseColor } from '@/design/phases'
+import { phaseColor, phaseLabel } from '@/design/phases'
 import { hexA, mergePhaseSegments } from './utils'
 
 type Rec = Record<string, string | number | null>
@@ -69,5 +69,70 @@ export function buildCreditImpulseChart(cycle: Rec[]): Record<string, any> {
         itemStyle: { color: hexA(COLORS.accent, 0.65) },
       },
     ],
+  })
+}
+
+/** Dual-axis line — two series on one category axis (e.g. CPI vs PPI, M1 vs M2). */
+export function buildDualAxisLine(
+  derived: Rec[], a: string, b: string,
+  aColor = COLORS.accent, bColor = COLORS.up,
+): Record<string, any> {
+  const dates = derived.map((r) => r.date as string)
+  return applyTheme({
+    xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
+    yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
+    series: [
+      { name: a, type: 'line', connectNulls: true, symbol: 'none', data: derived.map((r) => r[a]),
+        lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
+      { name: b, type: 'line', connectNulls: true, symbol: 'none', data: derived.map((r) => r[b]),
+        lineStyle: { color: bColor, width: 2 } },
+    ],
+  })
+}
+
+/** Stacked area — multiple series stacked (e.g. leverage by sector). */
+export function buildStackedArea(
+  derived: Rec[], cols: string[],
+): Record<string, any> {
+  const dates = derived.map((r) => r.date as string)
+  const palette = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#a78bfa', '#06b6d4']
+  return applyTheme({
+    xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
+    yAxis: { type: 'value', ...baseAxis({ name: '%' }) },
+    series: cols.map((c, i) => ({
+      name: c, type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
+      areaStyle: { opacity: 0.12 },
+      lineStyle: { width: 1.5, color: palette[i % palette.length] },
+      data: derived.map((r) => r[c]),
+    })),
+  })
+}
+
+/** Scatter quadrant — x vs y coloured by phase (Merrill clock / inventory). */
+export function buildScatterQuadrant(
+  cycle: Rec[], xKey: string, yKey: string,
+  xLabel: string, yLabel: string, hline = 0, vline = 0,
+): Record<string, any> {
+  const byPhase = new Map<string, [number, number][]>()
+  for (const r of cycle) {
+    const x = r[xKey] as number | null
+    const y = r[yKey] as number | null
+    if (x == null || y == null) continue
+    const p = (r.phase as string) ?? 'unknown'
+    if (!byPhase.has(p)) byPhase.set(p, [])
+    byPhase.get(p)!.push([x, y])
+  }
+  return applyTheme({
+    xAxis: { type: 'value', name: xLabel, ...baseAxis({ name: xLabel }) },
+    yAxis: { type: 'value', name: yLabel, ...baseAxis({ name: yLabel }) },
+    tooltip: { trigger: 'item' },
+    series: Array.from(byPhase.entries()).map(([p, data]) => ({
+      name: phaseLabel(p), type: 'scatter', data, symbolSize: 8,
+      itemStyle: { color: phaseColor(p), opacity: 0.85 },
+    })),
+    markLine: {
+      silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: COLORS.text3 },
+      data: [hline ? [{ yAxis: hline }, { yAxis: hline }] : [], vline ? [{ xAxis: vline }, { xAxis: vline }] : []].flat(),
+    } as any,
   })
 }

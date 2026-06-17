@@ -1,0 +1,44 @@
+<script setup lang="ts">
+import { ref, watchEffect } from 'vue'
+import { api } from '@/api/client'
+import { useFiltersStore } from '@/stores/filters'
+import { buildDualAxisLine, buildScatterQuadrant } from '@/components/charts/options'
+import EChart from '@/components/charts/EChart.vue'
+import GraphCard from '@/components/layout/GraphCard.vue'
+import { phaseColor, phaseLabel } from '@/design/phases'
+import type { CycleFrame } from '@/api/types'
+
+const filters = useFiltersStore()
+const loading = ref(true)
+const dm = ref<Record<string, string | number | null>[]>([])
+const cycle = ref<CycleFrame | null>(null)
+async function load() {
+  loading.value = true
+  try {
+    const [d, c] = await Promise.all([
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy'),
+      api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
+    ])
+    dm.value = d.records; cycle.value = c
+  } finally { loading.value = false }
+}
+watchEffect(() => { void filters.start; void filters.end; load() })
+</script>
+
+<template>
+  <div class="p-6 space-y-5 ml-[200px]">
+    <header><h1 class="text-xl font-bold text-text">库存周期</h1>
+      <p class="text-xs text-text-3 mt-1">PMI + 工业增加值 → 主动/被动 补库·去库</p>
+    </header>
+    <div v-if="cycle?.latest_phase" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border">
+      <span class="w-2 h-2 rounded-full" :style="{ background: phaseColor(cycle.latest_phase) }" />
+      <span class="text-xs text-text-2">当前：<b class="text-text">{{ phaseLabel(cycle.latest_phase) }}</b></span>
+    </div>
+    <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading">
+      <EChart :option="buildDualAxisLine(dm, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')" height="320px" />
+    </GraphCard>
+    <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading">
+      <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
+    </GraphCard>
+  </div>
+</template>

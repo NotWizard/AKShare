@@ -25,7 +25,18 @@ export const api = {
     if (cols) q.set('cols', cols)
     return getJSON<DerivedFrame>(`/derived/monthly${q.size ? '?' + q : ''}`)
   },
-  getDerivedQuarterly: () => getJSON<DerivedFrame>('/derived/quarterly'),
+  getDerivedQuarterly: (start?: string, end?: string) => {
+    const q = new URLSearchParams()
+    if (start) q.set('start', start)
+    if (end) q.set('end', end)
+    return getJSON<DerivedFrame>(`/derived/quarterly${q.size ? '?' + q : ''}`)
+  },
+  getTable: (name: string, start?: string, end?: string) => {
+    const q = new URLSearchParams()
+    if (start) q.set('start', start)
+    if (end) q.set('end', end)
+    return getJSON<DerivedFrame>(`/table/${name}${q.size ? '?' + q : ''}`)
+  },
   getCycle: (name: string, start?: string, end?: string) => {
     const q = new URLSearchParams()
     if (start) q.set('start', start)
@@ -33,6 +44,8 @@ export const api = {
     return getJSON<CycleFrame>(`/cycles/${name}${q.size ? '?' + q : ''}`)
   },
   getSignals: () => getJSON<SignalSummary>('/signals'),
+  getRealEstate: (cities?: string[]) =>
+    getJSON<Record<string, any>>(`/real-estate${cities ? '?cities=' + encodeURIComponent(cities.join(',')) : ''}`),
   getRefreshStatus: () => getJSON<RefreshResult>('/refresh/status'),
   triggerRefresh: () => postJSON<RefreshResult>('/refresh'),
 }
