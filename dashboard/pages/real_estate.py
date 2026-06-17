@@ -42,8 +42,8 @@ MAX_DATE = max(_hp['date'].max(), _lpr['date'].max()).strftime('%Y-%m-%d')
 # Chart builders
 # ---------------------------------------------------------------------------
 LINE_COLORS = [
-    C['accent'], '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
-    '#1abc9c', '#e67e22', '#3498db', '#e91e63', '#00bcd4',
+    C['accent'], C['up'], C['down'], C['warn'],
+    '#7c3aed', '#0891b2', '#db2777', '#0d9488', '#ca8a04', '#475569',
 ]
 
 
@@ -110,7 +110,7 @@ def _leverage_vs_price(lev, hp, city):
     fig.add_trace(
         go.Scatter(x=merged['date'], y=merged['hh_lev'],
                    name='居民杠杆率', mode='lines',
-                   line=dict(color='#e74c3c', width=2),
+                   line=dict(color=C['down'], width=2),
                    hovertemplate=HOVER_PCT),
         secondary_y=False,
     )
@@ -152,7 +152,7 @@ def _lpr_trend_chart(lpr_df):
         fig.add_trace(go.Scatter(
             x=dates_valid, y=p10, name='10%分位',
             mode='lines', line=dict(color=C['border'], width=1, dash='dot'),
-            fill='tonexty', fillcolor='rgba(69,71,90,0.2)',
+            fill='tonexty', fillcolor='rgba(37,99,235,0.08)',
             hovertemplate=HOVER_PCT,
         ))
 
@@ -230,7 +230,7 @@ def _radar_chart(assessment):
         theta=dims + [dims[0]],
         fill='toself',
         line=dict(color=C['accent']),
-        fillcolor='rgba(26,115,232,0.2)',
+        fillcolor='rgba(37,99,235,0.15)',
         hovertemplate='<b>%{theta}</b>: %{r:.2f}<extra></extra>',
     ))
     fig.update_layout(
@@ -239,7 +239,7 @@ def _radar_chart(assessment):
             radialaxis=dict(visible=True, range=[0, 1],
                             gridcolor=C['border'], color=C['text']),
             angularaxis=dict(gridcolor=C['border'], color=C['text']),
-            bgcolor='rgba(30,30,46,0.8)',
+            bgcolor='rgba(255,255,255,0)',
         ),
     )
     _apply_layout(fig)
@@ -254,7 +254,7 @@ def _assessment_text(assessment):
         style={
             'backgroundColor': C['card'], 'borderRadius': '8px',
             'padding': '16px', 'marginTop': '12px',
-            'borderLeft': '4px solid #1a73e8',
+            'borderLeft': f'4px solid {C["accent"]}',
         },
         children=[
             html.H4('市场综合评估', style={

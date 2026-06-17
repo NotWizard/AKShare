@@ -62,8 +62,8 @@ def _quadrant_chart(dq, mc_df):
         fig.add_trace(go.Scatter(
             x=[x[-1]], y=[y[-1]],
             name='当前', mode='markers',
-            marker=dict(color='#f39c12', size=16, symbol='star',
-                        line=dict(color='white', width=2)),
+            marker=dict(color=C['warn'], size=16, symbol='star',
+                        line=dict(color='rgba(15,23,42,0.25)', width=1.5)),
             hovertemplate='<b>当前</b>: GDP %{x:.2f}% / CPI %{y:.2f}%<extra></extra>',
         ))
 

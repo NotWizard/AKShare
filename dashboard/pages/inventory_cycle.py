@@ -57,11 +57,11 @@ def _pmi_chart(dm, ic_df):
     if 'pmi_ma6' in dm.columns and dm['pmi_ma6'].notna().any():
         fig.add_trace(go.Scatter(
             x=dm['date'], y=dm['pmi_ma6'], name='PMI 6月均线',
-            mode='lines', line=dict(color='#f39c12', width=1.5, dash='dot'),
+            mode='lines', line=dict(color=C['warn'], width=1.5, dash='dot'),
             hovertemplate=HOVER_IDX,
         ))
 
-    fig.add_hline(y=50, line_dash='dash', line_color='#e74c3c', opacity=0.6,
+    fig.add_hline(y=50, line_dash='dash', line_color=C['down'], opacity=0.6,
                   annotation_text='荣枯线')
 
     fig.update_layout(
@@ -94,7 +94,7 @@ def _ip_chart(dm, ic_df):
     if 'ip_trend' in dm.columns and dm['ip_trend'].notna().any():
         fig.add_trace(go.Scatter(
             x=dm['date'], y=dm['ip_trend'], name='工业趋势',
-            mode='lines', line=dict(color='#f39c12', width=2, dash='dash'),
+            mode='lines', line=dict(color=C['warn'], width=2, dash='dash'),
             hovertemplate=HOVER_PCT,
         ))
 
