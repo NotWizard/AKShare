@@ -1,7 +1,7 @@
 // ECharts option builders — one per chart family. Pure functions: records in,
 // option out. Each applies the Terminal Fintech theme (≈ _apply_layout).
 
-import { applyTheme, baseAxis, COLORS } from '@/design/echarts.theme'
+import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import { hexA, mergePhaseSegments } from './utils'
 
@@ -192,5 +192,46 @@ export function buildRadar(assessment: {
         itemStyle: { color: COLORS.accent },
       }],
     }],
+  })
+}
+
+/** Bar + line combo — bar on the primary axis, line on a secondary axis
+ *  (e.g. 社融增量 bar vs 社融存量增速 line, 新增贷款 bar vs 贷款同比 line). */
+export function buildBarLineCombo(
+  derived: Rec[], barCol: string, lineCol: string,
+  barName: string, lineName: string,
+  barUnit = '', lineUnit = '',
+): Record<string, any> {
+  const dates = derived.map((r) => r.date as string)
+  return applyTheme({
+    legend: { top: 0 },
+    xAxis: { type: 'category', data: dates, ...baseAxis() },
+    yAxis: [
+      { type: 'value', name: barUnit, ...baseAxis() },
+      { type: 'value', name: lineUnit, ...baseAxis(), splitLine: { show: false } },
+    ],
+    series: [
+      { name: barName, type: 'bar', yAxisIndex: 0,
+        data: derived.map((r) => r[barCol]), itemStyle: { color: hexA(COLORS.accent, 0.55) } },
+      { name: lineName, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
+        data: derived.map((r) => r[lineCol]), lineStyle: { color: COLORS.warn, width: 2 } },
+    ],
+  })
+}
+
+/** Multi-line — N series on one value axis (e.g. PMI 官方+财新+非制造业, LPR 1Y+5Y).
+ *  Single-column input also renders a one-series line. */
+export function buildMultiLine(
+  derived: Rec[], cols: { col: string; name: string }[], yUnit = '',
+): Record<string, any> {
+  const dates = derived.map((r) => r.date as string)
+  return applyTheme({
+    xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
+    yAxis: { type: 'value', name: yUnit, ...baseAxis({ name: yUnit }) },
+    series: cols.map((c, i) => ({
+      name: c.name, type: 'line', connectNulls: true, symbol: 'none',
+      lineStyle: { width: 2, color: PALETTE[i % PALETTE.length] },
+      data: derived.map((r) => r[c.col]),
+    })),
   })
 }

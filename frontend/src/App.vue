@@ -5,9 +5,9 @@ import RefreshBar from './components/layout/RefreshBar.vue'
 </script>
 
 <template>
-  <div class="min-h-screen flex bg-bg">
+  <div class="min-h-screen bg-bg">
     <Sidebar />
-    <main class="flex-1 min-h-screen">
+    <main class="ml-[200px] h-screen overflow-y-auto overflow-x-hidden">
       <RefreshBar />
       <RouterView v-slot="{ Component }">
         <Transition name="fade" mode="out-in">

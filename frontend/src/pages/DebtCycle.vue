@@ -32,7 +32,7 @@ watchEffect(() => { void filters.start; void filters.end; load() })
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header><h1 class="text-xl font-bold text-text">债务周期</h1>
       <p class="text-xs text-text-3 mt-1">各部门杠杆率（达利欧去杠杆框架）</p>
     </header>
@@ -42,6 +42,9 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     </div>
     <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading">
       <EChart :option="buildStackedArea(dq, ['household', 'non_fin_corp', 'gov_total'])" height="380px" />
+    </GraphCard>
+    <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading">
+      <EChart :option="buildStackedArea(dq, ['gov_central', 'gov_local'])" height="320px" />
     </GraphCard>
   </div>
 </template>
