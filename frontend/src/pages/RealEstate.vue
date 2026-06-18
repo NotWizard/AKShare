@@ -67,7 +67,7 @@ const scores = () => assessment.value.assessment ?? assessment.value
       <EChart :option="buildRadar(scores())" height="360px" />
       <p v-if="scores()?.summary" class="text-xs text-text-2 mt-3">
         {{ scores().summary }}<span v-if="scores()?.composite_score">
-          · 综合 {{ Number(scores().composite_score).toFixed(0) }}
+          · 综合 {{ Number(scores().composite_score).toFixed(2) }}
         </span>
       </p>
     </GraphCard>

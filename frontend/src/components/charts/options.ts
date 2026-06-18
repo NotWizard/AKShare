@@ -164,7 +164,7 @@ export function buildRadar(assessment: {
   rate_env_score?: number
 }): Record<string, any> {
   return applyTheme({
-    tooltip: { trigger: 'item' },
+    tooltip: { trigger: 'item', valueFormatter: (v: unknown) => Number(v).toFixed(2) },
     legend: { show: false },
     radar: {
       indicator: [
