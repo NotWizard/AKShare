@@ -28,7 +28,7 @@ async function load() {
   loading.value = true
   try {
     const [d, s] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,cpi_yoy,ppi_yoy,m1_yoy,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc,m2_m1_spread,m0_yoy,lpr_1y,lpr_5y,real_rate,cpi_mom'),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,cpi_yoy,ppi_yoy,m1_yoy,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc,m2_m1_spread,m0_yoy,lpr_1y,lpr_5y,real_rate,cpi_mom', true),
       api.getSignals(),
     ])
     if (mine !== reqId) return  // superseded by a newer request
@@ -83,7 +83,7 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
       <EChart :option="buildMultiLine(dm.slice().reverse(), [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')" height="300px" />
     </GraphCard>
     <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading">
-      <EChart :option="buildMultiLine(dm.slice().reverse(), [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }])" height="300px" />
+      <EChart :option="buildMultiLine(dm.slice().reverse(), [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)" height="300px" />
     </GraphCard>
 
     <!-- 跨指标领先/滞后（消费 analysis 的 signals.cross_lags，零额外计算）-->

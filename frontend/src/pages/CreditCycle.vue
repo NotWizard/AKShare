@@ -20,7 +20,7 @@ async function load() {
   loading.value = true
   try {
     const [dm, cc] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,total,sf_stock_yoy,new_rmb_loan,loan_yoy'),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,total,sf_stock_yoy,new_rmb_loan,loan_yoy', true),
       api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return

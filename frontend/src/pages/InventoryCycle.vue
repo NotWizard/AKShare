@@ -18,7 +18,7 @@ async function load() {
   loading.value = true
   try {
     const [d, c] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,ip_yoy'),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,ip_yoy', true),
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
@@ -44,7 +44,7 @@ watchEffect(() => { void filters.start; void filters.end; load() })
       <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
     </GraphCard>
     <GraphCard title="PMI 官方 vs 财新" tip="财新制造业 PMI 常被视为领先指标；50 为荣枯线。" :loading="loading">
-      <EChart :option="buildMultiLine(dm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }])" height="300px" />
+      <EChart :option="buildMultiLine(dm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }], '', 50)" height="300px" />
     </GraphCard>
   </div>
 </template>

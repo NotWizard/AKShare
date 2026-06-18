@@ -1,5 +1,33 @@
 # Change Log
 
+## 2026-06-18 — 图表起点对齐有数据 + PMI 荣枯线重点突出
+
+### 优化
+
+- **[优化] `backend/app/api/v1/data.py`**: `derived_monthly()` 加 `align_start` 布尔参数。True 时，取请求各值列**同时非空**的最早日期作为切片起点（用户传了 `start` 则取较大者尊重其范围）——图表不再从 1978 一段空白起，省去每次手动拖周期。默认 False，契约（golden）不变
+- **[优化] `frontend/src/api/client.ts`**: `getDerivedMonthly` 加 `alignStart` 透传
+- **[优化] 3 页面**（Overview/CreditCycle/InventoryCycle）: `getDerivedMonthly` 请求带 `alignStart: true`
+- **[优化] `frontend/src/components/charts/options.ts`**: `buildMultiLine` 加 `markLineAt?: number` 参数——在首个 series 画实线参考线 + 标注。概览「PMI 多维」与库存「PMI 官方 vs 财新」传 50，**荣枯线 50 以琥珀实线 + 标注重点突出**（PMI 语义零轴）
+
+### 验证
+
+- `align_start` 各列起点经真实 API 取证正确：LPR1Y→2013-10、财新PMI→2012-01、M2同比→1991-12（印证月度同比从那时才有）、CPI同比+环比→1996-02、社融+存量→2016-01；不传则 1978-01 默认不变
+- `vue-tsc --noEmit` 0 error；后端 golden test 6/6 无回归
+
+### Optimization (English)
+
+- [opt] `backend/app/api/v1/data.py`: add `align_start` flag to `derived_monthly()`. When true, the slice starts at the earliest date where all requested value columns are non-null (respects an explicit user `start` by taking the later) — charts no longer begin in 1978 with an empty run, sparing manual slider drags. Defaults false; golden contract unchanged
+- [opt] `api/client.ts`: `getDerivedMonthly` passes through `alignStart`
+- [opt] Overview/CreditCycle/InventoryCycle: requests send `alignStart: true`
+- [opt] `options.ts buildMultiLine`: add `markLineAt?` — draws a solid reference line + label on the first series. Overview "PMI multi-dim" and Inventory "PMI official vs Caixin" pass 50, highlighting the 50 expansion/contraction line as PMI's semantic zero-axis
+
+### Verification (English)
+
+- `align_start` confirmed via real API: LPR1Y→2013-10, Caixin-PMI→2012-01, M2-YoY→1991-12 (monthly YoY starts then), CPI-YoY+MoM→1996-02, social-financing+stock→2016-01; without the flag, default 1978-01 unchanged
+- `vue-tsc --noEmit` 0 errors; backend golden test 6/6 no regression
+
+---
+
 ## 2026-06-17 — 修复主体布局（侧边栏固定 + main 独立滚动 + 顶部筛选栏撑满）
 
 ### Bug 修复

@@ -220,18 +220,28 @@ export function buildBarLineCombo(
 }
 
 /** Multi-line — N series on one value axis (e.g. PMI 官方+财新+非制造业, LPR 1Y+5Y).
- *  Single-column input also renders a one-series line. */
+ *  Single-column input also renders a one-series line.
+ *  markLineAt: draw an emphasized reference line (e.g. PMI 荣枯线 50). */
 export function buildMultiLine(
-  derived: Rec[], cols: { col: string; name: string }[], yUnit = '',
+  derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number,
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
+  const series: Record<string, any>[] = cols.map((c, i) => ({
+    name: c.name, type: 'line', connectNulls: true, symbol: 'none',
+    lineStyle: { width: 2, color: PALETTE[i % PALETTE.length] },
+    data: derived.map((r) => r[c.col]),
+  }))
+  if (markLineAt !== undefined && series.length) {
+    series[0].markLine = {
+      silent: true, symbol: ['none', 'none'],
+      lineStyle: { color: COLORS.warn, type: 'solid', width: 1.5 },
+      label: { formatter: '荣枯线 {c}', color: COLORS.warn, fontSize: 10, position: 'insideEndTop' },
+      data: [{ yAxis: markLineAt }],
+    }
+  }
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', name: yUnit, ...baseAxis({ name: yUnit }) },
-    series: cols.map((c, i) => ({
-      name: c.name, type: 'line', connectNulls: true, symbol: 'none',
-      lineStyle: { width: 2, color: PALETTE[i % PALETTE.length] },
-      data: derived.map((r) => r[c.col]),
-    })),
+    series,
   })
 }

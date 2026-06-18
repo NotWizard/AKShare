@@ -15,7 +15,14 @@ def derived_monthly(
     start: str | None = Query(None),
     end: str | None = Query(None),
     cols: str | None = Query(None, description="comma-separated column subset"),
+    align_start: bool = Query(
+        False,
+        description="if true, drop the leading rows where requested cols are still all/any null, "
+                    "so the chart starts at the first point the data actually exists",
+    ),
 ):
+    import pandas as pd
+
     df = db.load("derived_monthly", start, end)
     if cols:
         # Dedupe: callers pass 'date' in cols (e.g. CreditCycle.vue uses
@@ -29,6 +36,20 @@ def derived_monthly(
             ["date"] + [c.strip() for c in cols.split(",") if c.strip()]
         ))
         df = df[[c for c in keep if c in df.columns]]
+
+    if align_start and "date" in df.columns:
+        # Start at the earliest row where every requested value column is
+        # non-null — charts no longer begin in 1978 with a long empty run when
+        # the series only exists from (e.g.) 2019. Respects an explicit user
+        # `start` (takes the later of the two).
+        value_cols = [c for c in df.columns if c != "date"]
+        if value_cols:
+            mask = df[value_cols].notna().all(axis=1)
+            if mask.any():
+                first_valid = df.loc[mask, "date"].iloc[0]
+                if start is None or pd.Timestamp(first_valid) > pd.Timestamp(start):
+                    df = df[df["date"] >= pd.Timestamp(first_valid)]
+
     return DerivedFrame(
         table="derived_monthly",
         columns=list(df.columns),

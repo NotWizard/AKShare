@@ -32,8 +32,8 @@ function qs(pairs: Array<[string, string | undefined]>): string {
 }
 
 export const api = {
-  getDerivedMonthly: (start?: string, end?: string, cols?: string) =>
-    getJSON<DerivedFrame>(`/derived/monthly${qs([['start', start], ['end', end], ['cols', cols]])}`),
+  getDerivedMonthly: (start?: string, end?: string, cols?: string, alignStart?: boolean) =>
+    getJSON<DerivedFrame>(`/derived/monthly${qs([['start', start], ['end', end], ['cols', cols], ['align_start', alignStart ? 'true' : undefined]])}`),
   getDerivedQuarterly: (start?: string, end?: string) =>
     getJSON<DerivedFrame>(`/derived/quarterly${qs([['start', start], ['end', end]])}`),
   getTable: (name: string, start?: string, end?: string) =>
