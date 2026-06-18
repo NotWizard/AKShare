@@ -43,5 +43,8 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading">
       <EChart :option="buildStackedArea(dq, ['household', 'non_fin_corp', 'gov_total'])" height="380px" />
     </GraphCard>
+    <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading">
+      <EChart :option="buildStackedArea(dq, ['gov_central', 'gov_local'])" height="320px" />
+    </GraphCard>
   </div>
 </template>

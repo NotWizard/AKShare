@@ -2,7 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildDualAxisLine } from '@/components/charts/options'
+import { buildDualAxisLine, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import MetricTile from '@/components/layout/MetricTile.vue'
@@ -28,7 +28,7 @@ async function load() {
   loading.value = true
   try {
     const [d, s] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,cpi_yoy,ppi_yoy,m1_yoy,pmi_official,m2_m1_spread'),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy,cpi_yoy,ppi_yoy,m1_yoy,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc,m2_m1_spread,m0_yoy,lpr_1y,lpr_5y,real_rate,cpi_mom'),
       api.getSignals(),
     ])
     if (mine !== reqId) return  // superseded by a newer request
@@ -42,8 +42,18 @@ const tiles = [
   { label: 'M2 同比', col: 'm2_yoy', suffix: '%' },
   { label: 'CPI 同比', col: 'cpi_yoy', suffix: '%' },
   { label: 'PMI 官方', col: 'pmi_official' },
+  { label: '财新 PMI', col: 'pmi_caixin' },
   { label: 'M2-M1 剪刀差', col: 'm2_m1_spread', suffix: 'pp' },
+  { label: 'M0 同比', col: 'm0_yoy', suffix: '%' },
 ]
+
+// Cross-indicator leading/lag (surfaced from analysis signals.cross_lags).
+const lagNum = (k: string): number | null => {
+  const v = (signals.value?.cross_lags as Record<string, unknown> | undefined)?.[k]
+  return typeof v === 'number' ? v : null
+}
+const fmtLag = (k: string) => lagNum(k) ?? '—'
+const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—'
 </script>
 
 <template>
@@ -66,5 +76,21 @@ const tiles = [
     <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱。" :loading="loading">
       <EChart :option="buildDualAxisLine(dm.slice().reverse(), 'm1_yoy', 'm2_yoy')" height="300px" />
     </GraphCard>
+    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀）vs 环比（月度变动，0 上下波动）。" :loading="loading">
+      <EChart :option="buildDualAxisLine(dm.slice().reverse(), 'cpi_yoy', 'cpi_mom')" height="260px" />
+    </GraphCard>
+    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）。" :loading="loading">
+      <EChart :option="buildMultiLine(dm.slice().reverse(), [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')" height="300px" />
+    </GraphCard>
+    <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading">
+      <EChart :option="buildMultiLine(dm.slice().reverse(), [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }])" height="300px" />
+    </GraphCard>
+
+    <!-- 跨指标领先/滞后（消费 analysis 的 signals.cross_lags，零额外计算）-->
+    <div v-if="signals?.cross_lags" class="text-xs text-text-2 space-y-1 px-4 py-3 rounded-lg bg-card border border-border">
+      <div class="text-text-3 uppercase tracking-wide">跨指标领先</div>
+      <div>M1 → PPI 领先约 <b class="text-text">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('m1_ppi_max_corr') }}）</div>
+      <div>剪刀差 → CPI 领先约 <b class="text-text">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('spread_cpi_max_corr') }}）</div>
+    </div>
   </div>
 </template>

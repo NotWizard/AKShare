@@ -2,7 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildDualAxisLine, buildScatterQuadrant } from '@/components/charts/options'
+import { buildDualAxisLine, buildScatterQuadrant, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
@@ -18,7 +18,7 @@ async function load() {
   loading.value = true
   try {
     const [d, c] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy'),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,ip_yoy'),
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
@@ -42,6 +42,9 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     </GraphCard>
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading">
       <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
+    </GraphCard>
+    <GraphCard title="PMI 官方 vs 财新" tip="财新制造业 PMI 常被视为领先指标；50 为荣枯线。" :loading="loading">
+      <EChart :option="buildMultiLine(dm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }])" height="300px" />
     </GraphCard>
   </div>
 </template>

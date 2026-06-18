@@ -1,5 +1,49 @@
 # Change Log
 
+## 2026-06-17 — 补齐前端缺失指标（社融/利率/信贷/财新PMI/跨指标领先/政府细分）
+
+### 新功能
+
+- **[新功能] `frontend/src/components/charts/options.ts`**: 新增两个可复用 builder——`buildBarLineCombo`（柱+双轴折线）与 `buildMultiLine`（多折线，单列亦可用）
+- **[新功能] `frontend/src/pages/CreditCycle.vue`**: 新增 2 图——「社会融资规模：增量与存量增速」（`total` 柱 + `sf_stock_yoy` 线）、「新增人民币贷款与同比」（`new_rmb_loan` 柱 + `loan_yoy` 线）
+- **[新功能] `frontend/src/pages/Overview.vue`**: 新增 4 图 + 2 KPI 瓦——「CPI 同比 vs 环比」（`cpi_mom`）、「利率环境」（`lpr_1y`/`lpr_5y`/`real_rate`）、「PMI 多维 官方/财新/非制造业/服务」（`pmi_caixin`/`pmi_non_mfg`/`pmi_caixin_svc`）；新增「财新 PMI」「M0 同比」KPI 瓦；新增「跨指标领先」stat 块（消费 `signals.cross_lags`：M1→PPI、剪刀差→CPI 的最优滞后与相关系数，零额外计算）
+
+### 优化
+
+- **[优化] `frontend/src/pages/InventoryCycle.vue`**: 新增「PMI 官方 vs 财新」图（`pmi_caixin`），财新制造业 PMI 作为领先指标在 PMI 专属页对照官方
+- **[优化] `frontend/src/pages/DebtCycle.vue`**: 新增「政府杠杆：中央 vs 地方」堆叠图（`gov_central`/`gov_local`，直读 leverage 表）
+
+### 说明
+
+- 把数据层算了但前端未展示的 ~22 个指标「全部补回」中的主体；`analysis/`、后端、数据管线**零改动**，仅前端扩 `cols` 参数 + 新增图表
+- 仍未展示（需额外工作）：`hh_debt_to_income`（居民真实杠杆率，`derived_quarterly` 未物化 + NBS 收入数据常缺）、`ip_cumulative`（与 ip_yoy 冗余，刻意略）、`rmb_loan`/`sf_impulse`/`loan_stock_yoy`（与已展示的社融/信贷主指标冗余）
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error；后端 golden test 6/6 无回归；新引用列经真实 API 取证均有非空值（社融 50535亿、LPR 4.15/4.8、实际利率 -0.35、财新 PMI 51.5 等），`cross_lags` 在场（剪刀差→CPI 领先 10 月 r=0.28）
+
+### New Feature (English)
+
+- [feat] `frontend/src/components/charts/options.ts`: add reusable builders `buildBarLineCombo` (bar + dual-axis line) and `buildMultiLine` (multi-line; works for single series too)
+- [feat] `CreditCycle.vue`: add 2 charts — "social financing: increment vs stock growth" (`total` bar + `sf_stock_yoy` line), "new RMB loans vs YoY" (`new_rmb_loan` bar + `loan_yoy` line)
+- [feat] `Overview.vue`: add 4 charts + 2 KPI tiles — "CPI YoY vs MoM" (`cpi_mom`), "interest-rate environment" (`lpr_1y`/`lpr_5y`/`real_rate`), "PMI multi-dim: official/Caixin/non-mfg/services" (`pmi_caixin`/`pmi_non_mfg`/`pmi_caixin_svc`); add Caixin-PMI and M0-YoY tiles; add cross-indicator-leading stat block (consumes `signals.cross_lags`: M1→PPI and spread→CPI best lag + correlation, zero extra compute)
+
+### Optimization (English)
+
+- [opt] `InventoryCycle.vue`: add "PMI official vs Caixin" chart (`pmi_caixin`); Caixin as a leading indicator on the PMI-centric page
+- [opt] `DebtCycle.vue`: add "government leverage: central vs local" stacked chart (`gov_central`/`gov_local`, reads leverage table)
+
+### Notes (English)
+
+- Brings back the main body of the ~22 computed-but-unshown metrics; `analysis/`, backend, data pipeline untouched (frontend-only: extended `cols` params + new charts)
+- Still not surfaced (needs extra work): `hh_debt_to_income` (not materialized in derived_quarterly + NBS income often absent), `ip_cumulative` (redundant with ip_yoy, intentionally omitted), `rmb_loan`/`sf_impulse`/`loan_stock_yoy` (redundant with the social-financing/credit charts now shown)
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors; backend golden test 6/6 (no regression); new columns confirmed non-null via real API (social financing 50535亿, LPR 4.15/4.8, real rate -0.35, Caixin PMI 51.5, …); `cross_lags` present (spread→CPI leads 10 months, r=0.28)
+
+---
+
 ## 2026-06-17 — 修复信用周期页 M2 趋势线不渲染（derived 日期重复列）
 
 ### Bug 修复
