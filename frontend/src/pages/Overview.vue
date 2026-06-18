@@ -57,7 +57,7 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header>
       <h1 class="text-xl font-bold text-text">综合概览</h1>
       <p class="text-xs text-text-3 mt-1">关键宏观指标 + 综合信号</p>

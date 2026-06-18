@@ -1,5 +1,29 @@
 # Change Log
 
+## 2026-06-17 — 修复主体布局（侧边栏固定 + main 独立滚动 + 顶部筛选栏撑满）
+
+### Bug 修复
+
+- **[严重] `frontend/src/App.vue`**: 原结构 `flex` + fixed sidebar + 各页 `ml-[200px]` 自相矛盾——fixed 元素不参与 flex、`flex-1` 形同虚设，且页面横向溢出时整篇文档被拖过 fixed 侧边栏，出现双滚动条、内容越过侧边栏。改为：外层去 `flex`；`<main>` 改 `ml-[200px] h-screen overflow-y-auto overflow-x-hidden` → main 成为独立滚动容器（纵向自滚、横向裁剪），与 fixed 侧边栏解耦，内容再溢出也拖不过侧边栏
+- **[修复] 6 个页面根 div**（Overview/Credit/Merrill/Inventory/Debt/RealEstate）: 去掉冗余 `ml-[200px]`（现由 main 统一负责偏移，留着会偏移 400px）
+- **[修复] `frontend/src/components/layout/RefreshBar.vue`**: 去掉旧布局遗留的 `ml-[200px]`（旧布局 main 全宽、bar 需躲侧边栏；现在 bar 在已偏移的 main 内，再 +200 导致偏右且不填满）→ 顶部筛选栏撑满主区全宽、与下方内容（px-6 ↔ p-6）对齐、`sticky top-0` 吸附滚动容器顶
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error；前后端 HTTP 200；vite HMR 无报错；布局修复后侧边栏钉死、main 独立滚动、顶部栏固定且全宽
+
+### Bug Fix (English)
+
+- [critical] `frontend/src/App.vue`: the old `flex` + fixed sidebar + per-page `ml-[200px]` was self-contradictory — a fixed element doesn't participate in flex (so `flex-1` did nothing), and horizontal overflow dragged the whole document past the fixed sidebar, causing double scrollbars and content crossing the sidebar. Fix: drop `flex` on the root; `<main>` → `ml-[200px] h-screen overflow-y-auto overflow-x-hidden` (independent scroll container, decoupled from the fixed sidebar; content can't cross it)
+- [fix] 6 pages (Overview/Credit/Merrill/Inventory/Debt/RealEstate): remove the redundant `ml-[200px]` (now owned by main; keeping it would double the offset to 400px)
+- [fix] `RefreshBar.vue`: drop the legacy `ml-[200px]` (made sense when main was full-width; now it's inside the offset main, so it shifted right and didn't fill) → toolbar now spans the main width, aligns with content (px-6 ↔ p-6), and `sticky top-0` sticks to the scroll container
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors; frontend+backend HTTP 200; vite HMR clean; layout fixed: sidebar pinned, main scrolls independently, toolbar full-width and sticky
+
+---
+
 ## 2026-06-17 — 补齐前端缺失指标（社融/利率/信贷/财新PMI/跨指标领先/政府细分）
 
 ### 新功能

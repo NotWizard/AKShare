@@ -56,7 +56,7 @@ const scores = () => assessment.value.assessment ?? assessment.value
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header><h1 class="text-xl font-bold text-text">房地产市场</h1>
       <p class="text-xs text-text-3 mt-1">多城市新房价格同比 + 三维评估（杠杆空间/利率环境/价格动能）</p>
     </header>

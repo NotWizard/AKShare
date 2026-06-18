@@ -32,7 +32,7 @@ watchEffect(() => { void filters.start; void filters.end; load() })
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header><h1 class="text-xl font-bold text-text">债务周期</h1>
       <p class="text-xs text-text-3 mt-1">各部门杠杆率（达利欧去杠杆框架）</p>
     </header>

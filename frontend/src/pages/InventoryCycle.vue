@@ -29,7 +29,7 @@ watchEffect(() => { void filters.start; void filters.end; load() })
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header><h1 class="text-xl font-bold text-text">库存周期</h1>
       <p class="text-xs text-text-3 mt-1">PMI + 工业增加值 → 主动/被动 补库·去库</p>
     </header>

@@ -26,7 +26,7 @@ watchEffect(() => { void filters.start; void filters.end; load() })
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header><h1 class="text-xl font-bold text-text">美林时钟</h1>
       <p class="text-xs text-text-3 mt-1">GDP 同比 vs CPI 同比四象限（复苏/过热/滞胀/衰退）</p>
     </header>

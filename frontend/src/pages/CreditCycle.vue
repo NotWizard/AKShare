@@ -41,7 +41,7 @@ const presets = ['5Y', '10Y', '20Y', 'ALL'] as const
 </script>
 
 <template>
-  <div class="p-6 space-y-5 ml-[200px]">
+  <div class="p-6 space-y-5">
     <header>
       <div>
         <h1 class="text-xl font-bold text-text">信用周期</h1>
