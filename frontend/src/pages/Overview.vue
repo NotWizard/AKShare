@@ -2,7 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildDualAxisLine, buildMultiLine } from '@/components/charts/options'
+import { buildDualAxisLine, buildMultiLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import MetricTile from '@/components/layout/MetricTile.vue'
@@ -75,6 +75,9 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
     </GraphCard>
     <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱。" :loading="loading">
       <EChart :option="buildDualAxisLine(dm.slice().reverse(), 'm1_yoy', 'm2_yoy')" height="300px" />
+    </GraphCard>
+    <GraphCard title="M2−M1 剪刀差" tip="M2 同比减 M1 同比（百分点）。>0 资金活化偏弱（定期化）；0 线为增速持平。" :loading="loading">
+      <EChart :option="buildSpreadChart(dm.slice().reverse(), 'm2_m1_spread')" height="260px" />
     </GraphCard>
     <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀）vs 环比（月度变动，0 上下波动）。" :loading="loading">
       <EChart :option="buildDualAxisLine(dm.slice().reverse(), 'cpi_yoy', 'cpi_mom')" height="260px" />

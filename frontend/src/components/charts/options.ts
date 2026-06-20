@@ -232,16 +232,51 @@ export function buildMultiLine(
     data: derived.map((r) => r[c.col]),
   }))
   if (markLineAt !== undefined && series.length) {
-    series[0].markLine = {
-      silent: true, symbol: ['none', 'none'],
-      lineStyle: { color: COLORS.warn, type: 'solid', width: 1.5 },
-      label: { formatter: '荣枯线 {c}', color: COLORS.warn, fontSize: 10, position: 'insideEndTop' },
-      data: [{ yAxis: markLineAt }],
-    }
+    // Attach the reference line to EVERY series, not just [0], so toggling any
+    // one off in the legend still leaves the line on the others. It only
+    // disappears when all series are hidden — which is correct.
+    series.forEach((s) => {
+      s.markLine = {
+        silent: true, symbol: ['none', 'none'],
+        lineStyle: { color: COLORS.warn, type: 'solid', width: 1.5 },
+        label: { formatter: '荣枯线 {c}', color: COLORS.warn, fontSize: 10, position: 'insideEndTop' },
+        data: [{ yAxis: markLineAt }],
+      }
+    })
   }
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
-    yAxis: { type: 'value', name: yUnit, ...baseAxis({ name: yUnit }) },
+    // scale:true → the y-axis adapts to the data range (not forced from 0),
+    // so narrow-amplitude series (PMI 49~52) aren't flattened into a near-line.
+    yAxis: { type: 'value', name: yUnit, scale: true, ...baseAxis({ name: yUnit }) },
     series,
+  })
+}
+
+/** Spread chart — a single value (e.g. M2−M1 剪刀差) as an area line, with an
+ *  emphasized zero line (the semantic axis: growth equal / diverging). The y-axis
+ *  is scaled to the data range so the small pp swings are visible.
+ *  `markLineValue` defaults to 0. */
+export function buildSpreadChart(
+  derived: Rec[], col: string, name = '剪刀差', unit = 'pp', markLineValue = 0,
+): Record<string, any> {
+  const dates = derived.map((r) => r.date as string)
+  return applyTheme({
+    xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
+    yAxis: { type: 'value', name: unit, scale: true, ...baseAxis({ name: unit }) },
+    series: [
+      {
+        name, type: 'line', connectNulls: true, symbol: 'none',
+        data: derived.map((r) => r[col]),
+        lineStyle: { color: COLORS.accent, width: 2 },
+        areaStyle: { color: hexA(COLORS.accent, 0.15) },
+        markLine: {
+          silent: true, symbol: ['none', 'none'],
+          lineStyle: { color: COLORS.text3, type: 'solid', width: 1 },
+          label: { formatter: '持平', color: COLORS.text3, fontSize: 10, position: 'insideEndTop' },
+          data: [{ yAxis: markLineValue }],
+        },
+      },
+    ],
   })
 }

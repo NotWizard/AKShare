@@ -1,5 +1,37 @@
 # Change Log
 
+## 2026-06-18 — 新增 M2−M1 剪刀差图 + 修复 PMI 荣枯线/纵轴
+
+### 新功能
+
+- **[新功能] `frontend/src/components/charts/options.ts`**: 新增 `buildSpreadChart` builder——单 series 面积线 + 0 轴 `markLine`（标「持平」）+ `scale:true`。专用于差值类指标（剪刀差），0 为语义零轴（增速持平）
+- **[新功能] `frontend/src/pages/Overview.vue`**: 在「M1 vs M2 同比」图后新增「M2−M1 剪刀差」面积图（`m2_m1_spread`），0 轴标「持平」，`scale` 放大 pp 波动。之前该指标只有 KPI 瓦、无独立图
+
+### Bug 修复
+
+- **[修复] `buildMultiLine` 荣枯线挂在 `series[0]`**：关掉「官方」series 时荣枯线跟着消失。改为挂到**每个 series**（`forEach`）——关任一 series，其余仍带 50 线，线不消失（全关才消失，符合预期）
+- **[优化] `buildMultiLine` 纵轴加 `scale:true`**：窄幅指标（PMI 49~52）不再被强制 0 起、压成平线，波动正确放大
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error；剪刀差数据起点 1991-12（align_start 下从有数据处起，359 非空点）
+
+### New Feature (English)
+
+- [feat] `options.ts`: add `buildSpreadChart` builder — single area line + zero-axis `markLine` (labeled 「持平」) + `scale:true`; for spread/difference series where 0 is the semantic axis (growth equal)
+- [feat] `Overview.vue`: add "M2−M1 剪刀差" area chart after the M1/M2 chart (`m2_m1_spread`), with a 0 line and scaled axis. Previously only a KPI tile existed, no dedicated chart
+
+### Bug Fix (English)
+
+- [fix] `buildMultiLine` reference line was on `series[0]` — toggling 官方 off hid the 50 line. Now attached to every series (`forEach`) — toggling any one off still leaves the line on the others; only disappears when all hidden (correct)
+- [opt] `buildMultiLine` yAxis `scale:true` — narrow-amplitude series (PMI 49~52) no longer forced from 0 into a near-flat line; swings amplified
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors; spread data starts 1991-12 under align_start (359 non-null points)
+
+---
+
 ## 2026-06-18 — 图表起点对齐有数据 + PMI 荣枯线重点突出
 
 ### 优化
