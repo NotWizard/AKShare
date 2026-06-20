@@ -51,6 +51,7 @@ def compute_derived(conn):
     lpr = load_table(conn, "lpr")
     industrial = load_table(conn, "industrial")
     hh_income = load_table(conn, "household_income")
+    bond = load_table(conn, "bond_yield")
 
     # ─── 构建月度主表 ───
     # 以 money_supply 的日期为锚（月度，最长序列）
@@ -96,6 +97,27 @@ def compute_derived(conn):
     # 实际利率 = LPR 1Y - CPI
     if "lpr_1y" in monthly.columns and "cpi_yoy" in monthly.columns:
         monthly["real_rate"] = monthly["lpr_1y"] - monthly["cpi_yoy"]
+
+    # ─── 10 年期国债收益率（日频 → 月频：取每月最后一个交易日的值）───
+    if not bond.empty:
+        b = bond.copy()
+        b["date"] = pd.to_datetime(b["date"])
+        b = b.sort_values("date").dropna(subset=["y_10y"])
+        # resample 到月末，取当月最后值；再对齐到 monthly 的月初锚点
+        b_m = (
+            b.set_index("date")["y_10y"]
+            .resample("ME")
+            .last()
+            .reset_index()
+            .rename(columns={"y_10y": "bond_10y"})
+        )
+        # monthly 锚点是每月 1 号；国债月末值 forward-fill 对齐到该月
+        b_m["date"] = b_m["date"].values.astype("datetime64[M]")  # 月初归一
+        monthly = monthly.merge(b_m[["date", "bond_10y"]], on="date", how="left")
+    else:
+        # 采集失败时仍预创建列（全 NaN），保证 derived_monthly 列结构稳定，
+        # 前端始终能请求到 bond_10y（值全空 → 图表无线，优雅降级而非缺列报错）
+        monthly["bond_10y"] = pd.NA
 
     # ─── 社融存量增速 ───
     if not social_fin.empty:

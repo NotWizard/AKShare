@@ -47,7 +47,7 @@ async function load() {
       api.getDerivedMonthly(m2st, en, 'date,m1_yoy,m2_yoy', true),
       api.getDerivedMonthly(m2st, en, 'date,m2_m1_spread', true),
       api.getDerivedMonthly(st, en, 'date,cpi_yoy,cpi_mom', true),
-      api.getDerivedMonthly(st, en, 'date,lpr_1y,lpr_5y,real_rate', true),
+      api.getDerivedMonthly(st, en, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true),
       api.getDerivedMonthly(st, en, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true),
       api.getSignals(),
     ])
@@ -119,8 +119,8 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
     <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀）vs 环比（月度变动，0 上下波动）。" :loading="loading">
       <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
     </GraphCard>
-    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）。" :loading="loading">
-      <EChart :option="buildMultiLine(rate, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')" height="300px" />
+    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。" :loading="loading">
+      <EChart :option="buildMultiLine(rate, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10Y国债' }], '%')" height="300px" />
     </GraphCard>
     <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading">
       <EChart :option="buildMultiLine(pmi, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)" height="300px" />

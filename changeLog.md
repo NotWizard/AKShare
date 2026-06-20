@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-06-20 — 新增 10Y 国债收益率采集 + 利率图（概览/房地产）
+
+### 新功能
+
+- **[新功能] `scripts/01_fetch_data.py`**: 新增 `fetch_bond_yield`——`ak.bond_china_yield` 采「中债国债收益率曲线」的 10 年列，日频存 `bond_yield` 表（date, y_10y）；`_pipeline.TABLE_SPECS` 加闸门（min_rows 1000）；加入 fetchers 列表
+- **[新功能] `scripts/02_compute_derived.py`**: 合并 `bond_10y` 到 `derived_monthly`——日频→月频重采样（取每月末值、月初归一对齐 monthly 锚点）；`bond` 表空时预创建全空列，保证列结构稳定（前端始终能请求到该列，采集失败时优雅降级为无线而非缺列报错）
+- **[新功能] `frontend/src/pages/Overview.vue`**: 「利率环境」图加 10Y 国债线（`bond_10y`），与 LPR1Y/5Y/实际利率同图，无风险利率锚
+- **[新功能] `frontend/src/pages/RealEstate.vue`**: 新增「利率环境（房贷锚）」图——5Y LPR（房贷定价基准）+ 实际利率（LPR1Y−CPI），与房价同页看利率对房市支撑。零采集（`lpr_5y`/`real_rate` 已在 derived_monthly）
+
+### 说明
+
+- **10Y 国债采集网络限制**：中债网（yield.chinabond.com.cn）全历史大批量采集在当前沙箱被限流/拒连（小范围可用，59 行验证通过）；换可达网络跑 `python scripts/01_fetch_data.py` 即填充 `bond_yield` → `derived_monthly.bond_10y`
+- **LPR 进房地产页**：零后端改动，纯前端加图
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error；后端 golden test 6/6 无回归；`bond_10y` 列存在（采集失败环境 581 行全 NaN，优雅降级；联网后填充）
+
+### New Feature (English)
+
+- [feat] `scripts/01_fetch_data.py`: add `fetch_bond_yield` — `ak.bond_china_yield` (the "中债国债收益率曲线" curve), 10Y column, daily, stored as `bond_yield` (date, y_10y); added to `_pipeline.TABLE_SPECS` (min_rows 1000) and the fetcher list
+- [feat] `scripts/02_compute_derived.py`: merge `bond_10y` into `derived_monthly` — resample daily→monthly (last value of each month, aligned to month-start); pre-create an all-null column when `bond` is empty so the schema stays stable (frontend always gets the column; graceful degradation on fetch failure)
+- [feat] `Overview.vue`: add a 10Y-bond line to the "利率环境" chart (`bond_10y`) alongside LPR1Y/5Y/real-rate — the risk-free rate anchor
+- [feat] `RealEstate.vue`: add a "利率环境（房贷锚）" chart — 5Y LPR (mortgage pricing base) + real rate (LPR1Y − CPI), on the same page as house prices. Zero backend change (`lpr_5y`/`real_rate` already in derived_monthly)
+
+### Notes (English)
+
+- **10Y bond fetch network limit**: the chinabond host rate-limits/refuses full-history bulk fetches in this sandbox (small-range fetch works, 59 rows verified); run `python scripts/01_fetch_data.py` on a network where the host is reachable to populate `bond_yield` → `derived_monthly.bond_10y`
+- **LPR on the real-estate page**: zero backend change, frontend-only chart
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors; backend golden test 6/6 no regression; `bond_10y` column present (581 rows all-NaN in the fetch-failed sandbox, graceful degradation; populated once the network is reachable)
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

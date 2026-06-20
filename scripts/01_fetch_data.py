@@ -469,6 +469,30 @@ def fetch_new_credit(conn):
 
 
 # ─────────────────────────────────────────────
+# 13. 10 年期国债收益率（无风险利率锚，日频 → 02 重采样为月频）
+# ─────────────────────────────────────────────
+def fetch_bond_yield(conn):
+    log("采集: 10 年期国债收益率 ...")
+    try:
+        from datetime import datetime
+        end = datetime.now().strftime("%Y%m%d")
+        df = ak.bond_china_yield(start_date="20020101", end_date=end)
+        # 仅取国债收益率曲线（接口还返回信用债/银行债等多条曲线）
+        df = df[df["曲线名称"] == "中债国债收益率曲线"]
+        result = pd.DataFrame({
+            "date": pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-%d"),
+            "y_10y": pd.to_numeric(df["10年"], errors="coerce"),
+        })
+        result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    except Exception as e:
+        log(f"  ⚠️ 国债收益率采集失败: {e}")
+        result = pd.DataFrame()
+
+    save_to_db(result, "bond_yield", conn)
+    return result
+
+
+# ─────────────────────────────────────────────
 # 主流程
 # ─────────────────────────────────────────────
 def main():
@@ -500,6 +524,7 @@ def main():
         fetch_house_price,
         fetch_household_income,
         fetch_new_credit,
+        fetch_bond_yield,
     ]
 
     for f in fetchers:

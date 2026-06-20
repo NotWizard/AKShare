@@ -5,11 +5,12 @@ import { useFiltersStore } from '@/stores/filters'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
-import { buildRadar } from '@/components/charts/options'
+import { buildRadar, buildMultiLine } from '@/components/charts/options'
 
 const filters = useFiltersStore()
 const loading = ref(true)
 const hp = ref<Record<string, string | number | null>[]>([])
+const rate = ref<Record<string, string | number | null>[]>([])   // lpr_5y, real_rate → 房贷锚
 const assessment = ref<Record<string, any>>({})
 
 const CITIES = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '天津']
@@ -19,12 +20,13 @@ async function load() {
   const mine = ++reqId
   loading.value = true
   try {
-    const [h, a] = await Promise.all([
+    const [h, a, r] = await Promise.all([
       api.getTable('house_price', filters.start ?? undefined, filters.end ?? undefined),
       api.getRealEstate(CITIES),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_5y,real_rate', true),
     ])
     if (mine !== reqId) return
-    hp.value = h.records; assessment.value = a
+    hp.value = h.records; assessment.value = a; rate.value = r.records
   } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
@@ -65,6 +67,9 @@ const scores = () => assessment.value.assessment ?? assessment.value
     </header>
     <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading">
       <EChart :option="priceOption()" height="380px" />
+    </GraphCard>
+    <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading">
+      <EChart :option="buildMultiLine(rate, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')" height="300px" />
     </GraphCard>
     <GraphCard title="房地产三维评估" tip="杠杆空间 / 利率环境 / 价格动能 三维评分（0–100，越高越支撑）。" :loading="loading">
       <EChart :option="buildRadar(scores())" height="360px" />
