@@ -1,5 +1,27 @@
 # Change Log
 
+## 2026-06-20 — 修复图例标记色与曲线颜色不一致
+
+### Bug 修复
+
+- **[修复] `frontend/src/components/charts/options.ts`**: 6 个 builder 凡设 `lineStyle.color` 的线 series，同步设 `itemStyle.color` 同色。**根因**：ECharts 图例标记色取自 `series.itemStyle.color`（非 `lineStyle.color`），此前只设线色不设标记色，导致图例错位——典型如债务堆叠图 `gov_total` 线黄、图例却显示红圆点。涉及：`buildStackedArea`（同时删除硬编码 palette、改用主题 `PALETTE`）、`buildMultiLine`、`buildDualAxisLine`、`buildBarLineCombo`（线 series）、`buildCreditM2Chart`、`buildSpreadChart`
+- **[修复] `frontend/src/pages/RealEstate.vue`**: 房价多城市图（inline `priceOption`）同样补 `itemStyle.color`，与线色一致
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error
+
+### Bug Fix (English)
+
+- [fix] `options.ts`: for every line series that sets `lineStyle.color`, also set `itemStyle.color` to the same value. Root cause: ECharts legend marker color comes from `series.itemStyle.color`, not `lineStyle.color` — so a series with only a line color rendered a legend marker in a different color (e.g. debt-stacked gov_total yellow line but a red legend dot). Covers `buildStackedArea` (also dropped the hardcoded palette in favor of the theme `PALETTE`), `buildMultiLine`, `buildDualAxisLine`, `buildBarLineCombo` (the line series), `buildCreditM2Chart`, `buildSpreadChart`
+- [fix] `RealEstate.vue`: the inline multi-city price chart (`priceOption`) gets the same `itemStyle.color` = line color treatment
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors
+
+---
+
 ## 2026-06-20 — 概览页 7 个 KPI 指标增加 tooltip（含义 + 取数逻辑）
 
 ### 新功能

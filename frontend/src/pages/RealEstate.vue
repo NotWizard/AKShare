@@ -39,11 +39,14 @@ function priceOption(): Record<string, any> {
     byDate.get(d)![c] = r.new_yoy as number | null
   }
   const dates = Array.from(byDate.keys())
-  const series = CITIES.map((c, i) => ({
-    name: c, type: 'line', connectNulls: true, symbol: 'none',
-    lineStyle: { width: 1.5, color: PALETTE[i % PALETTE.length] },
-    data: dates.map((d) => byDate.get(d)?.[c] ?? null),
-  }))
+  const series = CITIES.map((c, i) => {
+    const color = PALETTE[i % PALETTE.length]
+    return {
+      name: c, type: 'line', connectNulls: true, symbol: 'none',
+      itemStyle: { color }, lineStyle: { width: 1.5, color },
+      data: dates.map((d) => byDate.get(d)?.[c] ?? null),
+    }
+  })
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '同比%' }) },

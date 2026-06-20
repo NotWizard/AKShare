@@ -35,14 +35,14 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string,
       {
         name: 'M2同比',
         type: 'line', smooth: false, connectNulls: true, symbol: 'none',
-        data: m2, lineStyle: { color: COLORS.accent, width: 2.5 },
+        data: m2, itemStyle: { color: COLORS.accent }, lineStyle: { color: COLORS.accent, width: 2.5 },
         areaStyle: { opacity: 0.1 },
         markArea: { silent: true, data: [...phaseBg, ...gapBg] },
       },
       {
         name: 'M2趋势',
         type: 'line', connectNulls: true, symbol: 'none',
-        data: trend, lineStyle: { color: COLORS.warn, width: 2, type: 'dashed' },
+        data: trend, itemStyle: { color: COLORS.warn }, lineStyle: { color: COLORS.warn, width: 2, type: 'dashed' },
       },
     ],
     graphic: [{
@@ -89,10 +89,10 @@ export function buildDualAxisLine(
     series: [
       { name: a, type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[a]),
-        lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
+        itemStyle: { color: aColor }, lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
       { name: b, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[b]),
-        lineStyle: { color: bColor, width: 2 } },
+        itemStyle: { color: bColor }, lineStyle: { color: bColor, width: 2 } },
     ],
   })
 }
@@ -102,16 +102,19 @@ export function buildStackedArea(
   derived: Rec[], cols: string[],
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
-  const palette = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#a78bfa', '#06b6d4']
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%' }) },
-    series: cols.map((c, i) => ({
-      name: c, type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
-      areaStyle: { opacity: 0.12 },
-      lineStyle: { width: 1.5, color: palette[i % palette.length] },
-      data: derived.map((r) => r[c]),
-    })),
+    series: cols.map((c, i) => {
+      const color = PALETTE[i % PALETTE.length]
+      return {
+        name: c, type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
+        itemStyle: { color },          // legend marker + area fill use the same color as the line
+        areaStyle: { opacity: 0.12 }, // no explicit color → inherits itemStyle.color
+        lineStyle: { width: 1.5, color },
+        data: derived.map((r) => r[c]),
+      }
+    }),
   })
 }
 
@@ -214,7 +217,7 @@ export function buildBarLineCombo(
       { name: barName, type: 'bar', yAxisIndex: 0,
         data: derived.map((r) => r[barCol]), itemStyle: { color: hexA(COLORS.accent, 0.55) } },
       { name: lineName, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
-        data: derived.map((r) => r[lineCol]), lineStyle: { color: COLORS.warn, width: 2 } },
+        data: derived.map((r) => r[lineCol]), itemStyle: { color: COLORS.warn }, lineStyle: { color: COLORS.warn, width: 2 } },
     ],
   })
 }
@@ -226,11 +229,15 @@ export function buildMultiLine(
   derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number,
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
-  const series: Record<string, any>[] = cols.map((c, i) => ({
-    name: c.name, type: 'line', connectNulls: true, symbol: 'none',
-    lineStyle: { width: 2, color: PALETTE[i % PALETTE.length] },
-    data: derived.map((r) => r[c.col]),
-  }))
+  const series: Record<string, any>[] = cols.map((c, i) => {
+    const color = PALETTE[i % PALETTE.length]
+    return {
+      name: c.name, type: 'line', connectNulls: true, symbol: 'none',
+      itemStyle: { color },            // legend marker = line color
+      lineStyle: { width: 2, color },
+      data: derived.map((r) => r[c.col]),
+    }
+  })
   if (markLineAt !== undefined && series.length) {
     // Attach the reference line to EVERY series, not just [0], so toggling any
     // one off in the legend still leaves the line on the others. It only
@@ -268,7 +275,7 @@ export function buildSpreadChart(
       {
         name, type: 'line', connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[col]),
-        lineStyle: { color: COLORS.accent, width: 2 },
+        itemStyle: { color: COLORS.accent }, lineStyle: { color: COLORS.accent, width: 2 },
         areaStyle: { color: hexA(COLORS.accent, 0.15) },
         markLine: {
           silent: true, symbol: ['none', 'none'],
