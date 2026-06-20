@@ -9,20 +9,24 @@ import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
-const loading = ref(true)
-const dm = ref<Record<string, string | number | null>[]>([])
+type Rec = Record<string, string | number | null>
+// Per-chart groups so 财新 PMI (2012) doesn't truncate 官方 PMI + IP (2008).
+const ipDm = ref<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
+const caixinDm = ref<Rec[]>([])  // date,pmi_official,pmi_caixin → 2012-01
 const cycle = ref<CycleFrame | null>(null)
+const loading = ref(true)
 let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
   try {
-    const [d, c] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,ip_yoy', true),
+    const [ip, cx, c] = await Promise.all([
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy', true),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin', true),
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    dm.value = d.records; cycle.value = c
+    ipDm.value = ip.records; caixinDm.value = cx.records; cycle.value = c
   } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
@@ -38,13 +42,13 @@ watchEffect(() => { void filters.start; void filters.end; load() })
       <span class="text-xs text-text-2">当前：<b class="text-text">{{ phaseLabel(cycle.latest_phase) }}</b></span>
     </div>
     <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading">
-      <EChart :option="buildDualAxisLine(dm, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')" height="320px" />
+      <EChart :option="buildDualAxisLine(ipDm, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')" height="320px" />
     </GraphCard>
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading">
       <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
     </GraphCard>
     <GraphCard title="PMI 官方 vs 财新" tip="财新制造业 PMI 常被视为领先指标；50 为荣枯线。" :loading="loading">
-      <EChart :option="buildMultiLine(dm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }], '', 50)" height="300px" />
+      <EChart :option="buildMultiLine(caixinDm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }], '', 50)" height="300px" />
     </GraphCard>
   </div>
 </template>
