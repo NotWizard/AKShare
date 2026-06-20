@@ -39,13 +39,30 @@ async function load() {
 watchEffect(() => { void filters.start; void filters.end; load() })
 
 const tiles = [
-  { label: 'M2 同比', col: 'm2_yoy', suffix: '%' },
-  { label: 'CPI 同比', col: 'cpi_yoy', suffix: '%' },
-  { label: 'PMI 官方', col: 'pmi_official' },
-  { label: '财新 PMI', col: 'pmi_caixin' },
-  { label: 'M2-M1 剪刀差', col: 'm2_m1_spread', suffix: 'pp' },
-  { label: 'M0 同比', col: 'm0_yoy', suffix: '%' },
+  { label: 'M2 同比', col: 'm2_yoy', suffix: '%', tip: `广义货币供应量 M2 同比增速，反映市场整体流动性，增速上行通常对应宽货币。
+
+取数：AKShare macro_china_supply_of_money → money_supply.m2_yoy（原始同比，无衍生计算）→ 合并入 derived_monthly 表 → 取日期范围内最近一期有效值，单位 %。` },
+  { label: 'CPI 同比', col: 'cpi_yoy', suffix: '%', tip: `居民消费价格指数同比，衡量通胀/通缩，2% 为常用目标线。
+
+取数：AKShare macro_china_cpi_yearly → cpi.cpi_yoy（原始同比）→ left join 入 derived_monthly.cpi_yoy → 取最近一期有效值，单位 %。` },
+  { label: 'PMI 官方', col: 'pmi_official', tip: `国家统计局制造业采购经理指数，50 为荣枯分界线，>50 表示扩张。
+
+取数：AKShare macro_china_pmi_yearly → pmi.pmi_official（原始）→ 合并入 derived_monthly.pmi_official → 取最近一期有效值。` },
+  { label: '财新 PMI', col: 'pmi_caixin', tip: `财新/S&P 制造业 PMI，样本偏中小及沿海企业，公认领先官方 PMI，同为 50 荣枯线。
+
+取数：AKShare macro_china_cx_pmi_yearly → pmi.pmi_caixin（原始）→ 合并于 derived_monthly.pmi_caixin → 取最近一期有效值。` },
+  { label: 'M2-M1 剪刀差', col: 'm2_m1_spread', suffix: 'pp', tip: `M2 同比减 M1 同比，衡量资金活化程度。剪刀差扩大（正值）常预示企业活期存款走弱、需求疲软。
+
+取数：衍生计算 derived_monthly.m2_m1_spread = m2_yoy − m1_yoy（脚本 02_compute_derived.py）→ 取最近一期有效值，单位 pp（百分点）。` },
+  { label: 'M0 同比', col: 'm0_yoy', suffix: '%', tip: `流通中现金 M0 同比，反映现金需求与居民消费活跃度。
+
+取数：AKShare macro_china_supply_of_money → money_supply.m0_yoy（原始同比）→ 透传至 derived_monthly.m0_yoy → 取最近一期有效值，单位 %。` },
 ]
+
+// 综合信号 tooltip（聚合四大周期，取数见 signals.compute_signals）
+const signalTip = `聚合四大周期（美林/信用/库存/债务）最新阶段的复合得分，范围 [-4, +4]，正值偏多、负值偏空；下方文字为对应解读。
+
+取数：/api/v1/signals → analysis/signals.compute_signals：取四周期最新一期 phase 各查表映射为 −1/0/+1 后求和。`
 
 // Cross-indicator leading/lag (surfaced from analysis signals.cross_lags).
 const lagNum = (k: string): number | null => {
@@ -65,8 +82,8 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
 
     <!-- KPI tiles with count-up micro-interaction -->
     <div class="grid grid-cols-5 gap-3">
-      <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" />
-      <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent />
+      <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" :tip="t.tip" />
+      <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent :tip="signalTip" />
     </div>
     <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
 
