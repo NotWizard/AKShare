@@ -54,7 +54,7 @@ function hide() { visible.value = false }
   font-size: 12px;
   line-height: 1.5;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  white-space: normal;
+  white-space: pre-line;
   word-break: break-word;
   pointer-events: none;
 }

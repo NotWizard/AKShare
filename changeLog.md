@@ -1,5 +1,29 @@
 # Change Log
 
+## 2026-06-20 — 概览页 7 个 KPI 指标增加 tooltip（含义 + 取数逻辑）
+
+### 新功能
+
+- **[新功能] `frontend/src/components/layout/MetricTile.vue`**：新增 `tip?: string` prop，label 文字后挂载 `ChartTip`（ⓘ 图标 + Teleport 弹层），与 `GraphCard` 用法一致
+- **[新功能] `frontend/src/pages/Overview.vue`**：6 个 KPI 瓦（M2 同比 / CPI 同比 / PMI 官方 / 财新 PMI / M2-M1 剪刀差 / M0 同比）+ 综合信号瓦各配 tooltip，内容为「指标含义 + 取数逻辑」两段：数据源 AKShare 接口 → 原始表 → 是否衍生计算（剪刀差 = m2_yoy − m1_yoy；综合信号 = 四周期 phase 映射 −1/0/+1 求和）→ 取日期范围内最近一期有效值
+- **[优化] `frontend/src/components/controls/ChartTip.vue`**：弹层 `white-space: normal → pre-line`，让 tooltip 多段文本换行生效（对现有单行 tip 无影响）
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error
+
+### New Feature
+
+- [feat] `MetricTile.vue`: add `tip?: string` prop; mount `ChartTip` (ⓘ + Teleport popup) after the label, mirroring `GraphCard`
+- [feat] `Overview.vue`: add tooltips to 6 KPI tiles (M2/CPI/official PMI/Caixin PMI/M2-M1 spread/M0 YoY) + the composite-signal tile; each tooltip carries two paragraphs — indicator meaning + data logic (AKShare source → raw table → derived formula if any → latest valid value within the date range)
+- [opt] `ChartTip.vue`: popup `white-space: normal → pre-line` so multi-paragraph tooltip text wraps (no effect on existing single-line tips)
+
+### Verification
+
+- `vue-tsc --noEmit` 0 errors
+
+---
+
 ## 2026-06-17 — 修复主体布局（侧边栏固定 + main 独立滚动 + 顶部筛选栏撑满）
 
 ### Bug 修复
