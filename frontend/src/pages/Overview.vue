@@ -39,12 +39,13 @@ async function load() {
   const mine = ++reqId
   loading.value = true
   const st = filters.start ?? undefined, en = filters.end ?? undefined
+  const m2st = filters.start ?? '1996-12-01'   // M2 fragmented (annual-only) before 1997
   try {
     const [kpi, cp, m12, sp, cm, rt, pm, s] = await Promise.all([
       api.getDerivedMonthly(st, en, 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'),
       api.getDerivedMonthly(st, en, 'date,cpi_yoy,ppi_yoy', true),
-      api.getDerivedMonthly(st, en, 'date,m1_yoy,m2_yoy', true),
-      api.getDerivedMonthly(st, en, 'date,m2_m1_spread', true),
+      api.getDerivedMonthly(m2st, en, 'date,m1_yoy,m2_yoy', true),
+      api.getDerivedMonthly(m2st, en, 'date,m2_m1_spread', true),
       api.getDerivedMonthly(st, en, 'date,cpi_yoy,cpi_mom', true),
       api.getDerivedMonthly(st, en, 'date,lpr_1y,lpr_5y,real_rate', true),
       api.getDerivedMonthly(st, en, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true),

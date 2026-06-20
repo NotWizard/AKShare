@@ -20,14 +20,6 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string,
     { xAxis: s.x0, itemStyle: { color: hexA(phaseColor(s.phase), 0.08) } },
     { xAxis: s.x1 },
   ])
-  // Source-data gap disclosure (M2 monthly only from ~1997)
-  const gapBg = [
-    [
-      { xAxis: '1991-01-01', itemStyle: { color: hexA(COLORS.warn, 0.07) } },
-      { xAxis: '1996-12-01' },
-    ],
-  ]
-
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
@@ -37,7 +29,7 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string,
         type: 'line', smooth: false, connectNulls: true, symbol: 'none',
         data: m2, itemStyle: { color: COLORS.accent }, lineStyle: { color: COLORS.accent, width: 2.5 },
         areaStyle: { opacity: 0.1 },
-        markArea: { silent: true, data: [...phaseBg, ...gapBg] },
+        markArea: { silent: true, data: [...phaseBg] },
       },
       {
         name: 'M2趋势',
@@ -45,13 +37,6 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string,
         data: trend, itemStyle: { color: COLORS.warn }, lineStyle: { color: COLORS.warn, width: 2, type: 'dashed' },
       },
     ],
-    graphic: [{
-      type: 'text', left: 'center', top: 30, z: 2,
-      style: {
-        text: '此段 M2 仅年度结存，月度源数据缺失',
-        fill: COLORS.text3, fontSize: 10,
-      },
-    }],
   })
 }
 

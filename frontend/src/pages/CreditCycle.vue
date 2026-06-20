@@ -25,7 +25,7 @@ async function load() {
   loading.value = true
   try {
     const [m2, sf, nc, cc] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,m2_yoy', true),
+      api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_yoy', true),
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,total,sf_stock_yoy', true),
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,new_rmb_loan,loan_yoy', true),
       api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined),
