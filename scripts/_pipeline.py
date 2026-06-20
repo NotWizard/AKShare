@@ -59,6 +59,7 @@ TABLE_SPECS = {
     "household_income": dict(min_rows=8),                 # annual data, naturally sparse
     "new_credit":       dict(min_rows=100, required=["new_rmb_loan"]),
     "bond_yield":      dict(min_rows=1000, required=["y_10y"]),  # daily, ~20y of trading days
+    "demographics":   dict(min_rows=8),                 # annual, ~30y, NBS-sourced (may be blocked)
 }
 
 

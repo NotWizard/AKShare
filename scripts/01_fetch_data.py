@@ -493,6 +493,62 @@ def fetch_bond_yield(conn):
 
 
 # ─────────────────────────────────────────────
+# 14. 人口与城镇化（NBS 年度数据）
+# ─────────────────────────────────────────────
+def fetch_demographics(conn):
+    """NBS 年度人口指标：城镇化率 / 总人口 / 出生率 / 自然增长率。
+
+    Same NBS pattern as fetch_household_income. Each indicator fetched
+    independently (try/except) — a blocked/bad path doesn't sink the rest.
+    """
+    log("采集: 人口与城镇化（NBS） ...")
+
+    def _parse_year_col(col):
+        import re
+        m = re.match(r"(\d{4})年", str(col))
+        return f"{m.group(1)}-01-01" if m else None
+
+    def _fetch_nbs(path, keyword, col_name):
+        """Fetch one NBS indicator → DataFrame(date, col_name)."""
+        try:
+            df = ak.macro_china_nbs_nation(kind="年度数据", path=path, period="LAST30")
+            idx = [i for i in df.index if keyword in str(i)]
+            if not idx:
+                log(f"  ⚠️ NBS 未找到 '{keyword}' 行（path={path}）")
+                return pd.DataFrame()
+            row = df.loc[idx[0]]
+            records = []
+            for col, val in row.items():
+                d = _parse_year_col(col)
+                if d:
+                    records.append({"date": d, col_name: pd.to_numeric(val, errors="coerce")})
+            out = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
+            log(f"  ✅ {col_name}: {len(out)} 年")
+            return out
+        except Exception as e:
+            log(f"  ⚠️ {col_name} 采集失败: {e}")
+            return pd.DataFrame()
+
+    indicators = [
+        ("人口 > 常住人口城镇化率", "城镇化率", "urbanization_rate"),     # %
+        ("人口 > 年末总人口",       "总人口",   "population"),              # 万人
+        ("人口 > 人口出生率",       "出生率",   "birth_rate"),              # ‰
+        ("人口 > 人口自然增长率",   "自然增长率", "natural_growth_rate"),   # ‰
+    ]
+
+    dfs = [_fetch_nbs(path, kw, col) for path, kw, col in indicators]
+    merged = pd.DataFrame({"date": sorted(set().union(*[d["date"].tolist() for d in dfs if not d.empty]))}) \
+        if any(not d.empty for d in dfs) else pd.DataFrame()
+    for d in dfs:
+        if not d.empty:
+            merged = merged.merge(d, on="date", how="left")
+    if merged.empty:
+        log("  ⚠️ 人口数据全部不可用（NBS 可能被拦截），跳过保存")
+    save_to_db(merged, "demographics", conn)
+    return merged
+
+
+# ─────────────────────────────────────────────
 # 主流程
 # ─────────────────────────────────────────────
 def main():
@@ -525,6 +581,7 @@ def main():
         fetch_household_income,
         fetch_new_credit,
         fetch_bond_yield,
+        fetch_demographics,
     ]
 
     for f in fetchers:

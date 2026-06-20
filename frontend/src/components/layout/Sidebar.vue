@@ -10,6 +10,7 @@ const items = [
   { to: '/inventory-cycle', label: '库存周期', icon: '▣' },
   { to: '/debt-cycle', label: '债务周期', icon: '◆' },
   { to: '/real-estate', label: '房地产市场', icon: '▧' },
+  { to: '/demographics', label: '人口与城镇化', icon: '◎' },
 ]
 const isActive = (to: string) => computed(() =>
   to === '/overview' ? route.path === to : route.path.startsWith(to),
