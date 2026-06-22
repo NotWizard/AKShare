@@ -14,4 +14,21 @@ export default defineConfig({
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split echarts into its own vendor chunk (function form preserves
+        // tree-shaking — only the modules we actually import end up bundled,
+        // unlike the object form which pulls the full package entry).
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/echarts') ||
+            id.includes('node_modules/vue-echarts')
+          ) {
+            return 'vendor-echarts'
+          }
+        },
+      },
+    },
+  },
 })
