@@ -39,7 +39,9 @@ async function load() {
   const mine = ++reqId
   loading.value = true
   const st = filters.start ?? undefined, en = filters.end ?? undefined
-  const m2st = filters.start ?? '1996-12-01'   // M2 fragmented (annual-only) before 1997
+  // M2 月度数据在 1996-12 前为年度碎片（仅年度结存），月度同比从 1996-12 起才有。
+  // 如果用户手动设 start < 1996-12，会被此默认值覆盖（保证图表不显示空洞段）。
+  const m2st = filters.start ?? '1996-12-01'
   try {
     const [kpi, cp, m12, sp, cm, rt, pm, s] = await Promise.all([
       api.getDerivedMonthly(st, en, 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'),
