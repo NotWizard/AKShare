@@ -7,6 +7,7 @@ export const useRefreshStore = defineStore('refresh', () => {
   const running = ref(false)
   const progress = ref(0)          // 0..1
   const lastResult = ref<{ msg: string; ts: string | null } | null>(null)
+  let abortController: AbortController | null = null
 
   async function loadStatus() {
     try {
@@ -22,10 +23,13 @@ export const useRefreshStore = defineStore('refresh', () => {
   // SSE-driven refresh: open /api/v1/refresh/stream, parse progress + done.
   async function stream() {
     if (running.value) return
+    abortController = new AbortController()
     running.value = true
     progress.value = 0
     try {
-      const resp = await fetch('/api/v1/refresh/stream')
+      const resp = await fetch('/api/v1/refresh/stream', {
+        signal: abortController.signal,
+      })
       if (!resp.ok || !resp.body) {
         lastResult.value = { msg: `刷新失败: HTTP ${resp.status}`, ts: null }
         return
@@ -56,11 +60,20 @@ export const useRefreshStore = defineStore('refresh', () => {
         }
       }
     } catch (e) {
-      lastResult.value = { msg: `刷新异常: ${(e as Error).message}`, ts: null }
+      if ((e as Error).name === 'AbortError') {
+        lastResult.value = { msg: '刷新已取消', ts: null }
+      } else {
+        lastResult.value = { msg: `刷新异常: ${(e as Error).message}`, ts: null }
+      }
     } finally {
       running.value = false
+      abortController = null
     }
   }
 
-  return { running, progress, lastResult, loadStatus, stream }
+  function cancel() {
+    abortController?.abort()
+  }
+
+  return { running, progress, lastResult, loadStatus, stream, cancel }
 })
