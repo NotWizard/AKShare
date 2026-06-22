@@ -30,7 +30,14 @@ EXPECTED_FETCH_STEPS = 15
 
 
 def is_running() -> bool:
-    return LOCK_PATH.exists()
+    if not LOCK_PATH.exists():
+        return False
+    # Stale detection: if lockfile mtime > 10 minutes, treat as stale (backend crashed)
+    mtime = LOCK_PATH.stat().st_mtime
+    if time.time() - mtime > 600:  # 10 minutes
+        LOCK_PATH.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def _subprocess_env() -> dict:
