@@ -10,9 +10,11 @@ import pandas as pd
 
 def df_to_records(df: pd.DataFrame) -> list[dict]:
     """DataFrame → list[dict] with ISO dates and nulls for NaN."""
-    out = df.copy()
+    out = df
     if "date" in out.columns and pd.api.types.is_datetime64_any_dtype(out["date"]):
-        out["date"] = out["date"].dt.strftime("%Y-%m-%d")
+        # Only copy the date column (assign creates a new DataFrame with the
+        # formatted date; other columns remain views, no full copy).
+        out = out.assign(date=out["date"].dt.strftime("%Y-%m-%d"))
 
     cleaned = []
     for rec in out.to_dict(orient="records"):
