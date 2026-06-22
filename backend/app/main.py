@@ -29,12 +29,16 @@ app = FastAPI(
 # GZip compress responses >500 bytes (derived_monthly ~50KB → ~15KB)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
+# CORS origins configurable via CORS_ORIGINS env var (comma-separated).
+# Defaults to Vite dev server origins for local development.
+_cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",   # Vite dev
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
