@@ -7,6 +7,13 @@ import GraphCard from '@/components/layout/GraphCard.vue'
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
 import { buildRadar, buildMultiLine } from '@/components/charts/options'
 
+// Register RadarChart only on this page (lazy-loaded via router) — keeps
+// Radar out of the shared vendor-echarts chunk.
+import { use as echartsUse } from 'echarts/core'
+import { RadarChart } from 'echarts/charts'
+import { RadarComponent } from 'echarts/components'
+echartsUse([RadarChart, RadarComponent])
+
 const filters = useFiltersStore()
 const loading = ref(true)
 const hp = ref<Record<string, string | number | null>[]>([])
