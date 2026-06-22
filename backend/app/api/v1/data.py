@@ -26,8 +26,13 @@ def derived_monthly(
     cols: str | None = Query(None, description="comma-separated column subset"),
     align_start: bool = Query(
         False,
-        description="if true, drop the leading rows where requested cols are still all/any null, "
-                    "so the chart starts at the first point the data actually exists",
+        description=(
+            "if true, start from the earliest date where ALL requested value cols are "
+            "non-null in the SAME row (so charts don't begin with a long empty run). "
+            "Respects an explicit `start` (takes the later of the two). "
+            "If any requested col is all-NaN, the filter is skipped (graceful degradation: "
+            "returns full table from the user-provided start or 1978)."
+        ),
     ),
 ):
     import pandas as pd
