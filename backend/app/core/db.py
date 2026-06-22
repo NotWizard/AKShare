@@ -37,8 +37,12 @@ def load(table: str, start_date=None, end_date=None) -> pd.DataFrame:
     if "date" not in df.columns:
         return df
     out = df
-    if start_date is not None:
-        out = out[out["date"] >= pd.Timestamp(start_date)]
-    if end_date is not None:
-        out = out[out["date"] <= pd.Timestamp(end_date)]
+    try:
+        if start_date is not None:
+            out = out[out["date"] >= pd.Timestamp(start_date)]
+        if end_date is not None:
+            out = out[out["date"] <= pd.Timestamp(end_date)]
+    except (ValueError, TypeError):
+        # Invalid date string → skip the filter, return full table
+        pass
     return out
