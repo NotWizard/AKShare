@@ -5,7 +5,7 @@ which FastAPI can't JSON-encode — convert them to records here.
 """
 
 import pandas as pd
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from analysis.real_estate import analyze_real_estate
 from backend.app.core import db
@@ -34,5 +34,9 @@ def real_estate(cities: list[str] | None = Query(default=None)):
     don't decode commas); defaults to the 10 default cities when omitted.
     """
     city_list = cities or _DEFAULT_CITIES
+    # Validate city names against the known set
+    invalid = [c for c in city_list if c not in _DEFAULT_CITIES]
+    if invalid:
+        raise HTTPException(400, f"unknown cities: {invalid}")
     result = analyze_real_estate(str(db.DB_PATH), city_list)
     return _jsonable(result)
