@@ -20,10 +20,16 @@ export const useFiltersStore = defineStore('filters', () => {
     end.value = null
   }
 
+  function reset() {
+    preset.value = 'ALL'
+    start.value = null
+    end.value = null
+  }
+
   const params = computed(() => ({
     start: start.value ?? undefined,
     end: end.value ?? undefined,
   }))
 
-  return { start, end, preset, applyPreset, params }
+  return { start, end, preset, applyPreset, reset, params }
 })
