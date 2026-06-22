@@ -6,21 +6,43 @@ import type { DerivedFrame, CycleFrame, SignalSummary, RefreshResult, RealEstate
 const BASE = '/api/v1'
 
 async function getJSON<T>(path: string): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`)
-  if (!resp.ok) {
-    const body = (await resp.text()).slice(0, 200)
-    throw new Error(`${resp.status} ${body}`)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30s timeout
+  try {
+    const resp = await fetch(`${BASE}${path}`, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    if (!resp.ok) {
+      const body = (await resp.text()).slice(0, 200)
+      throw new Error(`${resp.status} ${body}`)
+    }
+    return resp.json()
+  } catch (e) {
+    clearTimeout(timeoutId)
+    if ((e as Error).name === 'AbortError') {
+      throw new Error('请求超时（30s）')
+    }
+    throw e
   }
-  return resp.json()
 }
 
 async function postJSON<T>(path: string): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, { method: 'POST' })
-  if (!resp.ok) {
-    const body = (await resp.text()).slice(0, 200)
-    throw new Error(`${resp.status} ${body}`)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30s timeout
+  try {
+    const resp = await fetch(`${BASE}${path}`, { method: 'POST', signal: controller.signal })
+    clearTimeout(timeoutId)
+    if (!resp.ok) {
+      const body = (await resp.text()).slice(0, 200)
+      throw new Error(`${resp.status} ${body}`)
+    }
+    return resp.json()
+  } catch (e) {
+    clearTimeout(timeoutId)
+    if ((e as Error).name === 'AbortError') {
+      throw new Error('请求超时（30s）')
+    }
+    throw e
   }
-  return resp.json()
 }
 
 // build "?a=..&b=.." from defined pairs (URLSearchParams drops undefined
