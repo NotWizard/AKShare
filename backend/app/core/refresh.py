@@ -74,11 +74,13 @@ def read_manifest_summary() -> dict:
     }
 
 
-def run_refresh(progress_cb=None) -> dict:
+def run_refresh(progress_cb=None, stop_event=None) -> dict:
     """Run the fetch pipeline as a subprocess; clear caches on success.
 
     Streams stdout so ``progress_cb(fraction)`` is driven by per-table ✅ lines.
     Single-flight: a lockfile prevents two refreshes racing on the staging DB.
+    Supports cancellation via ``stop_event`` (threading.Event): if set, the
+    subprocess is killed early and the lockfile released.
     Returns a UI-friendly result dict.
     """
     if is_running():
@@ -105,6 +107,11 @@ def run_refresh(progress_cb=None) -> dict:
         tail = []
         deadline = time.time() + 300
         for line in proc.stdout:
+            # Check for cancellation signal
+            if stop_event is not None and stop_event.is_set():
+                proc.kill()
+                return {"status": "cancelled", "msg": "刷新已取消（客户端断开）",
+                        "ts": None, "updated": [], "kept_previous": []}
             tail.append(line)
             tail = tail[-60:]
             if "✅" in line:

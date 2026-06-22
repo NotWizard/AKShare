@@ -36,33 +36,42 @@ def stream():
 
     Runs the blocking refresh on a worker thread and polls a queue from the
     generator so progress lines stream as the fetcher emits them (not buffered
-    until completion).
+    until completion). Supports cancellation: if the client disconnects, the
+    worker is signaled to stop early (kills subprocess + releases lockfile).
     """
     import threading
     from queue import Queue, Empty
 
     q: Queue = Queue()
     result_box: dict = {}
+    stop_event = threading.Event()
 
     def cb(frac: float):
+        if stop_event.is_set():
+            return  # worker will check stop_event and abort
         q.put(frac)
 
     def worker():
-        result_box["r"] = refresh.run_refresh(progress_cb=cb)
+        result_box["r"] = refresh.run_refresh(progress_cb=cb, stop_event=stop_event)
         q.put(None)  # sentinel: refresh finished
 
     threading.Thread(target=worker, daemon=True).start()
 
     def event_source():
-        while True:
-            try:
-                item = q.get(timeout=1.0)
-            except Empty:
-                yield ": keepalive\n\n"
-                continue
-            if item is None:
-                break
-            yield f"data: {json.dumps({'progress': round(item, 3)})}\n\n"
-        yield f"data: {json.dumps({'done': True, 'result': result_box.get('r')})}\n\n"
+        try:
+            while True:
+                try:
+                    item = q.get(timeout=1.0)
+                except Empty:
+                    yield ": keepalive\n\n"
+                    continue
+                if item is None:
+                    break
+                yield f"data: {json.dumps({'progress': round(item, 3)})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'result': result_box.get('r')})}\n\n"
+        except GeneratorExit:
+            # Client disconnected — signal worker to stop early
+            stop_event.set()
+            raise
 
     return StreamingResponse(event_source(), media_type="text/event-stream")
