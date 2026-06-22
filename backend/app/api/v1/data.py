@@ -1,10 +1,19 @@
 """Derived-table slices + generic table slice — replaces db.load calls."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.core import db
 from backend.app.core.serial import df_to_records
 from backend.app.schemas.cycles import DerivedFrame
+
+# Whitelist of tables the /table/{name} endpoint is allowed to serve.
+# Prevents information leakage (e.g. sqlite_master, sqlite_sequence).
+_ALLOWED_TABLES = {
+    "derived_monthly", "derived_quarterly",
+    "money_supply", "gdp", "cpi", "ppi", "pmi",
+    "leverage", "social_finance", "lpr", "industrial",
+    "house_price", "household_income", "new_credit", "bond_yield",
+}
 
 # Explicit paths (no blanket prefix) so /table/{name} isn't nested under /derived.
 router = APIRouter(tags=["data"])
@@ -70,6 +79,8 @@ def derived_quarterly(start: str | None = None, end: str | None = None):
 @router.get("/table/{name}", response_model=DerivedFrame)
 def raw_table(name: str, start: str | None = None, end: str | None = None):
     """Generic slice of any table (e.g. house_price, leverage)."""
+    if name not in _ALLOWED_TABLES:
+        raise HTTPException(404, f"unknown table: {name}")
     df = db.load(name, start, end)
     return DerivedFrame(
         table=name,
