@@ -22,6 +22,12 @@ MANIFEST_PATH = PROJECT_ROOT / "data" / "last_run.json"
 LOCK_PATH = PROJECT_ROOT / "data" / ".refresh.lock"
 VENV_PY = PROJECT_ROOT / ".venv312" / "bin" / "python"
 
+# Expected number of ✅ lines from 01_fetch_data.py stdout:
+# 13 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
+# industrial, house_price, household_income, new_credit, bond_yield)
+# + 2 derived tables (derived_monthly, derived_quarterly) = 15 total.
+EXPECTED_FETCH_STEPS = 15
+
 
 def is_running() -> bool:
     return LOCK_PATH.exists()
@@ -86,7 +92,7 @@ def run_refresh(progress_cb=None) -> dict:
             text=True,
             bufsize=1,
         )
-        expected, done = 14, 0   # ~12 fetchers + 2 derived
+        expected, done = EXPECTED_FETCH_STEPS, 0
         if progress_cb:
             progress_cb(0.0)
         tail = []
