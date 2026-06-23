@@ -1,350 +1,626 @@
-# 金融数据接入指南
+# 金融数据源接入参考手册
 
-> **用途**：本文档汇总 PanWatch 项目（股票监控）和 AKShare 项目（宏观经济分析）的数据源，供后续项目快速参考"哪些数据可从哪些接口获取"。
->
-> **适用范围**：A 股/港股/美股实时行情、K 线、新闻资讯、资金流向、中国宏观经济指标。
+> 按数据类型分类的数据源参考文档。每类数据说明：数据源、请求方式、返回字段、使用示例。
 
 ---
 
-## 一、PanWatch 数据源（股票监控）
+## 一、实时行情数据
 
-PanWatch 项目直连 HTTP API 获取数据（**未使用 akshare 库**，虽然文件名含 `akshare_collector` 但实际已替换为腾讯接口）。
+### 数据源：腾讯财经 API
 
-### 1.1 实时行情（股票报价）
+**官方文档**：无官方文档（非公开 API，逆向工程整理）
 
-**数据源：腾讯股票 HTTP API**
+**接口地址**：`http://qt.gtimg.cn/q={股票代码列表}`
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `http://qt.gtimg.cn/q=` |
-| **编码** | GBK |
-| **请求方式** | HTTP GET（多代码拼接，`~` 分隔返回）|
-| **支持市场** | A 股、港股、美股 |
-| **返回字段** | 当前价、昨收、开盘、成交量、涨跌额、涨跌幅、最高、最低、成交额、换手率、市盈率、流通市值、总市值、量比 |
-| **文件位置** | `src/collectors/akshare_collector.py`（类名 `AkshareCollector`，实际用腾讯接口）|
-| **辅助模块** | `src/collectors/market_http.py`（通用 HTTP 请求封装，支持按 host 节流、退避重试、短 TTL 缓存）|
+**请求方式**：HTTP GET
 
-**示例请求**：
-```
-http://qt.gtimg.cn/q=sh600519,sz000001,hk00700
-```
-返回格式（`~` 分隔）：
-```
-v_sh600519="51~贵州茅台~600519~1800.50~1790.00~...";
-v_sz000001="51~平安银行~000001~12.50~12.40~...";
+**股票代码格式**：
+- A 股：`sh600519`（上海）、`sz000001`（深圳）
+- 港股：`hk00700`
+- 美股：`usAAPL`
+
+**请求示例**：
+```python
+import requests
+
+url = "http://qt.gtimg.cn/q=sh600519,sz000001,hk00700"
+response = requests.get(url)
+response.encoding = 'gbk'
+print(response.text)
 ```
 
-**局限性**：
-- 仅实时报价，无历史 K 线
-- GBK 编码需特殊处理
-- 无官方文档，接口可能变动
+**返回字段**（以 `~` 分隔）：
+```
+索引 | 字段
+0    | 未知
+1    | 股票名称
+2    | 股票代码
+3    | 当前价格
+4    | 昨收价
+5    | 今开价
+6    | 成交量（手）
+7    | 外盘
+8    | 内盘
+9    | 买一价
+10   | 买一量
+11   | 买二价
+12   | 买二量
+...  | ...
+30   | 最新价
+31   | 涨跌额
+32   | 涨跌幅（%）
+33   | 最高价
+34   | 最低价
+35   | 价格/成交量/成交额
+36   | 成交量（手）
+37   | 成交额（万元）
+38   | 换手率（%）
+...  | ...
+```
+
+**使用示例**：
+```python
+import requests
+
+def get_realtime_quote(symbol):
+    """获取实时行情"""
+    url = f"http://qt.gtimg.cn/q={symbol}"
+    response = requests.get(url)
+    response.encoding = 'gbk'
+    
+    data = response.text.split('~')
+    if len(data) > 35:
+        return {
+            'name': data[1],
+            'code': data[2],
+            'price': float(data[3]),
+            'yesterday_close': float(data[4]),
+            'open': float(data[5]),
+            'volume': int(data[6]),
+            'change': float(data[31]),
+            'change_pct': float(data[32]),
+            'high': float(data[33]),
+            'low': float(data[34]),
+            'turnover': float(data[37]),
+            'turnover_rate': float(data[38]) if data[38] else 0
+        }
+    return None
+
+# 示例
+quote = get_realtime_quote('sh600519')
+print(f"{quote['name']}: {quote['price']} 元 ({quote['change_pct']}%)")
+```
 
 ---
 
-### 1.2 K 线数据（OHLC 蜡烛图）
+## 二、历史 K 线数据
 
-**数据源：腾讯 + 东方财富 + Stooq（美股备用）**
+### 数据源 1：腾讯财经 K 线 API
 
-#### 腾讯接口（主路径）
+**官方文档**：无官方文档（非公开 API，逆向工程整理）
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `http://web.ifzq.gtimg.cn/appstock/app/fqkline/get` |
-| **请求参数** | `param={标的代码},day,,,{天数},qfq`（前复权）；`_var=kline_dayqfq` |
-| **返回格式** | JS 变量格式 JSON，解析 `data.{标的}.day` 或 `data.{标的}.qfqday` |
-| **返回字段** | 数组，每条 `[日期, 开盘, 收盘, 最高, 最低, 成交量]` |
-| **复权方式** | `qfq`（前复权）/ `hfq`（后复权）|
-| **文件位置** | `src/collectors/kline_collector.py` |
+**接口地址**：`http://web.ifzq.gtimg.cn/appstock/app/fqkline/get`
 
-**示例请求**：
-```
-http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600519,day,,,100,qfq&_var=kline_dayqfq
-```
+**请求参数**：
+- `param`: `{股票代码},day,,,{天数},{复权方式}`
+  - 股票代码：`sh600519`、`sz000001`
+  - 周期：`day`（日K）、`week`（周K）、`month`（月K）
+  - 天数：获取多少条数据
+  - 复权：`qfq`（前复权）、`hfq`（后复权）、空（不复权）
+- `_var`: `kline_dayqfq`（固定值）
 
-#### 东方财富接口（A 股/港股长历史 + 指数）
+**请求示例**：
+```python
+import requests
+import json
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://push2his.eastmoney.com/api/qt/stock/kline/get` |
-| **请求参数** | `secid={市场}.{代码}`（如 `1.000001`）；`klt=101`（日K）；`fqt=1`（前复权）；`lmt={条数}`；`end=20500101`；`fields1/fields2`（字段集）；`ut={验证token}` |
-| **返回格式** | JSON，提取 `data.klines` 数组 |
-| **返回字段** | 逗号分隔字符串 `"YYYY-MM-DD,开盘,收盘,最高,最低,成交量,..."` |
-| **适用场景** | A 股/港股长历史（>1000 条）+ 指数（如上证指数 `1.000001`）|
+url = "http://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+params = {
+    'param': 'sh600519,day,,,100,qfq',
+    '_var': 'kline_dayqfq'
+}
 
-**示例请求**：
-```
-https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.000001&klt=101&fqt=1&lmt=100&end=20500101&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&ut=b2884a393a59ad64002292a3e90d46a5
-```
+response = requests.get(url, params=params)
+text = response.text
 
-#### Stooq 接口（美股备用）
-
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://stooq.com/q/d/l/` |
-| **请求参数** | `s={股票代码}.us`（如 `aapl.us`）；`i=d`（日线）|
-| **返回格式** | CSV 文本，表头 `Date,Open,High,Low,Close,Volume` |
-| **适用场景** | 美股历史数据（腾讯/东方财富无覆盖时）|
-
-**示例请求**：
-```
-https://stooq.com/q/d/l/?s=aapl.us&i=d
+# 解析响应（移除 var 声明）
+if 'kline_dayqfq=' in text:
+    text = text.split('kline_dayqfq=')[1]
+    data = json.loads(text)
+    
+    if 'data' in data and 'sh600519' in data['data']:
+        kline_data = data['data']['sh600519']
+        klines = kline_data.get('day') or kline_data.get('qfqday')
+        
+        if klines:
+            print(f"获取到 {len(klines)} 条 K 线数据")
+            print(f"示例: {klines[0]}")
 ```
 
-**局限性**：
-- 腾讯接口历史有限（通常 <1000 条），长历史需东方财富
-- 东方财富接口需固定 token（`ut` 参数），可能过期
-- Stooq 仅美股，且有请求频率限制
+**返回字段**（每条 K 线）：
+```
+[日期, 开盘价, 收盘价, 最高价, 最低价, 成交量]
+示例: ['2023-01-03', '10.50', '10.80', '10.85', '10.45', '1000000']
+```
 
 ---
 
-### 1.3 新闻资讯
+### 数据源 2：东方财富 K 线 API
 
-**数据源：雪球 + 东方财富（2 个 API）**
+**官方文档**：无官方文档（非公开 API，逆向工程整理）
 
-#### 雪球（个股新闻聚合）
+**接口地址**：`https://push2his.eastmoney.com/api/qt/stock/kline/get`
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://xueqiu.com/statuses/stock_timeline.json` |
-| **认证** | 需登录 cookie（`xq_a_token`）|
-| **请求参数** | `symbol={股票代码}`；`count={条数}` |
-| **返回字段** | JSON，含 `user_id`、`id`、`text`（新闻内容）、`created_at` |
-| **文章链接** | `https://xueqiu.com/{user_id}/{id}` |
-| **适用场景** | 个股新闻（资讯 + 公告）|
-| **启用条件** | 需配置 cookie，默认禁用 |
+**请求参数**：
+- `secid`: `{市场代码}.{股票代码}`
+  - A 股上海：`1.600519`
+  - A 股深圳：`0.000001`
+  - 港股：`116.00700`
+- `klt`: K 线类型（`101`=日K、`102`=周K、`103`=月K）
+- `fqt`: 复权方式（`0`=不复权、`1`=前复权、`2`=后复权）
+- `beg`: 开始日期（`YYYYMMDD`）
+- `end`: 结束日期（`YYYYMMDD`）
+- `lmt`: 获取条数
+- `fields1`: `f1,f2,f3,f4,f5,f6`
+- `fields2`: `f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63`
+- `ut`: `fa5fd1943c7b386f172d6893dbbd1d0c`（固定 token）
 
-#### 东方财富搜索（按关键词/股票搜新闻）
+**请求示例**：
+```python
+import requests
+import pandas as pd
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://search-api-web.eastmoney.com/search/jsonp` |
-| **请求参数** | `keyword={股票名称/关键词}`；`type=0`（新闻）；`pi={页码}`；`ps={每页条数}` |
-| **返回格式** | JSONP（需去除 callback 包裹）|
-| **支持市场** | A 股、港股、美股 + 行业/主题关键词（如"新能源汽车"）|
-| **文章链接** | `https://finance.eastmoney.com/a/{code}.html` |
-| **启用条件** | 默认启用 |
+url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+params = {
+    'secid': '1.600519',  # 贵州茅台
+    'klt': '101',  # 日K
+    'fqt': '1',    # 前复权
+    'beg': '20230101',
+    'end': '20261231',
+    'lmt': '100',
+    'fields1': 'f1,f2,f3,f4,f5,f6',
+    'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63',
+    'ut': 'fa5fd1943c7b386f172d6893dbbd1d0c'
+}
 
-**示例请求**：
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    'Referer': 'https://quote.eastmoney.com/'
+}
+
+response = requests.get(url, params=params, headers=headers, timeout=15)
+data = response.json()
+
+if 'data' in data and data['data'] and 'klines' in data['data']:
+    klines = data['data']['klines']
+    
+    # 解析 K 线数据
+    df = pd.DataFrame([item.split(',') for item in klines],
+                     columns=['date', 'open', 'close', 'high', 'low', 'volume', 'amount',
+                             'amplitude', 'change_pct', 'change', 'turnover'])
+    
+    df['date'] = pd.to_datetime(df['date'])
+    df[['open', 'close', 'high', 'low']] = df[['open', 'close', 'high', 'low']].astype(float)
+    df['volume'] = df['volume'].astype(int)
+    
+    print(f"获取到 {len(df)} 条 K 线数据")
+    print(df.head())
 ```
-https://search-api-web.eastmoney.com/search/jsonp?keyword=贵州茅台&type=0&pi=1&ps=10
+
+**返回字段**：
 ```
-
-#### 东方财富公告（上市公司公告批量查询）
-
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://np-anotice-stock.eastmoney.com/api/security/ann` |
-| **请求参数** | `stock_code={6位A股代码}`；`page_index={页码}`；`page_size={每页条数}` |
-| **返回格式** | JSON，含 `art_code`（公告ID）、`title`、`publish_date` |
-| **公告链接** | `https://data.eastmoney.com/notices/detail/{symbol}/{art_code}.html` |
-| **适用场景** | 仅 A 股（6 位数字代码）|
-| **启用条件** | 默认启用 |
-
-**示例请求**：
+date         | 日期
+open         | 开盘价
+close        | 收盘价
+high         | 最高价
+low          | 最低价
+volume       | 成交量
+amount       | 成交额
+amplitude    | 振幅（%）
+change_pct   | 涨跌幅（%）
+change       | 涨跌额
+turnover     | 换手率（%）
 ```
-https://np-anotice-stock.eastmoney.com/api/security/ann?stock_code=600519&page_index=1&page_size=10
-```
-
-**局限性**：
-- 雪球需登录 cookie，个人用需自配
-- 东方财富 JSONP 需去除 callback 包裹
-- 公告接口仅 A 股
 
 ---
 
-### 1.4 资金流向（主力/北向资金）
+### 数据源 3：Yahoo Finance（yfinance）
 
-**数据源：东方财富 API**
+**官方文档**：https://ranaroussi.github.io/yfinance
 
-| 项目 | 详情 |
-|---|---|
-| **接口 URL** | `https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get` |
-| **请求参数** | `secid={市场}.{代码}`；`klt=101`（日K）；`lmt=0`（全部）；`fields1=f1,f2,f3,f7`；`fields2=f51-f65`；`ut={验证token}`；`_={毫秒时间戳}` |
-| **返回格式** | JSON，提取 `data.klines` 数组 |
-| **返回字段** | 逗号分隔，索引含义：`0:日期, 1:主力净额, 2:小单净额, 3:中单净额, 4:大单净额, 5:超大单净额, 6:主力占比, 7:小单占比, 8:中单占比, 9:大单占比, 10:超大单占比, 11:收盘价, 12:涨跌幅, 13:成交量, 14:成交额` |
-| **适用场景** | A 股/港股/美股资金流向历史 |
-| **文件位置** | `src/collectors/capital_flow_collector.py` |
+**安装**：`pip install yfinance`
 
-**示例请求**：
+**使用示例**：
+```python
+import yfinance as yf
+
+# A 股：代码.SS（上海）、.SZ（深圳）
+ticker = yf.Ticker("600519.SS")
+
+# 获取历史数据
+df = ticker.history(period="max")  # 全部历史
+# 或
+df = ticker.history(start="2023-01-01", end="2026-12-31")
+
+print(df.head())
 ```
-https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid=1.600519&klt=101&lmt=0&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&ut=b2884a393a59ad64002292a3e90d46a5&_=1234567890
+
+**返回字段**：
+```
+Date, Open, High, Low, Close, Volume, Dividends, Stock Splits
 ```
 
-**局限性**：
-- 需固定 token（`ut` 参数），可能过期需更新
-- 仅日 K 资金流（无分钟级）
+---
+
+## 三、新闻资讯数据
+
+### 数据源 1：新浪财经新闻 API
+
+**官方文档**：无官方文档（非公开 API，逆向工程整理）
+
+**接口地址**：`https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData`
+
+**请求参数**：
+- `symbol`: 股票代码（`sh600519`）
+- `scale`: K 线周期（`240`=日线）
+- `ma`: 均线（`no`=不要）
+- `datalen`: 获取条数
+
+**请求示例**：
+```python
+import requests
+import json
+
+url = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
+params = {
+    'symbol': 'sh600519',
+    'scale': '240',
+    'ma': 'no',
+    'datalen': '100'
+}
+
+headers = {
+    'User-Agent': 'Mozilla/5.0',
+    'Referer': 'https://finance.sina.com.cn/'
+}
+
+response = requests.get(url, params=params, headers=headers, timeout=15)
+
+if response.status_code == 200:
+    text = response.text
+    if '({' in text:
+        text = text[text.index('({') + 1:text.rindex('})') + 1]
+        data = json.loads(text)
+        
+        if isinstance(data, list):
+            print(f"获取到 {len(data)} 条数据")
+            print(data[0])
+```
 
 ---
 
-## 二、AKShare 项目数据源（宏观经济指标）
+### 数据源 2：东方财富新闻 API
 
-本项目使用 **akshare 库**（开源 Python 金融数据接口）采集中国宏观经济指标，存储到 SQLite（`data/macro_data.db`）。
+**官方文档**：无官方文档（非公开 API，逆向工程整理）
 
-### 2.1 akshare 函数清单（17 个）
+**接口地址**：`https://search-api-web.eastmoney.com/search/jsonp`
 
-| akshare 函数 | 数据内容 | 频率 | 数据范围 | 存储表 |
-|---|---|---|---|---|
-| `ak.macro_china_supply_of_money()` | 货币供应 M0/M1/M2（含同比）| 月 | 1978–至今 | `money_supply` |
-| `ak.macro_china_gdp()` | GDP 绝对值 + 同比增速 | 季 | 2000–至今 | `gdp` |
-| `ak.macro_china_cpi_yearly()` | CPI 同比 | 月 | 1986–至今 | `cpi` |
-| `ak.macro_china_cpi_monthly()` | CPI 环比 | 月 | 1996–至今 | `cpi` |
-| `ak.macro_china_ppi_yearly()` | PPI 同比 | 月 | 1995–至今 | `ppi` |
-| `ak.macro_china_pmi_yearly()` | PMI 官方制造业 | 月 | 2005–至今 | `pmi` |
-| `ak.macro_china_cx_pmi_yearly()` | PMI 财新制造业 | 月 | 2012–至今 | `pmi` |
-| `ak.macro_china_non_man_pmi()` | PMI 非制造业 | 月 | 2007–至今 | `pmi` |
-| `ak.macro_china_cx_services_pmi_yearly()` | PMI 财新服务业 | 月 | 2012–至今 | `pmi` |
-| `ak.macro_cnbs()` | 宏观杠杆率（CNBS 分部门）| 季 | 1992–至今 | `leverage` |
-| `ak.macro_china_shrzgm()` | 社会融资规模增量 | 月 | 2015–至今 | `social_finance` |
-| `ak.macro_china_lpr()` | LPR 利率（1Y/5Y）| 月 | 2013–至今 | `lpr` |
-| `ak.macro_china_gyzjz()` | 工业增加值同比 + 累计 | 月 | 2008–至今 | `industrial` |
-| `ak.macro_china_new_house_price()` | 70 城房价指数（新建/二手）| 月 | 2011–至今 | `house_price` |
-| `ak.macro_china_new_financial_credit()` | 新增人民币贷款 | 月 | 2008–至今 | `new_credit` |
-| `ak.macro_china_nbs_nation()` | NBS 通用接口（人口/收入/城镇化率）| 年 | 2000–至今 | `household_income` / `demographics` |
-| `ak.bond_china_yield()` | 中债国债收益率曲线 | 日 | 2002–至今 | `bond_yield` |
+**请求参数**：
+- `keyword`: 搜索关键词（股票名称/代码）
+- `type`: `0`（新闻）
+- `pi`: 页码
+- `ps`: 每页条数
 
-**文件位置**：`scripts/01_fetch_data.py`（采集）+ `scripts/02_compute_derived.py`（衍生指标计算）
+**请求示例**：
+```python
+import requests
+import json
 
----
+url = "https://search-api-web.eastmoney.com/search/jsonp"
+params = {
+    'keyword': '贵州茅台',
+    'type': '0',
+    'pi': '1',
+    'ps': '10'
+}
 
-### 2.2 数据表结构
+response = requests.get(url, params=params, timeout=15)
 
-#### 原始表（13 张）
-
-| 表名 | 行数（典型）| 关键字段 | 频率 |
-|---|---|---|---|
-| `money_supply` | 581 | date, m0, m1, m2, m0_yoy, m1_yoy, m2_yoy | 月 |
-| `gdp` | 21 | date, gdp_abs, gdp_yoy | 季（实际年度）|
-| `cpi` | 475 | date, cpi_yoy, cpi_mom | 月 |
-| `ppi` | 361 | date, ppi_yoy | 月 |
-| `pmi` | 321 | date, pmi_official, pmi_caixin, pmi_non_mfg, pmi_caixin_svc | 月 |
-| `leverage` | 80 | date, household, non_fin_corp, gov_total, gov_central, gov_local | 季 |
-| `social_finance` | 136 | date, total, rmb_loan, entrusted_loan, trust_loan, ... | 月 |
-| `lpr` | 1534 | date, lpr_1y, lpr_5y | 月（实际日频，月频聚合）|
-| `industrial` | 201 | date, ip_yoy, ip_cumulative | 月 |
-| `house_price` | 1840 | date, city, new_yoy, new_mom, new_base, used_yoy, ... | 月 |
-| `new_credit` | 221 | date, new_rmb_loan | 月 |
-| `household_income` | 30 | date, income_per_capita, population_10k, income_abs | 年 |
-| `bond_yield` | 5000+ | date, y_1y, y_3y, y_5y, y_7y, y_10y, y_30y | 日 |
-
-#### 衍生表（2 张）
-
-| 表名 | 来源 | 关键字段 |
-|---|---|---|
-| `derived_monthly` | 月度主表合并（581 行 × 30 列）| m2_m1_spread, real_rate, pmi_ma6, ip_trend, sf_stock_yoy, sf_impulse, loan_yoy, ... |
-| `derived_quarterly` | 季度主表（GDP + 杠杆率）| gdp_yoy_smooth, household_change, gov_change, corp_change |
+# 解析 JSONP 响应
+text = response.text
+if '({' in text:
+    # 移除 JSONP 包裹
+    text = text[text.index('(') + 1:text.rindex(')')]
+    data = json.loads(text)
+    
+    if 'result' in data:
+        news_list = data['result']
+        print(f"获取到 {len(news_list)} 条新闻")
+        for news in news_list[:3]:
+            print(f"- {news.get('title', 'N/A')}")
+```
 
 ---
 
-### 2.3 使用示例
+## 四、ETF 数据
 
-#### Python 直接调用 akshare
+**说明**：ETF 数据复用历史 K 线 API（东方财富/Yahoo Finance），接口地址和参数与历史 K 线相同，仅股票代码格式不同。
+
+### 数据源 1：东方财富 ETF K 线 API
+
+**官方文档**：无官方文档（复用历史 K 线 API，逆向工程整理）
+
+**ETF 代码格式**：
+- 上海 ETF：`1.563020`
+- 深圳 ETF：`0.159915`
+
+**使用示例**：
+```python
+import requests
+import pandas as pd
+
+url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+params = {
+    'secid': '1.563020',  # 红利低波 ETF
+    'klt': '101',
+    'fqt': '1',
+    'beg': '20230101',
+    'end': '20261231',
+    'fields1': 'f1,f2,f3,f4,f5,f6',
+    'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63',
+    'ut': 'fa5fd1943c7b386f172d6893dbbd1d0c'
+}
+
+response = requests.get(url, params=params, timeout=15)
+data = response.json()
+
+if 'data' in data and data['data'] and 'klines' in data['data']:
+    klines = data['data']['klines']
+    df = pd.DataFrame([item.split(',') for item in klines],
+                     columns=['date', 'open', 'close', 'high', 'low', 'volume', 'amount',
+                             'amplitude', 'change_pct', 'change', 'turnover'])
+    print(f"获取到 {len(df)} 条 ETF K 线数据")
+```
+
+---
+
+### 数据源 2：Yahoo Finance ETF 数据
+
+**ETF 代码格式**：`代码.SS`（上海）、`.SZ`（深圳）
+
+**使用示例**：
+```python
+import yfinance as yf
+
+ticker = yf.Ticker("563020.SS")  # 红利低波 ETF
+df = ticker.history(period="max")
+
+print(df.head())
+```
+
+---
+
+## 五、宏观经济数据（AKShare）
+
+### 官方文档
+
+**AKShare 官方文档**：https://akshare.akfamily.xyz/
+
+### 安装
+
+```bash
+pip install akshare
+```
+
+### 货币供应量（M0/M1/M2）
 
 ```python
 import akshare as ak
-import pandas as pd
 
-# 货币供应 M2
 df = ak.macro_china_supply_of_money()
-print(df[["统计时间", "货币和准货币（广义货币M2）", "货币和准货币（广义货币M2）同比增长"]].tail())
+print(df.head())
 
-# CPI 同比
-cpi = ak.macro_china_cpi_yearly()
-print(cpi[["日期", "今值"]].tail())
-
-# PMI 官方
-pmi = ak.macro_china_pmi_yearly()
-print(pmi[["日期", "今值"]].tail())
-
-# LPR 利率
-lpr = ak.macro_china_lpr()
-print(lpr[["TRADE_DATE", "LPR1Y", "LPR5Y"]].tail())
-
-# 70 城房价（需指定城市）
-hp = ak.macro_china_new_house_price(city_first="北京", city_second="上海")
-print(hp.head())
+# 字段：统计时间, 货币和准货币(M2), M2同比, 货币(M1), M1同比, 流通中现金(M0), M0同比
 ```
 
-#### 从 SQLite 读取（项目已采集）
+### GDP
 
 ```python
-import sqlite3
-import pandas as pd
+import akshare as ak
 
-conn = sqlite3.connect("data/macro_data.db")
+df = ak.macro_china_gdp()
+print(df.head())
 
-# 货币供应
-df = pd.read_sql("SELECT date, m2, m2_yoy FROM money_supply ORDER BY date DESC LIMIT 10", conn)
-print(df)
+# 字段：季度, 国内生产总值-绝对值, 国内生产总值-同比
+```
 
-# 衍生月度（M2-M1 剪刀差）
-derived = pd.read_sql("SELECT date, m2_m1_spread FROM derived_monthly WHERE m2_m1_spread IS NOT NULL ORDER BY date DESC LIMIT 10", conn)
-print(derived)
+### CPI
 
-# 杠杆率
-lev = pd.read_sql("SELECT date, household, non_fin_corp, gov_total FROM leverage ORDER BY date DESC LIMIT 10", conn)
-print(lev)
+```python
+import akshare as ak
 
-conn.close()
+# 同比
+df_yoy = ak.macro_china_cpi_yearly()
+
+# 环比
+df_mom = ak.macro_china_cpi_monthly()
+```
+
+### PPI
+
+```python
+import akshare as ak
+
+df = ak.macro_china_ppi_yearly()
+```
+
+### PMI
+
+```python
+import akshare as ak
+
+# 官方制造业 PMI
+df_official = ak.macro_china_pmi_yearly()
+
+# 财新制造业 PMI
+df_caixin = ak.macro_china_cx_pmi_yearly()
+
+# 非制造业 PMI
+df_non_man = ak.macro_china_non_man_pmi()
+```
+
+### LPR 利率
+
+```python
+import akshare as ak
+
+df = ak.macro_china_lpr()
+
+# 字段：TRADE_DATE, LPR1Y, LPR5Y
+```
+
+### 社会融资规模
+
+```python
+import akshare as ak
+
+df = ak.macro_china_shrzgm()
+```
+
+### 工业增加值
+
+```python
+import akshare as ak
+
+df = ak.macro_china_gyzjz()
+```
+
+### 70 城房价指数
+
+```python
+import akshare as ak
+
+df = ak.macro_china_new_house_price(city_first="北京", city_second="上海")
+```
+
+### 宏观杠杆率（CNBS）
+
+```python
+import akshare as ak
+
+df = ak.macro_cnbs()
+
+# 字段：年份, 居民部门, 非金融企业部门, 政府部门, 实体经济部门
 ```
 
 ---
 
-## 三、数据源对比表
+## 六、指数估值数据（Tushare）
 
-| 数据类型 | PanWatch 接口 | AKShare 函数 | 适用场景 |
-|---|---|---|---|
-| **实时股票报价** | 腾讯 `qt.gtimg.cn` | `ak.stock_zh_a_spot_em()` 等 | A 股/港股/美股实时价格 |
-| **K 线历史** | 腾讯 `web.ifzq.gtimg.cn` + 东方财富 `push2his.eastmoney.com` | `ak.stock_zh_a_hist()` | 日 K/周 K/月 K |
-| **新闻资讯** | 雪球 + 东方财富搜索 + 东方财富公告 | `ak.stock_news_em()` | 个股新闻/公告 |
-| **资金流向** | 东方财富 `push2his.eastmoney.com/fflow` | `ak.stock_individual_fund_flow()` | 主力/北向资金 |
-| **宏观经济（中国）** | ❌ 无 | `ak.macro_china_*` 系列（17 个函数）| CPI/PPI/PMI/GDP/LPR 等 |
-| **国债收益率** | ❌ 无 | `ak.bond_china_yield()` | 中债国债曲线 |
-| **房价指数** | ❌ 无 | `ak.macro_china_new_house_price()` | 70 城房价 |
-| **人口/城镇化** | ❌ 无 | `ak.macro_china_nbs_nation()` | NBS 年度数据 |
+### 官方文档
 
----
+**Tushare 官方文档**：https://tushare.pro/document/1
 
-## 四、快速参考：接口 URL 汇总
+### 安装
 
-### 腾讯接口
+```bash
+pip install tushare
+```
 
-| 用途 | URL | 参数示例 |
-|---|---|---|
-| 实时行情 | `http://qt.gtimg.cn/q={代码列表}` | `sh600519,sz000001` |
-| K 线（前复权）| `http://web.ifzq.gtimg.cn/appstock/app/fqkline/get` | `param=sh600519,day,,,100,qfq` |
+### 注册
 
-### 东方财富接口
+https://tushare.pro/register（免费，需要积分）
 
-| 用途 | URL | 关键参数 |
-|---|---|---|
-| K 线（长历史）| `https://push2his.eastmoney.com/api/qt/stock/kline/get` | `secid=1.000001`, `klt=101`, `fqt=1` |
-| 资金流向 | `https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get` | `secid=1.600519`, `klt=101` |
-| 新闻搜索 | `https://search-api-web.eastmoney.com/search/jsonp` | `keyword=贵州茅台`, `type=0` |
-| 公告查询 | `https://np-anotice-stock.eastmoney.com/api/security/ann` | `stock_code=600519` |
+### 指数估值（股息率、PE、PB）
 
-### 其他接口
+```python
+import tushare as ts
 
-| 用途 | URL | 备注 |
-|---|---|---|
-| 雪球新闻 | `https://xueqiu.com/statuses/stock_timeline.json` | 需 cookie |
-| Stooq（美股）| `https://stooq.com/q/d/l/` | CSV 格式，备用 |
-| 中债国债 | akshare `ak.bond_china_yield()` | 中债登数据 |
+ts.set_token('YOUR_TOKEN_HERE')
+pro = ts.pro_api()
 
----
+# 获取指数估值数据
+df = pro.index_dailybasic(
+    ts_code='H30269.CSI',  # 红利低波指数
+    start_date='20140101',
+    end_date='20261231',
+    fields='ts_code,trade_date,pe,pe_ttm,pb,ps,ps_ttm,dv_ratio,dv_ttm'
+)
 
-## 五、注意事项
+print(df.head())
 
-1. **akshare 依赖外部数据源**——部分接口可能因上游变动失效（如 NBS 403、东方财富 token 过期）。采集失败时需检查上游接口状态。
-2. **腾讯/东方财富接口无官方文档**——URL 和参数可能变动，需逆向工程或社区文档。
-3. **雪球需登录**——个人用需自配 cookie（`xq_a_token`），企业用需遵守其 ToS。
-4. **akshare NBS 接口在本沙箱被 WAF 拦截**（IP 140.205.85.146 被封）——需在 NBS 可达网络采集人口/城镇化率数据。
-5. **数据频率差异**——akshare 宏观数据多为月频/季频/年频，PanWatch 行情为实时/日频。混用时注意频率对齐。
+# 字段：
+# trade_date | 交易日期
+# pe         | 市盈率
+# pe_ttm     | 市盈率 TTM
+# pb         | 市净率
+# ps         | 市销率
+# dv_ratio   | 股息率（%）
+# dv_ttm     | 股息率 TTM
+```
 
 ---
 
-## 六、相关文档
+## 七、常见问题
 
-- PanWatch 项目：https://github.com/TNT-Likely/PanWatch
-- AKShare 文档：https://www.akshare.xyz/
-- 本项目数据采集脚本：`scripts/01_fetch_data.py` + `scripts/02_compute_derived.py`
-- 本项目数据表结构：`data/macro_data.db`（SQLite，13 张原始表 + 2 张衍生表）
+### Q: 腾讯 API 返回空数据？
+
+A: 检查股票代码格式是否正确（`sh`/`sz`/`hk` 前缀），以及是否在交易时间。
+
+### Q: 东方财富 API 返回 ConnectionError？
+
+A: 可能是 IP 被限制，尝试：
+- 使用代理
+- 在本地网络运行（非云服务器）
+- 使用其他数据源（Yahoo Finance、新浪财经）
+
+### Q: AKShare 函数报错？
+
+A: AKShare 依赖上游数据源，上游接口可能变动。检查 AKShare 版本是否最新：
+```bash
+pip install --upgrade akshare
+```
+
+### Q: Tushare 接口无权限？
+
+A: 部分接口需要积分，详见：https://tushare.pro/document/1?doc_id=108
+
+---
+
+## 八、数据源对比
+
+| 数据类型 | 腾讯 | 东方财富 | Yahoo | AKShare | Tushare |
+|---------|------|---------|-------|---------|---------|
+| 实时行情 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 历史 K 线 | ✅（短） | ✅（长） | ✅ | ✅ | ✅ |
+| ETF 数据 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 新闻资讯 | ❌ | ✅ | ❌ | ✅ | ❌ |
+| 宏观经济 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 指数估值 | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 九、使用建议
+
+1. **实时行情**：腾讯 API（简单快速）
+2. **历史 K 线**：东方财富（数据全）或 Yahoo Finance（海外股票）
+3. **宏观经济**：AKShare（覆盖广）
+4. **指数估值**：Tushare（需积分）
+5. **新闻资讯**：东方财富新闻 API
+
+---
+
+## 十、官方文档快速索引
+
+| 数据源 | 类型 | 官方文档 | 备注 |
+|--------|------|---------|------|
+| **腾讯财经 API** | 实时行情 / K 线 | 无官方文档 | 非公开 API，逆向工程整理 |
+| **东方财富 API** | K 线 / 新闻 | 无官方文档 | 非公开 API，逆向工程整理 |
+| **新浪财经 API** | 新闻 | 无官方文档 | 非公开 API，逆向工程整理 |
+| **Yahoo Finance** | 行情 / K 线 | https://ranaroussi.github.io/yfinance | yfinance 库官方文档 |
+| **AKShare** | 宏观经济数据 | https://akshare.akfamily.xyz/ | 中文文档 |
+| **Tushare** | 指数估值 | https://tushare.pro/document/1 | 需注册 + 积分 |
+
+---
+
+*文档版本：1.1 | 更新时间：2026-06-22*

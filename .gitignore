@@ -6,11 +6,14 @@ dist/
 build/
 *.egg
 
-# Data (database too large for git)
+# Data (runtime / cache / downloaded files)
 data/*.db
 data/*.db.staging
+data/*.csv
 data/backups/
 data/last_run.json
+data/.dashcache/
+data/.refresh.lock
 
 # IDE
 .idea/
