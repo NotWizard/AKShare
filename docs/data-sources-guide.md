@@ -163,7 +163,7 @@ if 'kline_dayqfq=' in text:
 - `lmt`: 获取条数
 - `fields1`: `f1,f2,f3,f4,f5,f6`
 - `fields2`: `f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63`
-- `ut`: `fa5fd1943c7b386f172d6893dbbd1d0c`（固定 token）
+- `ut`: `fa5fd1943c7b386f172d6893dbbd1d0c`（固定公共 token，无需替换）
 
 **请求示例**：
 ```python
@@ -226,7 +226,13 @@ turnover     | 换手率（%）
 
 ### 数据源 3：Yahoo Finance（yfinance）
 
-**官方文档**：https://ranaroussi.github.io/yfinance
+**官方文档**：https://ranaroussi.github.io/yfinance/
+
+**API 参考**：https://ranaroussi.github.io/yfinance/reference/api.html
+
+**GitHub 仓库**：https://github.com/ranaroussi/yfinance
+
+> 注：yfinance 非 Yahoo 官方产品，数据来源于 Yahoo Finance，可能存在延迟或不准确。
 
 **安装**：`pip install yfinance`
 
@@ -254,29 +260,32 @@ Date, Open, High, Low, Close, Volume, Dividends, Stock Splits
 
 ## 三、新闻资讯数据
 
-### 数据源 1：新浪财经新闻 API
+### 数据源 1：新浪财经滚动新闻 API
 
 **官方文档**：无官方文档（非公开 API，逆向工程整理）
 
-**接口地址**：`https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData`
+> ⚠️ 注意：该接口为非公开 API，可能需要添加 `Referer: https://finance.sina.com.cn/` 请求头，且随时可能变更。
+
+**接口地址**：`https://feed.mix.sina.com.cn/api/roll/get`
 
 **请求参数**：
-- `symbol`: 股票代码（`sh600519`）
-- `scale`: K 线周期（`240`=日线）
-- `ma`: 均线（`no`=不要）
-- `datalen`: 获取条数
+- `pageid`: 页面 ID（`153`=财经频道）
+- `lid`: 栏目 ID（`2509`=全部、`2511`=A 股、`2516`=个股）
+- `k`: 搜索关键词（可选，如股票名称/代码）
+- `num`: 每页条数
+- `page`: 页码
 
 **请求示例**：
 ```python
 import requests
-import json
 
-url = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
+url = "https://feed.mix.sina.com.cn/api/roll/get"
 params = {
-    'symbol': 'sh600519',
-    'scale': '240',
-    'ma': 'no',
-    'datalen': '100'
+    'pageid': '153',
+    'lid': '2516',
+    'k': '贵州茅台',
+    'num': '10',
+    'page': '1'
 }
 
 headers = {
@@ -285,59 +294,103 @@ headers = {
 }
 
 response = requests.get(url, params=params, headers=headers, timeout=15)
+data = response.json()
 
-if response.status_code == 200:
-    text = response.text
-    if '({' in text:
-        text = text[text.index('({') + 1:text.rindex('})') + 1]
-        data = json.loads(text)
-        
-        if isinstance(data, list):
-            print(f"获取到 {len(data)} 条数据")
-            print(data[0])
+if 'result' in data and 'data' in data['result']:
+    news_list = data['result']['data']
+    for item in news_list[:5]:
+        print(f"- [{item.get('ctime', '')}] {item.get('title', 'N/A')}")
+        print(f"  {item.get('url', '')}")
 ```
+
+**返回字段**：
+```
+字段      | 说明
+title     | 新闻标题
+ctime     | 发布时间（Unix 时间戳）
+url       | 新闻链接
+media_name| 媒体来源
+summary   | 摘要
+keywords  | 关键词
+```
+
+> 备选方案：如该接口不可用，可使用 **Tushare 旧版** 的 `ts.get_latest_news()` 获取即时财经新闻，或使用下方的东方财富新闻 API。
 
 ---
 
-### 数据源 2：东方财富新闻 API
+### 数据源 2：东方财富新闻搜索 API
 
 **官方文档**：无官方文档（非公开 API，逆向工程整理）
 
 **接口地址**：`https://search-api-web.eastmoney.com/search/jsonp`
 
-**请求参数**：
+**请求参数**（通过 JSONP `param` 传递）：
 - `keyword`: 搜索关键词（股票名称/代码）
-- `type`: `0`（新闻）
-- `pi`: 页码
-- `ps`: 每页条数
+- `type`: 搜索类型（`cmsArticleWebOld`=新闻文章）
+- `pageIndex`: 页码
+- `pageSize`: 每页条数
+- `sort`: 排序方式（`default`=默认）
 
 **请求示例**：
 ```python
 import requests
 import json
+import re
 
 url = "https://search-api-web.eastmoney.com/search/jsonp"
 params = {
-    'keyword': '贵州茅台',
-    'type': '0',
-    'pi': '1',
-    'ps': '10'
+    'cb': 'jQuery',
+    'param': json.dumps({
+        "uid": "",
+        "keyword": "贵州茅台",
+        "type": ["cmsArticleWebOld"],
+        "client": "web",
+        "clientType": "web",
+        "clientVersion": "curr",
+        "param": {
+            "cmsArticleWebOld": {
+                "searchScope": "default",
+                "sort": "default",
+                "pageIndex": 1,
+                "pageSize": 10,
+                "preTag": "",
+                "postTag": ""
+            }
+        }
+    })
 }
 
-response = requests.get(url, params=params, timeout=15)
+headers = {
+    'User-Agent': 'Mozilla/5.0',
+    'Referer': 'https://so.eastmoney.com/'
+}
 
-# 解析 JSONP 响应
+response = requests.get(url, params=params, headers=headers, timeout=15)
+
+# 解析 JSONP 响应：jQuery({...})
 text = response.text
-if '({' in text:
-    # 移除 JSONP 包裹
-    text = text[text.index('(') + 1:text.rindex(')')]
-    data = json.loads(text)
-    
-    if 'result' in data:
-        news_list = data['result']
-        print(f"获取到 {len(news_list)} 条新闻")
-        for news in news_list[:3]:
-            print(f"- {news.get('title', 'N/A')}")
+match = re.search(r'jQuery\((.*)\)', text, re.DOTALL)
+if match:
+    data = json.loads(match.group(1))
+    result = data.get('result', {})
+    articles = result.get('cmsArticleWebOld', [])
+    print(f"共 {result.get('hitsTotal', 0)} 条结果")
+    for article in articles[:5]:
+        print(f"- [{article.get('date', '')}] {article.get('title', '')}")
+        print(f"  来源: {article.get('mediaName', '')}")
+        print(f"  链接: {article.get('url', '')}")
+```
+
+**返回字段**：
+```
+字段        | 说明
+title       | 新闻标题
+date        | 发布时间
+content     | 摘要
+mediaName   | 媒体来源
+url         | 新闻链接
+code        | 文章 ID
+image       | 缩略图 URL
 ```
 
 ---
@@ -406,22 +459,31 @@ print(df.head())
 
 **AKShare 官方文档**：https://akshare.akfamily.xyz/
 
+**AKShare 数据字典（API 全量索引）**：https://akshare.akfamily.xyz/data/macro/macro.html
+
+**AKShare GitHub**：https://github.com/akfamily/akshare
+
 ### 安装
 
 ```bash
 pip install akshare
 ```
 
-### 货币供应量（M0/M1/M2）
+### 货币供应量（M2）
 
 ```python
 import akshare as ak
 
-df = ak.macro_china_supply_of_money()
+# M2 货币供应年率（年度数据）
+df = ak.macro_china_m2_yearly()
 print(df.head())
 
-# 字段：统计时间, 货币和准货币(M2), M2同比, 货币(M1), M1同比, 流通中现金(M0), M0同比
+# 字段：日期, M2 货币和准货币（亿元）, M2 同比（%）
 ```
+
+> 注：AKShare 当前版本未提供独立的 M0/M1 月度供应函数。如需 M0/M1 数据，可通过
+> `ak.macro_china_money_supply()` 获取完整货币供应量统计表（含 M0、M1、M2 月度数据），
+> 或参考东方财富宏观数据页面手动导出。
 
 ### GDP
 
@@ -521,6 +583,10 @@ df = ak.macro_cnbs()
 
 **Tushare 官方文档**：https://tushare.pro/document/1
 
+**index_dailybasic 接口文档**：https://tushare.pro/document/2?doc_id=128
+
+**积分权限说明**：https://tushare.pro/document/1?doc_id=108（index_dailybasic 需要 4000+ 积分）
+
 ### 安装
 
 ```bash
@@ -539,24 +605,29 @@ import tushare as ts
 ts.set_token('YOUR_TOKEN_HERE')
 pro = ts.pro_api()
 
-# 获取指数估值数据
+# 获取指数估值数据（支持：上证综指/深证成指/上证50/沪深300/中证500/中小板指/创业板指）
 df = pro.index_dailybasic(
-    ts_code='H30269.CSI',  # 红利低波指数
+    ts_code='000300.SH',  # 沪深300指数
     start_date='20140101',
     end_date='20261231',
-    fields='ts_code,trade_date,pe,pe_ttm,pb,ps,ps_ttm,dv_ratio,dv_ttm'
+    fields='ts_code,trade_date,pe,pe_ttm,pb,dv_ratio,dv_ttm,turnover_rate,total_mv,float_mv'
 )
 
 print(df.head())
 
 # 字段：
-# trade_date | 交易日期
-# pe         | 市盈率
-# pe_ttm     | 市盈率 TTM
-# pb         | 市净率
-# ps         | 市销率
-# dv_ratio   | 股息率（%）
-# dv_ttm     | 股息率 TTM
+# trade_date    | 交易日期
+# total_mv      | 当日总市值（元）
+# float_mv      | 当日流通市值（元）
+# total_share   | 当日总股本（股）
+# float_share   | 当日流通股本（股）
+# free_share    | 当日自由流通股本（股）
+# turnover_rate | 换手率（%）
+# pe            | 市盈率
+# pe_ttm        | 市盈率 TTM
+# pb            | 市净率
+# dv_ratio      | 股息率（%）
+# dv_ttm        | 股息率 TTM
 ```
 
 ---
@@ -566,6 +637,13 @@ print(df.head())
 ### Q: 腾讯 API 返回空数据？
 
 A: 检查股票代码格式是否正确（`sh`/`sz`/`hk` 前缀），以及是否在交易时间。
+
+### Q: 新浪新闻 API 返回 403？
+
+A: 新浪 `feed.mix.sina.com.cn` 接口可能需要：
+- 添加 `Referer: https://finance.sina.com.cn/` 请求头
+- 在本地网络运行（非云服务器）
+- 接口随时可能变更，建议优先使用东方财富新闻 API
 
 ### Q: 东方财富 API 返回 ConnectionError？
 
@@ -580,6 +658,11 @@ A: AKShare 依赖上游数据源，上游接口可能变动。检查 AKShare 版
 ```bash
 pip install --upgrade akshare
 ```
+
+### Q: AKShare 找不到 `macro_china_supply_of_money`？
+
+A: 该函数已被移除或从未存在。M2 年度数据请使用 `macro_china_m2_yearly()`，
+完整货币供应量统计表（含 M0/M1/M2 月度）请使用 `macro_china_money_supply()`。
 
 ### Q: Tushare 接口无权限？
 
@@ -616,11 +699,11 @@ A: 部分接口需要积分，详见：https://tushare.pro/document/1?doc_id=108
 |--------|------|---------|------|
 | **腾讯财经 API** | 实时行情 / K 线 | 无官方文档 | 非公开 API，逆向工程整理 |
 | **东方财富 API** | K 线 / 新闻 | 无官方文档 | 非公开 API，逆向工程整理 |
-| **新浪财经 API** | 新闻 | 无官方文档 | 非公开 API，逆向工程整理 |
-| **Yahoo Finance** | 行情 / K 线 | https://ranaroussi.github.io/yfinance | yfinance 库官方文档 |
-| **AKShare** | 宏观经济数据 | https://akshare.akfamily.xyz/ | 中文文档 |
-| **Tushare** | 指数估值 | https://tushare.pro/document/1 | 需注册 + 积分 |
+| **新浪财经 API** | 新闻 / K 线 | 无官方文档 | 非公开 API，逆向工程整理；新闻接口可能需 Referer 头 |
+| **Yahoo Finance** | 行情 / K 线 | https://ranaroussi.github.io/yfinance | yfinance 库官方文档；[API 参考](https://ranaroussi.github.io/yfinance/reference/api.html) |
+| **AKShare** | 宏观经济数据 | https://akshare.akfamily.xyz/ | [数据字典](https://akshare.akfamily.xyz/data/macro/macro.html)；[GitHub](https://github.com/akfamily/akshare) |
+| **Tushare** | 指数估值 | https://tushare.pro/document/1 | [index_dailybasic](https://tushare.pro/document/2?doc_id=128)；[积分权限](https://tushare.pro/document/1?doc_id=108)；需注册 + 4000 积分 |
 
 ---
 
-*文档版本：1.1 | 更新时间：2026-06-22*
+*文档版本：1.2 | 更新时间：2026-06-23*

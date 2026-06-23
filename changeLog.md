@@ -1,6 +1,27 @@
 # Change Log
 
-## 2026-06-20 — 新增 10Y 国债收益率采集 + 利率图（概览/房地产）
+## [Unreleased] — 数据源参考手册交叉验证与修正
+
+### 变更
+
+1. **[修复] `docs/data-sources-guide.md` §五 货币供应量**：`macro_china_supply_of_money()` 在 AKShare 中不存在，替换为正确的 `macro_china_m2_yearly()`，补充 `macro_china_money_supply()` 备选方案
+2. **[修复] §三 新浪财经新闻 API**：原 URL `CN_MarketData.getKLineData` 实际返回 K 线数据而非新闻，替换为正确的 `feed.mix.sina.com.cn/api/roll/get` 新闻接口，附完整参数和代码示例
+3. **[修复] §六 Tushare 代码示例**：`ts_code='H30269.CSI'` 格式错误（index_dailybasic 仅支持 SH/SZ 后缀），改为 `ts_code='000300.SH'`
+4. **[修复] §三 东方财富新闻 API**：重写为正确的 JSONP 嵌套参数结构和解析代码
+5. **[文档] §六 Tushare 输出字段**：补齐全部 12 个字段（新增 total_mv/float_mv/total_share/float_share/free_share/turnover_rate）
+6. **[文档] 官方文档链接**：新增 5 个链接——AKShare 数据字典 + GitHub、Tushare index_dailybasic 接口文档 + 积分权限、yfinance API 参考
+7. **[文档] FAQ**：新增 2 条——新浪新闻 API 403 解决方案、`macro_china_supply_of_money` 不存在说明
+8. **[文档] .gitignore**：补全 `data/` 下遗漏的运行时文件（*.csv、.dashcache/、.refresh.lock）
+
+### 验证
+
+- 8 个数据源逐一联网验证（Tavily Search + WebFetch 直接调用 API）
+- 腾讯 qt.gtimg.cn、web.ifzq.gtimg.cn 接口实测返回正常
+- 东方财富 search-api-web.eastmoney.com 新闻搜索 API 实测返回 JSONP 新闻数据
+- AKShare 官方文档确认 `macro_china_m2_yearly` 为唯一 M2 函数
+- Tushare 官方文档确认 index_dailybasic 参数与积分要求（4000+）
+
+---
 
 ### 新功能
 
