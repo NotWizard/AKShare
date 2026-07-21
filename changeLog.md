@@ -12,6 +12,7 @@
 6. **[文档] 官方文档链接**：新增 5 个链接——AKShare 数据字典 + GitHub、Tushare index_dailybasic 接口文档 + 积分权限、yfinance API 参考
 7. **[文档] FAQ**：新增 2 条——新浪新闻 API 403 解决方案、`macro_china_supply_of_money` 不存在说明
 8. **[文档] .gitignore**：补全 `data/` 下遗漏的运行时文件（*.csv、.dashcache/、.refresh.lock）
+9. **[修复] `backend/app/api/v1/data.py` align_start**：排除全 null 列后再做 `.all()` 对齐——`bond_10y` 全 null 曾导致利率图 align 完全失效（从 1978 空白起），修复后恢复 2019-09 起点，其余图表零影响
 
 ### 验证
 
