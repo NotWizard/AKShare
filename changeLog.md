@@ -469,6 +469,26 @@
 
 ---
 
+### refresh SSE URL 复用 BASE 常量
+
+### 重构
+
+1. **[重构] `frontend/src/api/client.ts` + `stores/refresh.ts`**：`BASE` 由模块私有改 `export`；refresh.ts 的 SSE stream fetch 由写死 `'/api/v1/refresh/stream'` 改 `` `${BASE}/refresh/stream` ``——单一 URL 真相源，API 版本变更不漏改（此前 refresh.ts 是唯一绕过 `api` 对象、写死 `/api/v1` 的 fetch）。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；URL 字节级与旧值一致（`/api/v1` + `/refresh/stream` = 旧字面量），无运行时行为变更。
+
+### Refactor (English)
+
+1. **[refactor] `frontend/src/api/client.ts` + `stores/refresh.ts`**: `BASE` from module-private to `export`; refresh.ts SSE stream fetch from hardcoded `'/api/v1/refresh/stream'` to `` `${BASE}/refresh/stream` `` — single URL source of truth, no missed update on API version change (refresh.ts was the only fetch bypassing the `api` object with a hardcoded `/api/v1`).
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; URL byte-identical to prior (`/api/v1` + `/refresh/stream` = old literal), no runtime behavior change.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

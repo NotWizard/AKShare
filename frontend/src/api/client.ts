@@ -3,7 +3,7 @@
 // ships hand-written types, `npm run gen:api` regenerates from OpenAPI).
 import type { DerivedFrame, CycleFrame, SignalSummary, RefreshResult, RealEstateResponse, Commentary } from './types'
 
-const BASE = '/api/v1'
+export const BASE = '/api/v1'
 
 async function getJSON<T>(path: string): Promise<T> {
   const controller = new AbortController()

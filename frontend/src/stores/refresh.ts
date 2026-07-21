@@ -1,7 +1,7 @@
 // Refresh store — drives the SSE progress bar + manifest result.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api } from '../api/client'
+import { api, BASE } from '../api/client'
 
 export const useRefreshStore = defineStore('refresh', () => {
   const running = ref(false)
@@ -28,7 +28,7 @@ export const useRefreshStore = defineStore('refresh', () => {
     running.value = true
     progress.value = 0
     try {
-      const resp = await fetch('/api/v1/refresh/stream', {
+      const resp = await fetch(`${BASE}/refresh/stream`, {
         signal: abortController.signal,
       })
       if (!resp.ok || !resp.body) {
