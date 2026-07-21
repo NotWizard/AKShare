@@ -169,25 +169,39 @@ def compute_derived(conn):
     log(f"  ✅ derived_monthly: {len(monthly)} rows, {len(monthly.columns)} columns")
 
     # ─── 构建季度衍生表 ───
+    # 以 leverage 季频为锚：季末日期(03/06/09/12-末)归一到季初(01/04/07/10-1)，
+    # 避免 GDP 年频(YYYY-01-01)与 leverage 季末等值 merge 落空（旧实现导致 leverage
+    # 列全 NULL——README 旧称"频率不匹配限制"实为月份约定不匹配，已修复）。
     quarterly = pd.DataFrame()
-    if not gdp.empty:
-        quarterly = gdp[["date", "gdp_abs", "gdp_yoy"]].copy()
-        quarterly["date"] = pd.to_datetime(quarterly["date"])
-        quarterly["gdp_yoy_smooth"] = quarterly["gdp_yoy"].rolling(4, min_periods=1).mean()
-
     if not leverage.empty:
         lev = leverage.copy()
         lev["date"] = pd.to_datetime(lev["date"])
-        quarterly = quarterly.merge(
-            lev[["date", "household", "non_fin_corp", "gov_total",
-                 "gov_central", "gov_local", "real_economy"]],
-            on="date", how="left"
-        )
+        lev["date"] = lev["date"].dt.to_period("Q").dt.to_timestamp()  # 季末 → 季初
+        lev = lev.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
+        quarterly = lev[["date", "household", "non_fin_corp", "gov_total",
+                         "gov_central", "gov_local", "real_economy"]].copy()
         # 杠杆率变化速度 (年度变化 = 当前 - 4 季度前)
-        if "household" in quarterly.columns:
-            quarterly["household_change"] = quarterly["household"] - quarterly["household"].shift(4)
-            quarterly["gov_change"] = quarterly["gov_total"] - quarterly["gov_total"].shift(4)
-            quarterly["corp_change"] = quarterly["non_fin_corp"] - quarterly["non_fin_corp"].shift(4)
+        quarterly["household_change"] = quarterly["household"] - quarterly["household"].shift(4)
+        quarterly["gov_change"] = quarterly["gov_total"] - quarterly["gov_total"].shift(4)
+        quarterly["corp_change"] = quarterly["non_fin_corp"] - quarterly["non_fin_corp"].shift(4)
+
+    # GDP 年频 → 经 merge_asof(backward) + ffill 填充到各季度（年 GDP 作为该年各季分母，
+    # 与 cycle_debt 的 backward-fill 约定一致）。
+    if not gdp.empty:
+        g = gdp[["date", "gdp_abs", "gdp_yoy"]].copy()
+        g["date"] = pd.to_datetime(g["date"])
+        g = g.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
+        if quarterly.empty:
+            # leverage 缺失 → 退回年频 GDP 表（保持旧行为，不丢 gdp_yoy_smooth）
+            quarterly = g.copy()
+            quarterly["gdp_yoy_smooth"] = quarterly["gdp_yoy"].rolling(4, min_periods=1).mean()
+        else:
+            quarterly = quarterly.sort_values("date").reset_index(drop=True)
+            quarterly = pd.merge_asof(quarterly, g, on="date", direction="backward")
+            quarterly["gdp_abs"] = quarterly["gdp_abs"].ffill()
+            quarterly["gdp_yoy"] = quarterly["gdp_yoy"].ffill()
+            # 4 季平滑 = 16 季度滚动（季度数据上等价 4 年；年频上仍用 rolling(4) 见上分支）
+            quarterly["gdp_yoy_smooth"] = quarterly["gdp_yoy"].rolling(16, min_periods=4).mean()
 
     # ─── 居民真实杠杆率（债务 / 可支配收入）───
     if not hh_income.empty and not quarterly.empty and "gdp_abs" in quarterly.columns:

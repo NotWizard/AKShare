@@ -13,8 +13,9 @@ const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
 // Read the leverage table DIRECTLY (quarterly, non-null). derived_quarterly's
-// leverage columns are null because gdp is annual (YYYY-01-01) and leverage is
-// quarterly (YYYY-03/06/09/12) — an exact-date merge hits 0 rows.
+// leverage columns are now populated (02_compute_derived anchors on leverage
+// quarterly freq + GDP merge_asof ffill); the debt page reads leverage raw for
+// directness and to avoid the ffill step-shape in GDP-derived series.
 const dq = ref<Record<string, string | number | null>[]>([])
 const rateDm = ref<Record<string, string | number | null>[]>([])  // lpr_1y,lpr_5y,real_rate,bond_10y
 const cycle = ref<CycleFrame | null>(null)

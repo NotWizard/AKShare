@@ -211,6 +211,38 @@
 
 ---
 
+### derived_quarterly 杠杆率空列修复（月份约定不匹配根治）
+
+### 修复
+
+1. **[修复] `scripts/02_compute_derived.py`**：季度表改为以 leverage 季频为锚（季末日期经 `dt.to_period("Q").dt.to_timestamp()` 归一到季初），GDP 年频经 `pd.merge_asof(direction="backward")` + `ffill` 填充到各季——根治旧实现 GDP `YYYY-01-01` 与 leverage 季末 `YYYY-{03,06,09,12}` 等值 merge 日期不重叠、derived_quarterly 杠杆率列全 NULL（0/21 → 80/80）。`gdp_yoy_smooth` 改 `rolling(16, min_periods=4)`（季度上等价 4 年；leverage 缺失的 gdp-only 回退分支仍用 `rolling(4)`）。
+2. **[修复] `analysis/cycle_merrill.py`**：读 derived_quarterly 后按年去重（`drop_duplicates(subset=["year"], keep="last")`）恢复年频——缓解季度化（21→80 行）后 `rolling(window=4)` 从 4 年窗口退化为 1 年窗口、阶段判定偏向滞胀/衰退的回归。
+3. **[文档] `README.md`**：更正「derived_quarterly leverage 列因频率不匹配为空」的误导表述（实为月份约定不匹配，已修复）。
+4. **[文档] `frontend/src/pages/DebtCycle.vue`**：同步更新引用该缺陷的注释。
+
+### 验证
+
+1. `02_compute_derived.py` 重算：derived_quarterly 21 行→80 行；household/non_fin_corp/gov_total/gov_central/gov_local/real_economy 全 80/80 非空（旧 0/21）；gdp_yoy 76/80、gdp_yoy_smooth 73/80（首 4 季无前值，边界正确）。
+2. `cycle_merrill.py` 阶段健康混合（recovery/overheating/stagflation/recession，非全滞胀衰退）；2024 `gdp_trend=8.425`=(18.9+4.8+4.7+5.3)/4 确认 4 年窗口保留。`cycle_debt.py` 正常分类（手动 backward-fill 循环，约定无关）。
+3. 后端 golden test 6/6 无回归。
+4. 独立审查 Agent 确认：merge_asof backward 正确（Q4 不窃次年 GDP——2024 各季均得 5.3、2023 Q4 得 4.7）、dedup-by-year 缓解生效、无下游消费者受影响（`/derived/quarterly` 直供、DebtCycle 读 leverage 原始表、`getDerivedQuarterly` 前端无调用方）。
+
+### Fix (English)
+
+1. **[fix] `scripts/02_compute_derived.py`**: quarterly table now anchors on leverage quarterly freq (quarter-end → quarter-start via `dt.to_period("Q").dt.to_timestamp()`), GDP annual freq brought in via `pd.merge_asof(direction="backward")` + `ffill` — root-causes the old equality-merge miss where GDP `YYYY-01-01` vs leverage quarter-end `YYYY-{03,06,09,12}` hit 0 rows, leaving derived_quarterly leverage columns all NULL (0/21 → 80/80). `gdp_yoy_smooth` now `rolling(16, min_periods=4)` (4-year equiv on quarterly; the gdp-only fallback still uses `rolling(4)`).
+2. **[fix] `analysis/cycle_merrill.py`**: after reading derived_quarterly, dedup-by-year (`drop_duplicates(subset=["year"], keep="last")`) restores annual granularity — mitigates the regression where `rolling(window=4)` would degrade from a 4-year to a 1-year window on the new 80-row quarterly frame, biasing phase classification toward stagflation/recession.
+3. **[doc] `README.md`**: corrected the misleading "derived_quarterly leverage columns empty due to frequency mismatch" note (real cause: month-convention mismatch, now fixed).
+4. **[doc] `frontend/src/pages/DebtCycle.vue`**: updated the comment referencing the fixed defect.
+
+### Verification (English)
+
+1. `02_compute_derived.py` recompute: derived_quarterly 21 → 80 rows; household/non_fin_corp/gov_total/gov_central/gov_local/real_economy all 80/80 non-null (was 0/21); gdp_yoy 76/80, gdp_yoy_smooth 73/80 (first 4 quarters have no prior GDP, correct boundary).
+2. `cycle_merrill.py` healthy phase mix (recovery/overheating/stagflation/recession, not all stagflation/recession); 2024 `gdp_trend=8.425`=(18.9+4.8+4.7+5.3)/4 confirms 4-year window preserved. `cycle_debt.py` classifies normally (manual backward-fill loop, convention-agnostic).
+3. Backend golden test 6/6 no regression.
+4. Independent review agent confirmed: merge_asof backward correct (Q4 doesn't steal next-year GDP — 2024 quarters all get 5.3, 2023 Q4 gets 4.7), dedup-by-year mitigation effective, no downstream consumer affected (`/derived/quarterly` serves raw, DebtCycle reads leverage raw, `getDerivedQuarterly` has no frontend caller).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

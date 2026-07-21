@@ -242,7 +242,7 @@ python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarte
 **`derived_quarterly`**（季度主表）
 - GDP 同比 + 4 季平滑、各部门杠杆率及季度变化速度
 
-> 注：`derived_quarterly` 的 leverage 列因 gdp 年频与 leverage 季频日期不重叠而为空；债务图表直读 `leverage` 原始表（见 DebtCycle.vue），`cycle_debt` 也直读 leverage，不受影响。
+> 注：`derived_quarterly` 以 leverage 季频为锚、GDP 年频经 `merge_asof` + ffill 填充到各季，各部门杠杆率及季度变化列已填充（旧实现因 GDP 年频 `YYYY-01-01` 与 leverage 季末 `YYYY-{03,06,09,12}` 等值 merge 日期不重叠而全 NULL，已修复）。债务图表仍直读 `leverage` 原始表（见 DebtCycle.vue），`cycle_debt` 也直读 leverage。
 
 ---
 

@@ -41,12 +41,17 @@ def classify_merrill(db_path: str) -> pd.DataFrame:
     conn = sqlite3.connect(db_path)
 
     # ── Annual GDP ──────────────────────────────────────────────────────────
+    # derived_quarterly 现为季频（年 GDP 经 merge_asof ffill 到各季）；按年去重恢复年频，
+    # 保证下方 rolling(window=4) 仍是 4 年窗口（否则季度上 rolling(4)=1 年，回归阶段判定）。
     gdp = pd.read_sql(
         "SELECT date, gdp_yoy FROM derived_quarterly WHERE gdp_yoy IS NOT NULL",
         conn,
     )
     gdp["date"] = pd.to_datetime(gdp["date"])
     gdp = gdp.drop_duplicates(subset=["date"], keep="last")
+    gdp = gdp.sort_values("date").reset_index(drop=True)
+    gdp["year"] = gdp["date"].dt.year
+    gdp = gdp.drop_duplicates(subset=["year"], keep="last").drop(columns=["year"])
 
     # ── Monthly CPI → annual mean ───────────────────────────────────────────
     cpi_monthly = pd.read_sql(
