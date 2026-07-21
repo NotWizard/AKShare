@@ -13,6 +13,7 @@ _ALLOWED_TABLES = {
     "money_supply", "gdp", "cpi", "ppi", "pmi",
     "leverage", "social_finance", "lpr", "industrial",
     "house_price", "household_income", "new_credit", "bond_yield",
+    "demographics",
 }
 
 # Explicit paths (no blanket prefix) so /table/{name} isn't nested under /derived.

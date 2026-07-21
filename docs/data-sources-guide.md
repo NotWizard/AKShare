@@ -706,4 +706,39 @@ A: 部分接口需要积分，详见：https://tushare.pro/document/1?doc_id=108
 
 ---
 
-*文档版本：1.2 | 更新时间：2026-06-23*
+## 十一、已知数据源问题
+
+### NBS 国家统计局（data.stats.gov.cn）— 2026-03 起失效
+
+**状态**：旧 API 已废弃，新 API 数据层未部署，当前不可用。
+
+**时间线**：
+- 2026-03-25：NBS 发布[新版数据发布库上线公告](https://www.stats.gov.cn/xw/tjxw/tzgg/202603/t20260325_1962844.html)
+- 2026-03-27：新版正式上线
+
+**旧 API（`easyquery.htm`）**：被 WAF UrlACL 规则精确拦截，返回 403。与 IP/频率无关，任何客户端均无法访问。AKShare 的 `macro_china_nbs_nation()` 硬编码此路径，彻底失效。
+
+**新 API（`/dg/website/publicrelease/web/external`）**：
+- 元数据层正常：`/new/queryIndexTreeAsync`（目录树）、`/new/queryIndicatorsByCid`（指标列表）均可用
+- 数据查询层未部署：`getEsDataByCidAndDt` 所有路径变体返回 404
+- 搜索端点 `/query` 返回"服务异常"HTML 页面
+- 前端静态资源（JS/CSS）全部 404
+
+**结论**：新平台仅完成了元数据迁移，实际数据查询的后端服务（Elasticsearch 层）尚未上线。
+
+**受影响的采集函数**：`fetch_demographics`、`fetch_household_income`
+
+**替代方案**：
+- `demographics` → World Bank API（`SP.POP.TOTL` / `SP.URB.TOTL.IN.ZS` / `SP.DYN.CBRT.IN` / `SP.DYN.CDRT.IN`），覆盖 1960-2025
+- `household_income` → 前端未使用此表，暂不替代；如后续需要可考虑 NBS 统计年鉴 CSV 或 World Bank `NY.GDP.PCAP.PP.KD`
+
+**新 API 参数备忘**（待数据层上线后适配）：
+- Base URL：`https://data.stats.gov.cn/dg/website/publicrelease/web/external`
+- 目录树：GET `/new/queryIndexTreeAsync?pid=&code=1`（code: 1=月度, 2=季度, 3=年度）
+- 指标列表：GET `/new/queryIndicatorsByCid?cid=<dataset_uuid>`
+- 数据查询：POST `/getEsDataByCidAndDt`，body: `{cid, indicatorIds[], das["000000000000"], dts["YYYYMMDD-YYYYMMDD"], showType:"1", rootId}`
+- 无需鉴权
+
+---
+
+*文档版本：1.3 | 更新时间：2026-07-21*

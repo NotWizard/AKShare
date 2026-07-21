@@ -7,12 +7,14 @@
 import sqlite3
 import os
 import sys
+import time
 import warnings
 from datetime import datetime
 
 import akshare as ak
 import pandas as pd
 import numpy as np
+import requests
 
 warnings.filterwarnings("ignore")
 
@@ -133,41 +135,94 @@ def fetch_gdp(conn):
 
 
 # ─────────────────────────────────────────────
-# 3. CPI 年率 + 月率
+# 3. CPI 年率 + 月率 (东方财富)
 # ─────────────────────────────────────────────
+def _fetch_eastmoney(report_name: str, col_map: dict) -> pd.DataFrame:
+    """Paginated fetch from eastmoney datacenter API."""
+    url = "https://datacenter-web.eastmoney.com/api/data/v1/get"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    cols = ",".join(col_map.keys())
+    page, frames = 1, []
+    while True:
+        params = {
+            "reportName": report_name,
+            "columns": cols,
+            "pageNumber": str(page),
+            "pageSize": "500",
+            "sortColumns": "REPORT_DATE",
+            "sortTypes": "-1",
+            "source": "WEB",
+            "client": "WEB",
+        }
+        r = requests.get(url, params=params, headers=headers, timeout=15)
+        body = r.json()
+        rows = (body.get("result") or {}).get("data")
+        if not rows:
+            break
+        frames.append(pd.DataFrame(rows))
+        if len(rows) < 500:
+            break
+        page += 1
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    return df.rename(columns=col_map)
+
+
 def fetch_cpi(conn):
     log("采集: CPI 年率 + 月率 ...")
-    # 年率 (同比)
-    df_yoy = ak.macro_china_cpi_yearly()
-    # 月率 (环比)
-    df_mom = ak.macro_china_cpi_monthly()
+    em = _fetch_eastmoney("RPT_ECONOMY_CPI", {
+        "REPORT_DATE": "date",
+        "NATIONAL_SAME": "cpi_yoy",
+        "NATIONAL_SEQUENTIAL": "cpi_mom",
+    })
+    if em.empty:
+        log("  ⚠️ 东方财富 CPI 无数据，保留旧表")
+        return pd.DataFrame()
+    em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
+    em["cpi_yoy"] = pd.to_numeric(em["cpi_yoy"], errors="coerce")
+    em["cpi_mom"] = pd.to_numeric(em["cpi_mom"], errors="coerce")
+    em = em.dropna(subset=["cpi_yoy"])
 
-    yoy = pd.DataFrame({
-        "date": pd.to_datetime(df_yoy["日期"]).dt.strftime("%Y-%m-01"),
-        "cpi_yoy": pd.to_numeric(df_yoy["今值"], errors="coerce"),
-    }).dropna(subset=["cpi_yoy"])
+    # Keep old data for dates before eastmoney coverage
+    em_min = em["date"].min()
+    try:
+        old = pd.read_sql(f"SELECT date, cpi_yoy, cpi_mom FROM cpi WHERE date < '{em_min}'", conn)
+    except Exception:
+        old = pd.DataFrame()
 
-    mom = pd.DataFrame({
-        "date": pd.to_datetime(df_mom["日期"]).dt.strftime("%Y-%m-01"),
-        "cpi_mom": pd.to_numeric(df_mom["今值"], errors="coerce"),
-    }).dropna(subset=["cpi_mom"])
-
-    result = pd.merge(yoy, mom, on="date", how="outer").sort_values("date").reset_index(drop=True)
+    result = pd.concat([old, em], ignore_index=True)
+    result = result.drop_duplicates(subset=["date"], keep="last")
+    result = result.sort_values("date").reset_index(drop=True)
     save_to_db(result, "cpi", conn)
     return result
 
 
 # ─────────────────────────────────────────────
-# 4. PPI 年率
+# 4. PPI 年率 (东方财富)
 # ─────────────────────────────────────────────
 def fetch_ppi(conn):
     log("采集: PPI 年率 ...")
-    df = ak.macro_china_ppi_yearly()
-    result = pd.DataFrame({
-        "date": pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-01"),
-        "ppi_yoy": pd.to_numeric(df["今值"], errors="coerce"),
+    em = _fetch_eastmoney("RPT_ECONOMY_PPI", {
+        "REPORT_DATE": "date",
+        "BASE_SAME": "ppi_yoy",
     })
-    result = result.dropna(subset=["ppi_yoy"]).sort_values("date").reset_index(drop=True)
+    if em.empty:
+        log("  ⚠️ 东方财富 PPI 无数据，保留旧表")
+        return pd.DataFrame()
+    em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
+    em["ppi_yoy"] = pd.to_numeric(em["ppi_yoy"], errors="coerce")
+    em = em.dropna(subset=["ppi_yoy"])
+
+    em_min = em["date"].min()
+    try:
+        old = pd.read_sql(f"SELECT date, ppi_yoy FROM ppi WHERE date < '{em_min}'", conn)
+    except Exception:
+        old = pd.DataFrame()
+
+    result = pd.concat([old, em], ignore_index=True)
+    result = result.drop_duplicates(subset=["date"], keep="last")
+    result = result.sort_values("date").reset_index(drop=True)
     save_to_db(result, "ppi", conn)
     return result
 
@@ -469,24 +524,58 @@ def fetch_new_credit(conn):
 
 
 # ─────────────────────────────────────────────
-# 13. 10 年期国债收益率（无风险利率锚，日频 → 02 重采样为月频）
+# 13. 10 年期国债收益率（中债信息网，并行年频采集 → 月频重采样）
 # ─────────────────────────────────────────────
 def fetch_bond_yield(conn):
     log("采集: 10 年期国债收益率 ...")
-    try:
-        from datetime import datetime
-        end = datetime.now().strftime("%Y%m%d")
-        df = ak.bond_china_yield(start_date="20020101", end_date=end)
-        # 仅取国债收益率曲线（接口还返回信用债/银行债等多条曲线）
-        df = df[df["曲线名称"] == "中债国债收益率曲线"]
-        result = pd.DataFrame({
-            "date": pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-%d"),
-            "y_10y": pd.to_numeric(df["10年"], errors="coerce"),
-        })
-        result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-    except Exception as e:
-        log(f"  ⚠️ 国债收益率采集失败: {e}")
-        result = pd.DataFrame()
+    from concurrent.futures import ThreadPoolExecutor
+    from io import StringIO
+
+    _CB_URL = "https://yield.chinabond.com.cn/cbweb-pbc-web/pbc/historyQuery"
+    _CB_HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+    def _fetch_year(year):
+        params = {
+            "startDate": f"{year}-01-01",
+            "endDate": f"{year}-12-31",
+            "gjqx": "0",
+            "qxId": "ycqx",
+            "locale": "cn_ZH",
+        }
+        try:
+            r = requests.get(_CB_URL, params=params, headers=_CB_HEADERS,
+                             verify=False, timeout=30)
+            text = r.text.replace("&nbsp", "")
+            dfs = pd.read_html(StringIO(text), header=0)
+            df = dfs[1]
+            gz = df[df["曲线名称"] == "中债国债收益率曲线"][["日期", "10年"]].copy()
+            gz["10年"] = pd.to_numeric(gz["10年"], errors="coerce")
+            return gz.dropna(subset=["10年"])
+        except Exception:
+            return pd.DataFrame()
+
+    from datetime import datetime
+    current_year = datetime.now().year
+    years = list(range(2006, current_year + 1))
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        frames = list(ex.map(_fetch_year, years))
+
+    all_daily = pd.concat(frames, ignore_index=True)
+    if all_daily.empty:
+        log("  ⚠️ 国债收益率采集失败: 无数据")
+        save_to_db(pd.DataFrame(), "bond_yield", conn)
+        return pd.DataFrame()
+
+    all_daily["date"] = pd.to_datetime(all_daily["日期"])
+    all_daily["y_10y"] = all_daily["10年"]
+    monthly = (
+        all_daily.set_index("date")["y_10y"]
+        .resample("ME").last().dropna()
+        .reset_index()
+    )
+    monthly["date"] = monthly["date"].dt.strftime("%Y-%m-01")
+    result = monthly[["date", "y_10y"]].sort_values("date").reset_index(drop=True)
 
     save_to_db(result, "bond_yield", conn)
     return result
@@ -496,54 +585,55 @@ def fetch_bond_yield(conn):
 # 14. 人口与城镇化（NBS 年度数据）
 # ─────────────────────────────────────────────
 def fetch_demographics(conn):
-    """NBS 年度人口指标：城镇化率 / 总人口 / 出生率 / 自然增长率。
+    """年度人口指标：城镇化率 / 总人口 / 出生率 / 自然增长率。
 
-    Same NBS pattern as fetch_household_income. Each indicator fetched
-    independently (try/except) — a blocked/bad path doesn't sink the rest.
+    数据源：World Bank API（NBS data.stats.gov.cn 被 WAF 封禁 403）。
+    指标映射：
+        SP.POP.TOTL        → population（人 → 万人）
+        SP.URB.TOTL.IN.ZS  → urbanization_rate（%）
+        SP.DYN.CBRT.IN     → birth_rate（‰）
+        SP.DYN.CDRT.IN     → death_rate（‰，用于计算 natural_growth_rate）
     """
-    log("采集: 人口与城镇化（NBS） ...")
+    log("采集: 人口与城镇化（World Bank） ...")
 
-    def _parse_year_col(col):
-        import re
-        m = re.match(r"(\d{4})年", str(col))
-        return f"{m.group(1)}-01-01" if m else None
+    _WB_INDICATORS = {
+        "SP.POP.TOTL":       "population",
+        "SP.URB.TOTL.IN.ZS": "urbanization_rate",
+        "SP.DYN.CBRT.IN":    "birth_rate",
+        "SP.DYN.CDRT.IN":    "death_rate",
+    }
 
-    def _fetch_nbs(path, keyword, col_name):
-        """Fetch one NBS indicator → DataFrame(date, col_name)."""
+    def _fetch_wb(indicator_code, col_name):
         try:
-            df = ak.macro_china_nbs_nation(kind="年度数据", path=path, period="LAST30")
-            idx = [i for i in df.index if keyword in str(i)]
-            if not idx:
-                log(f"  ⚠️ NBS 未找到 '{keyword}' 行（path={path}）")
-                return pd.DataFrame()
-            row = df.loc[idx[0]]
-            records = []
-            for col, val in row.items():
-                d = _parse_year_col(col)
-                if d:
-                    records.append({"date": d, col_name: pd.to_numeric(val, errors="coerce")})
-            out = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
+            url = f"https://api.worldbank.org/v2/country/CHN/indicator/{indicator_code}"
+            r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=15)
+            r.raise_for_status()
+            records = r.json()[1]
+            rows = []
+            for rec in records:
+                if rec["value"] is not None:
+                    rows.append({"date": f"{rec['date']}-01-01", col_name: float(rec["value"])})
+            out = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
             log(f"  ✅ {col_name}: {len(out)} 年")
             return out
         except Exception as e:
             log(f"  ⚠️ {col_name} 采集失败: {e}")
             return pd.DataFrame()
 
-    indicators = [
-        ("人口 > 常住人口城镇化率", "城镇化率", "urbanization_rate"),     # %
-        ("人口 > 年末总人口",       "总人口",   "population"),              # 万人
-        ("人口 > 人口出生率",       "出生率",   "birth_rate"),              # ‰
-        ("人口 > 人口自然增长率",   "自然增长率", "natural_growth_rate"),   # ‰
-    ]
-
-    dfs = [_fetch_nbs(path, kw, col) for path, kw, col in indicators]
+    dfs = [_fetch_wb(code, col) for code, col in _WB_INDICATORS.items()]
     merged = pd.DataFrame({"date": sorted(set().union(*[d["date"].tolist() for d in dfs if not d.empty]))}) \
         if any(not d.empty for d in dfs) else pd.DataFrame()
     for d in dfs:
         if not d.empty:
             merged = merged.merge(d, on="date", how="left")
+
+    if not merged.empty:
+        merged["population"] = merged["population"] / 10000  # 人 → 万人
+        merged["natural_growth_rate"] = merged["birth_rate"] - merged["death_rate"]
+        merged = merged.drop(columns=["death_rate"])
+
     if merged.empty:
-        log("  ⚠️ 人口数据全部不可用（NBS 可能被拦截），跳过保存")
+        log("  ⚠️ 人口数据全部不可用，跳过保存")
     save_to_db(merged, "demographics", conn)
     return merged
 

@@ -13,6 +13,9 @@
 7. **[文档] FAQ**：新增 2 条——新浪新闻 API 403 解决方案、`macro_china_supply_of_money` 不存在说明
 8. **[文档] .gitignore**：补全 `data/` 下遗漏的运行时文件（*.csv、.dashcache/、.refresh.lock）
 9. **[修复] `backend/app/api/v1/data.py` align_start**：排除全 null 列后再做 `.all()` 对齐——`bond_10y` 全 null 曾导致利率图 align 完全失效（从 1978 空白起），修复后恢复 2019-09 起点，其余图表零影响
+10. **[修复] `scripts/01_fetch_data.py` fetch_demographics**：NBS `data.stats.gov.cn` 自 2026-03 起被 WAF 封禁（403 UrlACL），改用 World Bank API 作为数据源（66 年数据 1960-2025），指标映射：population / urbanization_rate / birth_rate / natural_growth_rate
+11. **[修复] `backend/app/api/v1/data.py` _ALLOWED_TABLES**：白名单补充 `demographics`，此前缺失导致 `/table/demographics` 返回 404
+12. **[文档] `docs/data-sources-guide.md` §十一**：新增"已知数据源问题"章节，记录 NBS 平台迁移状态（旧 API 废弃 + 新 API 数据层未部署）、受影响函数、替代方案、新 API 参数备忘
 
 ### 验证
 
