@@ -19,7 +19,7 @@ export default {
         info: '#3b82f6',
         text: '#f1f5f9',
         'text-2': '#94a3b8',
-        'text-3': '#64748b',
+        'text-3': '#8294a8',
       },
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'SF Pro Display', 'Segoe UI', 'Noto Sans SC', 'PingFang SC', 'sans-serif'],

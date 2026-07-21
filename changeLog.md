@@ -367,6 +367,26 @@
 
 ---
 
+### text-3 对比度达 WCAG AA（保 3 级层级）
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/design/tokens.css` + `echarts.theme.ts` + `tailwind.config.ts`**：`--text-3` / `text3` / `'text-3'` 由 `#64748b`（slate-500，card 上 3.3:1、surface 4.0:1 不达 AA）改 `#8294a8`（card 5.07:1、surface 5.70:1、bg 6.20:1 全达 AA）。验证指出 scan 原推荐 `#94a3b8` 会与 `text-2`（同值）撞色、3 级层级塌成 2 级；`#8294a8` 亮度更低（L=0.2875 < text-2 的 0.3595）保 3 级阶梯。MetricTile 标签、轴标签、小字注全面提升低视力可读性。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；3 处 token 同改（CSS var / ECharts / Tailwind 不漂移）；无其他文字色误改；`phases.ts` neutral 与 `style.css` scrollbar 的 `#64748b` 独立语义不在本项范围（正确留外）。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/design/tokens.css` + `echarts.theme.ts` + `tailwind.config.ts`**: `--text-3` / `text3` / `'text-3'` from `#64748b` (slate-500, 3.3:1 on card / 4.0:1 on surface, failing AA) → `#8294a8` (5.07:1 card / 5.70:1 surface / 6.20:1 bg, all pass AA). Validation found the scan's proposed `#94a3b8` would collide with `text-2` (same value), flattening the 3-tier hierarchy; `#8294a8` has lower luminance (L=0.2875 < text-2's 0.3595), preserving the 3-tier step. MetricTile labels, axis labels, and small captions all improve low-vision readability.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; all 3 token sites changed together (CSS var / ECharts / Tailwind, no drift); no other text color touched; the `#64748b` in `phases.ts` neutral + `style.css` scrollbar are independent semantics, out of scope (correctly left).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

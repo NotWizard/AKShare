@@ -12,7 +12,7 @@ export const COLORS = {
   border: 'rgba(255,255,255,0.06)',
   text: '#f1f5f9',
   text2: '#94a3b8',
-  text3: '#64748b',
+  text3: '#8294a8',
   accent: '#6366f1',
   up: '#10b981',
   down: '#ef4444',
