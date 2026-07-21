@@ -533,6 +533,26 @@
 
 ---
 
+### useCountUp 从上次显示值平滑过渡（不再每次从 0 重数）
+
+### 修复
+
+1. **[修复] `frontend/src/composables/useCountUp.ts`**：`const from = 0` 改 `let from = parseFloat(display.value); if (Number.isNaN(from)) from = 0`——preset 切换 / 数据更新时 count-up 从上次显示值平滑过渡到新值，不再每次从 0 重滚（6 个 KPI 瓦 + 综合信号）。首次 `display='—'` → `parseFloat` NaN → `from = 0`，首跑行为不变。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；首跑 NaN→0 保留；animate 循环 `const val = from + (target - from) * eased` unbroken（`from` 在循环内不重赋）；唯一调用方 `MetricTile.vue` 传 `number | null | undefined` 匹配 fallback 意图。
+
+### Fix (English)
+
+1. **[fix] `frontend/src/composables/useCountUp.ts`**: `const from = 0` → `let from = parseFloat(display.value); if (Number.isNaN(from)) from = 0` — count-up animates from the previously-displayed value to the new one on preset switch / data update, no longer re-rolling from 0 each time (6 KPI tiles + composite signal). First run `display='—'` → `parseFloat` NaN → `from = 0`, first-run behavior unchanged.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; first-run NaN→0 preserved; animate loop `const val = from + (target - from) * eased` unbroken (`from` not reassigned in loop); sole caller `MetricTile.vue` passes `number | null | undefined` matching the fallback intent.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

@@ -7,7 +7,8 @@ export function useCountUp(source: Ref<number | null | undefined>, duration = 60
 
   function animate(target: number) {
     cancelAnimationFrame(raf)
-    const from = 0
+    let from = parseFloat(display.value)
+    if (Number.isNaN(from)) from = 0   // 首次 display='—' → 从 0 起；后续从上次显示值平滑过渡
     const start = performance.now()
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / duration)
