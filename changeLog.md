@@ -573,6 +573,26 @@
 
 ---
 
+### ECharts 图表 a11y（AriaComponent 注册 + aria 配置）
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/components/charts/EChart.vue` + `design/echarts.theme.ts`**：注册 `AriaComponent`（`echarts/components` 导出但原未注册，故 `option.aria` 静默失效——两处都须改）+ `applyTheme` 的 `base` 加 `aria: { enabled: true, label: { description: '时间序列图表，详见 tooltip 与图例' } }`——ECharts 自动在 ~21 张图表根 DOM 生成 `role="img"` + `aria-label`（WCAG 1.1.1 / 4.1.2，零逐调用方改动）。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；vendor-echarts +1.18KB gzip（AriaComponent 预期）；`aria` 注册于 import + `use([...])` 两处；`base.aria` 经 `{...base, ...option}` 传播到全部图表（无 chart 覆盖 `aria`）。非阻塞观察：scatter/radar 的 label 文本略偏（仍满足 WCAG）、`aria` 未 deep-merge（latent，无 chart 覆盖故不触发）。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/components/charts/EChart.vue` + `design/echarts.theme.ts`**: registered `AriaComponent` (exported from `echarts/components` but previously NOT registered, so `option.aria` silently failed — both edits required) + added `aria: { enabled: true, label: { description: '...' } }` to `applyTheme`'s `base` — ECharts auto-generates `role="img"` + `aria-label` on all ~21 charts' root DOM (WCAG 1.1.1 / 4.1.2, zero per-caller changes).
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; vendor-echarts +1.18KB gzip (AriaComponent expected); `aria` registered in both import + `use([...])`; `base.aria` propagates to all charts via `{...base, ...option}` (no chart overrides `aria`). Non-blocking notes: scatter/radar label text slightly off (still WCAG-compliant), `aria` not deep-merged (latent, no chart overrides so not triggered).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

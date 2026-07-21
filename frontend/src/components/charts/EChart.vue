@@ -3,7 +3,7 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, BarChart, ScatterChart } from 'echarts/charts'
 import {
-  GridComponent, TooltipComponent, LegendComponent,
+  AriaComponent, GridComponent, TooltipComponent, LegendComponent,
   MarkAreaComponent, MarkLineComponent, DataZoomComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
@@ -15,7 +15,7 @@ import VChart from 'vue-echarts'
 // deleted when the M2 gap-marker was dropped (charts start at 1996-12 now).
 use([
   CanvasRenderer, LineChart, BarChart, ScatterChart,
-  GridComponent, TooltipComponent, LegendComponent,
+  AriaComponent, GridComponent, TooltipComponent, LegendComponent,
   MarkAreaComponent, MarkLineComponent, DataZoomComponent,
 ])
 

@@ -125,6 +125,10 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
       itemWidth: 12,
       itemHeight: 12,
     },
+    aria: {
+      enabled: true,
+      label: { description: '时间序列图表，详见 tooltip 与图例' },
+    },
   }
   const merged: Record<string, any> = { ...base, ...option }
   merged.tooltip = { ...base.tooltip, ...(option.tooltip || {}) }
