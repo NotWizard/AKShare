@@ -447,6 +447,28 @@
 
 ---
 
+### commentary 生成/轮询开销削减（BE-PERF-02 + BE-PERF-03）
+
+### 性能
+
+1. **[性能] `backend/app/core/commentary.py`** `get_current`：模块级 `_table_ready` 标志，首次 `_ensure_table` 成功后置 True，`get_current` 按标志跳过——消除每 2s 轮询的 `CREATE TABLE IF NOT EXISTS` + `commit`（写路径 `_persist` / `mark_stale_and_regenerate` / `ensure_on_startup` 仍调用，保 create-on-first-access 契约）。
+2. **[性能] `backend/app/core/commentary.py`** `_latest_data_date`：改复用 `_load_full("derived_monthly")` lru_cache DataFrame（lifespan 预热、refresh 前 `clear_all_caches` 清）取 `df["date"].max()`，免每 generate 开新 sqlite 连接；`pd.notna` 守卫空/NaT 返回 None（不返 'Na'）。
+
+### 验证
+
+- golden test 6/6（commentary 经 app 启动链）；smoke：`_table_ready` False→True 首次 `get_current` 后置位、2nd 跳过 `_ensure_table`；`_latest_data_date` 返 '2026-05'；缓存失效顺序正确（refresh `clear_all_caches` 在 `mark_stale_and_regenerate` 前）。
+
+### Performance (English)
+
+1. **[perf] `backend/app/core/commentary.py`** `get_current`: module-level `_table_ready` flag set after first `_ensure_table` success; `get_current` skips when set — eliminates per-2s-poll `CREATE TABLE IF NOT EXISTS` + `commit` (write paths `_persist` / `mark_stale_and_regenerate` / `ensure_on_startup` still call it, preserving create-on-first-access).
+2. **[perf] `backend/app/core/commentary.py`** `_latest_data_date`: reuses `_load_full("derived_monthly")` lru_cache DataFrame (lifespan preload, cleared via `clear_all_caches` before refresh) for `df["date"].max()`, avoiding a fresh sqlite connection per generate; `pd.notna` guard returns None (not 'Na') on empty/NaT.
+
+### Verification (English)
+
+- golden test 6/6 (commentary via app startup chain); smoke: `_table_ready` False→True after first `get_current`, 2nd skips `_ensure_table`; `_latest_data_date` returns '2026-05'; cache invalidation order correct (refresh `clear_all_caches` before `mark_stale_and_regenerate`).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

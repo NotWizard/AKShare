@@ -39,6 +39,9 @@ MODEL = os.getenv("COMMENTARY_MODEL", "")
 _gen_lock = threading.Lock()
 # Marks an in-flight generation so GET can return status="generating".
 _busy = threading.Event()
+# Set True after _ensure_table first succeeds; get_current skips the per-poll
+# CREATE TABLE IF NOT EXISTS + commit (table provably exists for process lifetime).
+_table_ready = False
 
 
 def _ts() -> str:
@@ -52,6 +55,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
+    global _table_ready
     conn.execute(
         f"""CREATE TABLE IF NOT EXISTS {COMMENTARY_TABLE} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,18 +69,25 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
         )"""
     )
     conn.commit()
+    _table_ready = True
 
 
 def _latest_data_date() -> str | None:
-    """Return the newest date in derived_monthly — the 'data as of' stamp."""
+    """Return the newest date in derived_monthly — the 'data as of' stamp.
+
+    Reuses the lru_cached _load_full DataFrame (warm after lifespan preload;
+    cleared on refresh before mark_stale_and_regenerate) instead of opening a
+    fresh sqlite connection per generate. Guards empty/missing-date so it
+    returns None (not 'Na') on a fresh/empty DB.
+    """
     try:
-        conn = _connect()
-        row = conn.execute(
-            "SELECT MAX(date) AS d FROM derived_monthly"
-        ).fetchone()
-        conn.close()
-        d = row["d"] if row else None
-        return str(d)[:7] if d else None  # YYYY-MM
+        import pandas as pd
+        from backend.app.core.db import _load_full
+        df = _load_full("derived_monthly")
+        if df.empty or "date" not in df.columns:
+            return None
+        d = df["date"].max()
+        return str(d)[:7] if pd.notna(d) else None  # YYYY-MM
     except Exception:
         return None
 
@@ -225,7 +236,8 @@ def get_current() -> dict:
         return {"status": "generating", "msg": "评论生成中…", "text": ""}
     try:
         conn = _connect()
-        _ensure_table(conn)
+        if not _table_ready:
+            _ensure_table(conn)
         row = _latest_row(conn)
         conn.close()
         return _row_to_dict(row)
