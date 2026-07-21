@@ -66,6 +66,32 @@
 
 ---
 
+### 债务周期杠杆率数据补全（NIFD 季度报告）
+
+### 数据补全
+
+1. **[数据] `scripts/03_supplement_leverage.py`**：新增杠杆率数据补充脚本——`ak.macro_cnbs()` (AKShare/CNBS) 仅更新至 2024-Q4，从 NIFD（国家金融与发展实验室）季度报告 PDF 中提取 2025Q1–2026Q1 共 5 个季度的居民/非金融企业/政府（中央+地方）分项杠杆率数据，写入 `leverage` 表
+2. **[数据] NIFD 报告交叉验证**：5 份季度报告 PDF（2025Q1/Q2/Q3/Q4 + 2026Q1）下载并解析，各季度数值通过报告间交叉验证（季度变化之和 = 全年涨幅），微小差异（≤0.1pp）来自 NIFD 四舍五入
+
+### 验证
+
+- DB: `leverage` 表从 80 行 → 85 行，最后日期从 2024-12-01 → 2026-03-01
+- API: `GET /api/v1/table/leverage` 返回 85 条记录，含 2025Q1–2026Q1 全部分项数据
+- 前端 Vite proxy 验证：`curl localhost:5173/api/v1/table/leverage` 返回 14.7KB JSON，含 2026-03-01 记录
+
+### Data Supplement (English)
+
+1. **[data] `scripts/03_supplement_leverage.py`**: new leverage data supplement script — `ak.macro_cnbs()` (AKShare/CNBS) only updated through 2024-Q4; extracted 2025Q1–2026Q1 (5 quarters) of household/non-financial-corp/government (central+local) leverage ratios from NIFD quarterly report PDFs, inserted into `leverage` table
+2. **[data] NIFD report cross-verification**: 5 quarterly report PDFs (2025Q1/Q2/Q3/Q4 + 2026Q1) downloaded and parsed; all values cross-verified across reports (quarterly changes sum to annual totals), minor differences (≤0.1pp) from NIFD rounding
+
+### Verification (English)
+
+- DB: `leverage` table 80 → 85 rows, latest date 2024-12-01 → 2026-03-01
+- API: `GET /api/v1/table/leverage` returns 85 records with all sector breakdowns through 2026-Q1
+- Frontend proxy verified: `curl localhost:5173/api/v1/table/leverage` returns 14.7KB JSON including 2026-03-01 record
+
+---
+
 ### 变更
 
 1. **[修复] `docs/data-sources-guide.md` §五 货币供应量**：`macro_china_supply_of_money()` 在 AKShare 中不存在，替换为正确的 `macro_china_m2_yearly()`，补充 `macro_china_money_supply()` 备选方案
