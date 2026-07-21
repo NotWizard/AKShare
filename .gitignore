@@ -36,3 +36,6 @@ venv/
 # Frontend build artifacts
 frontend/node_modules/
 frontend/dist/
+
+# Worktrees
+.worktrees/
