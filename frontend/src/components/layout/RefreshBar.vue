@@ -36,11 +36,16 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
     >
       {{ refresh.running ? '🔄 采集中…' : '🔄 刷新数据' }}
     </button>
+    <button
+      v-if="refresh.running"
+      class="px-3 py-1 text-xs font-semibold rounded-lg border border-border-hi text-text-2 hover:border-accent transition-all"
+      @click="refresh.cancel()"
+    >取消</button>
 
-    <div v-if="refresh.running" class="flex-1 max-w-[200px] h-1 bg-[rgba(255,255,255,0.06)] rounded overflow-hidden">
+    <div v-if="refresh.running" class="flex-1 max-w-[200px] h-1 bg-[rgba(255,255,255,0.06)] rounded overflow-hidden" role="progressbar" :aria-valuenow="Math.round(refresh.progress*100)" aria-valuemin="0" aria-valuemax="100">
       <div class="h-full bg-accent transition-all duration-200" :style="{ width: (refresh.progress * 100).toFixed(0) + '%' }" />
     </div>
-    <div v-else-if="refresh.lastResult" class="text-[11px] text-text-3 truncate">
+    <div v-else-if="refresh.lastResult" role="status" aria-live="polite" class="text-[11px] text-text-3 truncate">
       {{ refresh.lastResult.msg }}{{ refresh.lastResult.ts ? ' · ' + refresh.lastResult.ts : '' }}
     </div>
   </div>

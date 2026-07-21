@@ -243,6 +243,30 @@
 
 ---
 
+### RefreshBar 刷新取消按钮 + 进度条 a11y
+
+### 修复
+
+1. **[修复] `frontend/src/components/layout/RefreshBar.vue`**：刷新进行中暴露「取消」按钮（`v-if="refresh.running"`，`@click="refresh.cancel()"`）——store 早有 `cancel()`（SSE AbortController 中止，commit c0fa543）但 UI 从未暴露，用户此前只能关 tab 取消。
+2. **[无障碍] `frontend/src/components/layout/RefreshBar.vue`**：进度条加 `role="progressbar"` + `aria-valuenow/min/max`（progress 0..1→0..100）；结果消息加 `role="status" aria-live="polite"`——SR 可播报刷新进度与完成/取消/失败。
+
+### 验证
+
+1. `vue-tsc --noEmit` 0 error；`vite build` 2.25s 成功。
+2. 独立审查 Agent 确认：cancel→AbortError→catch→finally 链产生干净终态（running=false、abortController=null、lastResult='刷新已取消'），取消按钮 v-if 同 tick 卸载；不运行时 `null?.abort()` 幂等无抛；移动端进度条 flex-1 吸收 ~50px 可接受，无需断点隐藏。
+
+### Fix (English)
+
+1. **[fix] `frontend/src/components/layout/RefreshBar.vue`**: expose a "取消" (cancel) button while refreshing (`v-if="refresh.running"`, `@click="refresh.cancel()"`) — the store already had `cancel()` (SSE AbortController abort, commit c0fa543) but the UI never exposed it; users could previously only cancel by closing the tab.
+2. **[a11y] `frontend/src/components/layout/RefreshBar.vue`**: progress bar gets `role="progressbar"` + `aria-valuenow/min/max` (progress 0..1→0..100); result message gets `role="status" aria-live="polite"` — SR can announce refresh progress and completion/cancel/failure.
+
+### Verification (English)
+
+1. `vue-tsc --noEmit` 0 errors; `vite build` 2.25s success.
+2. Independent review agent confirmed: cancel→AbortError→catch→finally chain yields a clean end state (running=false, abortController=null, lastResult='刷新已取消'), 取消 button v-if unmounts same tick; `null?.abort()` is idempotent no-throw when not running; mobile progress bar (flex-1) absorbs ~50px delta acceptably, no breakpoint hiding needed.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
