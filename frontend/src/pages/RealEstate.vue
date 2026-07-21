@@ -2,6 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
@@ -15,6 +16,7 @@ import { RadarComponent } from 'echarts/components'
 echartsUse([RadarChart, RadarComponent])
 
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 const loading = ref(true)
 const hp = ref<Record<string, string | number | null>[]>([])
 const rate = ref<Record<string, string | number | null>[]>([])   // lpr_5y, real_rate → 房贷锚
@@ -36,7 +38,7 @@ async function load() {
     hp.value = h.records; assessment.value = a; rate.value = r.records
   } finally { if (mine === reqId) loading.value = false }
 }
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 
 // pivot house_price rows → series per city (new_yoy)
 function priceOption(): Record<string, any> {

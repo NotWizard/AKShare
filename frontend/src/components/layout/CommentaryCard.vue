@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useRefreshStore } from '@/stores/refresh'
 import { api } from '@/api/client'
 import type { Commentary } from '@/api/types'
 
 const data = ref<Commentary>({ ts: null, data_as_of: null, composite_score: null, text: '', model: null, stale: false, status: 'empty', msg: null })
 const loading = ref(false)
+const refresh = useRefreshStore()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 async function fetch() {
@@ -41,11 +43,14 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
-onMounted(async () => {
+async function pull() {
   await fetch()
   if (data.value.status === 'generating') startPolling()
-})
+}
+onMounted(pull)
 onUnmounted(stopPolling)
+// 数据刷新后 backend 已重生成评论；重取（若仍 generating 则继续轮询）
+watch(() => refresh.lastRefreshedAt, pull)
 </script>
 
 <template>

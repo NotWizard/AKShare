@@ -2,6 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import { buildDualAxisLine, buildScatterQuadrant, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -9,6 +10,7 @@ import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 type Rec = Record<string, string | number | null>
 // Per-chart groups so 财新 PMI (2012) doesn't truncate 官方 PMI + IP (2008).
 const ipDm = ref<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
@@ -29,7 +31,7 @@ async function load() {
     ipDm.value = ip.records; pmiDm.value = cx.records; cycle.value = c
   } finally { if (mine === reqId) loading.value = false }
 }
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 </script>
 
 <template>

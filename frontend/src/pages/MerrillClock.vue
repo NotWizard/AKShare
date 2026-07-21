@@ -2,6 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import { buildScatterQuadrant, buildDualAxisLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -9,6 +10,7 @@ import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 const loading = ref(true)
 const merrill = ref<CycleFrame | null>(null)
 // 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
@@ -30,7 +32,7 @@ async function load() {
   }
   finally { if (mine === reqId) loading.value = false }
 }
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 </script>
 
 <template>

@@ -2,12 +2,14 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import { buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 const loading = ref(true)
 const dm = ref<Rec[]>([])
 let reqId = 0
@@ -21,7 +23,7 @@ async function load() {
     dm.value = d.records
   } finally { if (mine === reqId) loading.value = false }
 }
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 
 function latest(col: string): number | null {
   for (const r of dm.value) {

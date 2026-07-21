@@ -7,6 +7,7 @@ export const useRefreshStore = defineStore('refresh', () => {
   const running = ref(false)
   const progress = ref(0)          // 0..1
   const lastResult = ref<{ msg: string; ts: string | null } | null>(null)
+  const lastRefreshedAt = ref(0)   // bumped on SSE done; pages refetch by depending on it
   let abortController: AbortController | null = null
 
   async function loadStatus() {
@@ -55,6 +56,7 @@ export const useRefreshStore = defineStore('refresh', () => {
                 msg: payload.result?.msg ?? '刷新完成',
                 ts: payload.result?.ts ?? null,
               }
+              lastRefreshedAt.value = Date.now()
             }
           } catch { /* skip unparseable SSE event */ }
         }
@@ -75,5 +77,5 @@ export const useRefreshStore = defineStore('refresh', () => {
     abortController?.abort()
   }
 
-  return { running, progress, lastResult, loadStatus, stream, cancel }
+  return { running, progress, lastResult, lastRefreshedAt, loadStatus, stream, cancel }
 })

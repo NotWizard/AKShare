@@ -2,6 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import { buildCreditM2Chart, buildCreditImpulseChart, buildBarLineCombo, buildDualAxisLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -9,6 +10,7 @@ import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 
 // Per-chart column groups, each with its own align_start so a late-starting
 // column (社融存量 2016) doesn't truncate an early one (M2 1991).
@@ -39,7 +41,7 @@ async function load() {
   } finally { if (mine === reqId) loading.value = false }
 }
 
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 </script>
 
 <template>

@@ -2,12 +2,14 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
+import { useRefreshStore } from '@/stores/refresh'
 import MetricTile from '@/components/layout/MetricTile.vue'
 import CommentaryCard from '@/components/layout/CommentaryCard.vue'
 import type { SignalSummary } from '@/api/types'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
+const refresh = useRefreshStore()
 const loading = ref(true)
 
 const kpiDm = ref<Rec[]>([])        // latest-first for KPI latest(); no align
@@ -37,7 +39,7 @@ async function load() {
     signals.value = s
   } finally { if (mine === reqId) loading.value = false }
 }
-watchEffect(() => { void filters.start; void filters.end; load() })
+watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 void A
 
 const tiles = [

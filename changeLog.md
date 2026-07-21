@@ -185,6 +185,32 @@
 
 ---
 
+### 刷新按钮端到端失效修复（刷新后图表/KPI/评论自动重取）
+
+### 修复
+
+1. **[修复] `frontend/src/stores/refresh.ts`**：SSE `payload.done` 仅更新 `lastResult`，无任何信号通知页面数据已变——刷新进度条跑完、显示「刷新完成」，但 7 页图表/KPI/综合信号全停留旧数据，须换 preset 或切路由才重取。新增 `lastRefreshedAt` ref，`payload.done` 时 `= Date.now()` 并暴露。
+2. **[修复] `frontend/src/pages/*.vue`（7 页：Overview/MerrillClock/CreditCycle/DebtCycle/InventoryCycle/RealEstate/Demographics）**：各 import `useRefreshStore` + watchEffect 追加 `void refresh.lastRefreshedAt`，复用既有 `reqId` race-guard 丢弃刷新途中陈旧的 preset-load 结果。
+3. **[修复] `frontend/src/components/layout/CommentaryCard.vue`**：抽 `pull()`（fetch + 若 status==='generating' 则 startPolling），`onMounted(pull)` + `watch(refresh.lastRefreshedAt, pull)`——刷新后 backend 已 `mark_stale_and_regenerate`，前端自动重取评论并按需轮询。
+
+### 验证
+
+1. `vue-tsc --noEmit` 0 error；`vite build` 成功（624 模块）。
+2. 独立审查 Agent 确认：响应式正确（`void refresh.lastRefreshedAt` 在 watchEffect 内建立 dep）、reqId 并发安全（stale 结果丢弃）、CommentaryCard 无双轮询（`startPolling` 先 `stopPolling`）、无首屏双 fetch（非 immediate watch 不在 mount 触发）、backend 顺序安全（SSE `done` 在 `run_refresh` 返回后发出=子进程原子 `os.replace` 交换 + `clear_all_caches` 之后，重取读到已提交新数据）。
+
+### Fix (English)
+
+1. **[fix] `frontend/src/stores/refresh.ts`**: SSE `payload.done` only updated `lastResult` with no signal that data changed — the progress bar filled and "刷新完成" showed, but all 7 pages' charts/KPIs/composite-signal stayed stale until preset change or route switch. Added `lastRefreshedAt` ref, set `= Date.now()` on `payload.done`, exposed.
+2. **[fix] `frontend/src/pages/*.vue` (7 pages: Overview/MerrillClock/CreditCycle/DebtCycle/InventoryCycle/RealEstate/Demographics)**: each imports `useRefreshStore` + adds `void refresh.lastRefreshedAt` to the existing `watchEffect`; reuses the existing `reqId` race-guard to discard stale preset-load results during refresh.
+3. **[fix] `frontend/src/components/layout/CommentaryCard.vue`**: extracted `pull()` (fetch + startPolling if status==='generating'), `onMounted(pull)` + `watch(refresh.lastRefreshedAt, pull)` — backend regenerates commentary on refresh (`mark_stale_and_regenerate`), frontend now auto re-fetches and polls as needed.
+
+### Verification (English)
+
+1. `vue-tsc --noEmit` 0 errors; `vite build` success (624 modules).
+2. Independent review agent confirmed: reactivity correct (`void refresh.lastRefreshedAt` registers the watchEffect dep), reqId race-safe (stale results discarded), CommentaryCard no double-poll (`startPolling` calls `stopPolling` first), no initial-mount double-fetch (non-immediate watch doesn't fire on mount), backend ordering safe (SSE `done` emitted after `run_refresh` returns = subprocess atomic `os.replace` swap + `clear_all_caches`, so refetch reads committed fresh data).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
