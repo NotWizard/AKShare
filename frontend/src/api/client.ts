@@ -1,7 +1,7 @@
 // API client — typed wrappers over the FastAPI endpoints. Types mirror the
 // Pydantic schemas (single source of truth via shared/openapi.json codegen; P0
 // ships hand-written types, `npm run gen:api` regenerates from OpenAPI).
-import type { DerivedFrame, CycleFrame, SignalSummary, RefreshResult, RealEstateResponse } from './types'
+import type { DerivedFrame, CycleFrame, SignalSummary, RefreshResult, RealEstateResponse, Commentary } from './types'
 
 const BASE = '/api/v1'
 
@@ -72,4 +72,6 @@ export const api = {
   },
   getRefreshStatus: () => getJSON<RefreshResult>('/refresh/status'),
   triggerRefresh: () => postJSON<RefreshResult>('/refresh'),
+  getCommentary: () => getJSON<Commentary>('/commentary'),
+  regenerateCommentary: () => postJSON<Commentary>('/commentary/regenerate'),
 }

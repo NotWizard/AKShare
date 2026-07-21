@@ -2,7 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildStackedArea } from '@/components/charts/options'
+import { buildStackedArea, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
@@ -14,18 +14,20 @@ const loading = ref(true)
 // leverage columns are null because gdp is annual (YYYY-01-01) and leverage is
 // quarterly (YYYY-03/06/09/12) — an exact-date merge hits 0 rows.
 const dq = ref<Record<string, string | number | null>[]>([])
+const rateDm = ref<Record<string, string | number | null>[]>([])  // lpr_1y,lpr_5y,real_rate,bond_10y
 const cycle = ref<CycleFrame | null>(null)
 let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
   try {
-    const [q, c] = await Promise.all([
+    const [q, rt, c] = await Promise.all([
       api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true),
       api.getCycle('debt', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    dq.value = q.records; cycle.value = c
+    dq.value = q.records; rateDm.value = rt.records; cycle.value = c
   } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
@@ -45,6 +47,9 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     </GraphCard>
     <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading">
       <EChart :option="buildStackedArea(dq, ['gov_central', 'gov_local'])" height="320px" />
+    </GraphCard>
+    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。债务周期标准框架里 社融↔债券利率↔期限利差 为判定链路。" :loading="loading">
+      <EChart :option="buildMultiLine(rateDm, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10Y国债' }], '%')" height="300px" />
     </GraphCard>
   </div>
 </template>

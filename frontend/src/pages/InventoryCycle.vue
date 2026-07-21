@@ -12,7 +12,7 @@ const filters = useFiltersStore()
 type Rec = Record<string, string | number | null>
 // Per-chart groups so 财新 PMI (2012) doesn't truncate 官方 PMI + IP (2008).
 const ipDm = ref<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
-const caixinDm = ref<Rec[]>([])  // date,pmi_official,pmi_caixin → 2012-01
+const pmiDm = ref<Rec[]>([])     // date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
 const cycle = ref<CycleFrame | null>(null)
 const loading = ref(true)
 let reqId = 0
@@ -22,11 +22,11 @@ async function load() {
   try {
     const [ip, cx, c] = await Promise.all([
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin', true),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true),
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    ipDm.value = ip.records; caixinDm.value = cx.records; cycle.value = c
+    ipDm.value = ip.records; pmiDm.value = cx.records; cycle.value = c
   } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; load() })
@@ -47,8 +47,8 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading">
       <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
     </GraphCard>
-    <GraphCard title="PMI 官方 vs 财新" tip="财新制造业 PMI 常被视为领先指标；50 为荣枯线。" :loading="loading">
-      <EChart :option="buildMultiLine(caixinDm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }], '', 50)" height="300px" />
+    <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading">
+      <EChart :option="buildMultiLine(pmiDm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)" height="300px" />
     </GraphCard>
   </div>
 </template>

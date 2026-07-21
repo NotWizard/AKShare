@@ -20,6 +20,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.app.api.v1 import router as v1_router
 from backend.app.core.db import _load_full
+from backend.app.core import commentary
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
             _load_full(table)
         except Exception:
             pass  # table may not exist yet (fresh install) — skip silently
+    commentary.ensure_on_startup()
     yield
 
 
