@@ -565,15 +565,52 @@ import akshare as ak
 df = ak.macro_china_new_house_price(city_first="北京", city_second="上海")
 ```
 
-### 宏观杠杆率（CNBS）
+### 宏观杠杆率（CNBS / NIFD）
+
+#### 主数据源：CNBS（经 AKShare）
 
 ```python
 import akshare as ak
 
 df = ak.macro_cnbs()
 
-# 字段：年份, 居民部门, 非金融企业部门, 政府部门, 实体经济部门
+# 字段：年份, 居民部门, 非金融企业部门, 政府部门,
+#       中央政府, 地方政府, 实体经济部门, 金融部门资产方, 金融部门负债方
+# 频率：季度（1992-Q4 起），约 80 行
 ```
+
+**数据滞后**：截至 2026-07，`ak.macro_cnbs()` 仅返回至 2024-Q4 的数据。CNBS
+（中国国家资产负债表研究中心）通过 AKShare 发布的数据存在 1-2 年滞后，尚无
+自动更新时间表。
+
+#### 备选数据源：NIFD 季度报告
+
+NIFD（国家金融与发展实验室）按季度发布宏观杠杆率报告，包含与 CNBS 相同口径的
+分部门数据（居民/非金融企业/政府部门，含中央与地方政府拆分），滞后约 1 个季度。
+
+- NIFD 官网：http://www.nifd.cn （系列报告 → 宏观杠杆率）
+- 报告以 PDF 附件形式发布，无结构化 API，需手动下载并提取数据
+- 每份报告包含：本季度各部门杠杆率绝对值、环比变化、同比增速
+
+**已提取的报告数据**（见 `scripts/03_supplement_leverage.py`）：
+
+| 季度 | 报告发布日期 | NIFD 报告页 |
+|---|---|---|
+| 2025Q1 | 2025-04-29 | http://www.nifd.cn/SeriesReport/Details/4712 |
+| 2025Q2 | 2025-07-30 | http://www.nifd.cn/SeriesReport/Details/4728 |
+| 2025Q3 | 2025-10-24 | http://www.nifd.cn/SeriesReport/Details/4800 |
+| 2025Q4 | 2026-01-26 | http://www.nifd.cn/SeriesReport/Details/4851 |
+| 2026Q1 | 2026-04-21 | http://www.nifd.cn/SeriesReport/Details/4896 |
+
+#### 补充与刷新保护
+
+1. **补充脚本** `scripts/03_supplement_leverage.py`：将 NIFD 报告中提取的数据写入
+   `leverage` 表，支持重复运行（已有日期自动跳过）
+2. **刷新保护** `scripts/01_fetch_data.py` `fetch_leverage`：数据刷新时，`ak.macro_cnbs()`
+   仅返回至 2024-Q4，`save_to_db` 以 `if_exists="replace"` 覆盖整表会清除补充数据。
+   修复方案：在 `save_to_db` 前从 staging 表读取日期晚于 CNBS 最新日期的行，合并入
+   DataFrame，使刷新后仍保留 NIFD 补充数据。当 AKShare 更新 `macro_cnbs()` 至 2025+
+   后，补充数据自然被更新数据取代，无需手动干预
 
 ---
 

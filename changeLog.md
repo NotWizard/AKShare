@@ -88,6 +88,18 @@
 
 ---
 
+### 数据源文档更新
+
+### 文档
+
+1. **[文档] `docs/data-sources-guide.md` §五 宏观杠杆率**：从 5 行扩展为完整章节——新增 CNBS 数据滞后说明、NIFD 季度报告备选数据源（含 5 份报告 URL）、补充脚本与刷新保护机制说明
+
+### Documentation (English)
+
+1. **[docs] `docs/data-sources-guide.md` §五 macro leverage**: expanded from 5 lines to a full section — added CNBS data lag note, NIFD quarterly report alternative source (with 5 report URLs), supplement script and refresh-protection mechanism documentation
+
+---
+
 ### 债务周期杠杆率数据补全（NIFD 季度报告）
 
 ### 数据补全
