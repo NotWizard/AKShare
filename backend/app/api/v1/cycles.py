@@ -13,10 +13,10 @@ from backend.app.schemas.cycles import CycleFrame
 router = APIRouter(prefix="/cycles", tags=["cycles"])
 
 _VALUE_COL = {
-    "merrill": ("gdp_yoy", None),
-    "credit": ("m2_yoy", "credit_impulse"),
-    "inventory": ("pmi_official", None),
-    "debt": ("household", None),
+    "merrill": "gdp_yoy",
+    "credit": "m2_yoy",
+    "inventory": "pmi_official",
+    "debt": "household",
 }
 
 
@@ -48,7 +48,7 @@ def get_cycle(
             mask &= full["date"] <= pd.Timestamp(end)
         df = full[mask]
 
-    value_col = _VALUE_COL[name][0]
+    value_col = _VALUE_COL[name]
     phase_col = "overall_phase" if name == "debt" else "phase"
     latest_phase = None
     latest_value = None

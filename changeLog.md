@@ -287,6 +287,26 @@
 
 ---
 
+### 扁平化 _VALUE_COL 死元组
+
+### 清理
+
+1. **[清理] `backend/app/api/v1/cycles.py`**：`_VALUE_COL` 第二元组元素（如 `"credit_impulse"`）从未被读取（仅 `[0]` 访问，全仓无 `[1]`）。扁平化为字符串 dict + `_VALUE_COL[name][0]`→`_VALUE_COL[name]`，移除误导性死数据。
+
+### 验证
+
+- golden test 6/6（覆盖 `/cycles` 端点）；`credit_impulse` 全仓零引用（该列本身在 cycle_credit/signals 由 dataframe 读，与此 dict 无关）；`_VALUE_COL` 模块私有（前导下划线，无外部 import）。
+
+### Cleanup (English)
+
+1. **[cleanup] `backend/app/api/v1/cycles.py`**: `_VALUE_COL`'s second tuple element (e.g. `"credit_impulse"`) was never read (only `[0]` accessed, no `[1]` repo-wide). Flattened to a string dict + `_VALUE_COL[name][0]`→`_VALUE_COL[name]`, removing misleading dead data.
+
+### Verification (English)
+
+- golden test 6/6 (covers `/cycles` endpoints); `credit_impulse` zero refs repo-wide (the column itself is read from dataframes in cycle_credit/signals, unrelated to this dict); `_VALUE_COL` is module-private (leading underscore, no external import).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
