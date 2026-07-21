@@ -327,6 +327,26 @@
 
 ---
 
+### 修复 frontend/package-lock.json：resolved URL 由阿里内网源改 registry.npmjs.org
+
+### 修复
+
+1. **[修复] `frontend/package-lock.json`**：211 个 `resolved` URL 由 `registry.anpm.alibaba-inc.com`（阿里内网源，lockfile 在内网机器生成）改 `registry.npmjs.org`（对齐全局 `npm config get registry`）——离内网环境 `npm install` ECONNRESET（`rollup-4.62.0.tgz` TLS 失败）根治。
+
+### 验证
+
+- `npm install --no-audit --no-fund` 成功（991ms，exit 0，无 ECONNRESET）；lockfile JSON 有效；`resolved` 字段总数不变（纯 URL 域名重写，零版本/条目变更）；反向 sed 还原与备份逐字节一致确认仅改域名。
+
+### Fix (English)
+
+1. **[fix] `frontend/package-lock.json`**: 211 `resolved` URLs from `registry.anpm.alibaba-inc.com` (Alibaba intranet registry; lockfile generated on an intranet machine) → `registry.npmjs.org` (aligns with global `npm config get registry`) — root-causes `npm install` ECONNRESET off-intranet (`rollup-4.62.0.tgz` TLS failure).
+
+### Verification (English)
+
+- `npm install --no-audit --no-fund` success (991ms, exit 0, no ECONNRESET); lockfile JSON valid; `resolved` field count unchanged (pure URL-domain rewrite, zero version/entry changes); reverse-sed vs backup byte-identical confirms only the domain changed.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
