@@ -2,7 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildScatterQuadrant } from '@/components/charts/options'
+import { buildScatterQuadrant, buildDualAxisLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
@@ -11,14 +11,22 @@ import type { CycleFrame } from '@/api/types'
 const filters = useFiltersStore()
 const loading = ref(true)
 const merrill = ref<CycleFrame | null>(null)
+// 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
+type Rec = Record<string, string | number | null>
+const cpiPpi = ref<Rec[]>([])   // cpi_yoy,ppi_yoy
+const cpiMom = ref<Rec[]>([])   // cpi_yoy,cpi_mom
 let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
   try {
-    const r = await api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined)
+    const [r, cp, cm] = await Promise.all([
+      api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,ppi_yoy', true),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,cpi_mom', true),
+    ])
     if (mine !== reqId) return
-    merrill.value = r
+    merrill.value = r; cpiPpi.value = cp.records; cpiMom.value = cm.records
   }
   finally { if (mine === reqId) loading.value = false }
 }
@@ -36,6 +44,12 @@ watchEffect(() => { void filters.start; void filters.end; load() })
     </div>
     <GraphCard title="美林投资时钟" tip="横轴 GDP 同比、纵轴 CPI 同比；点的颜色为投资时钟阶段。" :loading="loading">
       <EChart :option="buildScatterQuadrant(merrill?.series ?? [], 'gdp_yoy', 'cpi_yoy', 'GDP同比(%)', 'CPI同比(%)', 2, 0)" height="420px" />
+    </GraphCard>
+    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading">
+      <EChart :option="buildDualAxisLine(cpiPpi, 'cpi_yoy', 'ppi_yoy')" height="300px" />
+    </GraphCard>
+    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀主轴）vs 环比（月度高频先行，0 上下波动）。" :loading="loading">
+      <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
     </GraphCard>
   </div>
 </template>

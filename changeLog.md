@@ -2,6 +2,70 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### 首页重构与 AI 评论功能
+
+### 重构
+
+1. **[重构] `frontend/src/pages/Overview.vue`**：移除 6 张 GraphCard 及其图表 imports/refs/fetch（m2st/cpiPpi/m1m2/spread/cpiMom/rate/pmi），首页仅保留 KPI 指标卡 + 综合信号 + 信号解读 + CommentaryCard——消除架构冗余，首页聚焦指标与研判
+2. **[重构] `frontend/src/pages/MerrillClock.vue`**：新增「CPI vs PPI」与「CPI 同比 vs 环比」两张图——通胀维度归美林时钟
+3. **[重构] `frontend/src/pages/CreditCycle.vue`**：扩展 M2 图上下文，新增「M1 vs M2 双线」与「M2−M1 剪刀差」两张图——货币松紧核心归信贷周期
+4. **[重构] `frontend/src/pages/InventoryCycle.vue`**：将原「PMI 官方 vs 财新」替换为四线版（官方/财新/非制造业/服务业）——多维 PMI 归库存周期
+5. **[重构] `frontend/src/pages/DebtCycle.vue`**：新增「利率环境」图（LPR/实际利率/10Y 国债）——社融↔债券利率↔期限利差归债务周期
+
+### 新功能
+
+1. **[新功能] `backend/app/schemas/commentary.py`**：Commentary Pydantic 模型（ts/data_as_of/composite_score/text/model/stale/status/msg）
+2. **[新功能] `backend/app/core/commentary.py`**：AI 评论核心——`build_snapshot()` 取 `compute_signals()` 快照；`call_model()` 经 httpx POST 调 OpenAI-compatible `/chat/completions`；`generate()` 带 threading 锁 + `_busy` 事件防并发；`_persist()` 写 SQLite `commentary` 表；`get_current()`；`mark_stale_and_regenerate()`；`ensure_on_startup()`——服务启动默认生成一次
+3. **[新功能] `backend/app/api/v1/commentary.py`**：`GET /commentary` 取当前评论 + `POST /commentary/regenerate` 触发重跑
+4. **[新功能] `backend/app/core/refresh.py`**：数据刷新后调 `commentary.mark_stale_and_regenerate()`——刷新即重跑（非标记过期）
+5. **[新功能] `backend/app/main.py`**：lifespan 启动钩子调 `commentary.ensure_on_startup()`
+6. **[新功能] `frontend/src/components/layout/CommentaryCard.vue`**：挂载时拉取评论，「重新分析」按钮触发重跑，generating 状态 2s 轮询，stale 提示，四态（generating/empty/error/ok）
+7. **[新功能] `frontend/src/api/client.ts` + `types.ts`**：`getCommentary()` + `regenerateCommentary()` 方法 + Commentary 接口
+
+### 说明
+
+- **模型接入**：OpenAI-compatible 模式，经环境变量配置 `COMMENTARY_BASE_URL`/`COMMENTARY_API_KEY`/`COMMENTARY_MODEL`，用户自选服务商，通用性强
+- **刷新策略**：刷新即重跑（非标记过期）；服务启动默认生成一次；生成异步（同步无必要）
+- **Prompt 约束**：三段式（综合研判/四大周期逐一点评/一句话结论），temperature 0.3，只能引用快照数值不得编造，250-400 字，不给投资建议
+
+### 验证
+
+- 后端 golden test 6/6 无回归；`build_snapshot()` 返回 composite_score=-2、data_as_of=2026-06、frameworks 四周期齐全；未配模型时 `get_current()` 返回 `{status:empty, msg:暂无评论}`
+- 前端 `vue-tsc --noEmit` 0 error；vite proxy + SPA fallback + API proxy 经 curl 验证
+- Chrome 截图确认：overview 渲染 KPI 卡（M2 8.0%/CPI 1.0%/PMI 49.4 等）、信号 -2.0、CommentaryCard 显示「暂无评论 — 点击「重新分析」生成（需配置模型）」、跨指标解读段保留
+
+### Refactor (English)
+
+1. **[refactor] `frontend/src/pages/Overview.vue`**: removed 6 GraphCards + chart imports/refs/fetches (m2st/cpiPpi/m1m2/spread/cpiMom/rate/pmi); homepage now only KPI tiles + composite signal + interpretation + CommentaryCard — eliminate architecture redundancy, homepage focuses on metrics & judgment
+2. **[refactor] `MerrillClock.vue`**: added "CPI vs PPI" and "CPI YoY vs MoM" charts — inflation dimension to Merrill Clock
+3. **[refactor] `CreditCycle.vue`**: extended M2 chart context, added "M1 vs M2 dual-line" and "M2−M1 spread" charts — monetary tightening core to Credit Cycle
+4. **[refactor] `InventoryCycle.vue`**: replaced "PMI official vs Caixin" with 4-line version (official/Caixin/non-manufacturing/services) — multi-dim PMI to Inventory Cycle
+5. **[refactor] `DebtCycle.vue`**: added "利率环境" chart (LPR/real-rate/10Y bond) — social-financing↔bond-rate↔term-spread to Debt Cycle
+
+### New Feature (English)
+
+1. **[feat] `backend/app/schemas/commentary.py`**: Commentary Pydantic model (ts/data_as_of/composite_score/text/model/stale/status/msg)
+2. **[feat] `backend/app/core/commentary.py`**: AI commentary core — `build_snapshot()` from `compute_signals()`; `call_model()` via httpx POST to OpenAI-compatible `/chat/completions`; `generate()` with threading lock + `_busy` event; `_persist()` to SQLite `commentary` table; `get_current()`; `mark_stale_and_regenerate()`; `ensure_on_startup()` — auto-generate on service start
+3. **[feat] `backend/app/api/v1/commentary.py`**: `GET /commentary` + `POST /commentary/regenerate`
+4. **[feat] `backend/app/core/refresh.py`**: after data refresh calls `commentary.mark_stale_and_regenerate()` — refresh-as-rerun (not mark-stale)
+5. **[feat] `backend/app/main.py`**: lifespan startup hook calls `commentary.ensure_on_startup()`
+6. **[feat] `frontend/src/components/layout/CommentaryCard.vue`**: fetch on mount, "重新分析" button triggers rerun, 2s polling when generating, stale hint, 4 states (generating/empty/error/ok)
+7. **[feat] `frontend/src/api/client.ts` + `types.ts`**: `getCommentary()` + `regenerateCommentary()` + Commentary interface
+
+### Notes (English)
+
+- **Model integration**: OpenAI-compatible mode, configured via env vars `COMMENTARY_BASE_URL`/`COMMENTARY_API_KEY`/`COMMENTARY_MODEL`, user picks provider, high generality
+- **Refresh policy**: refresh-as-rerun (not mark-stale); auto-generate on service startup; async generation (sync unnecessary)
+- **Prompt constraints**: 3-paragraph (综合研判/four-cycles-point-by-point/one-line conclusion), temperature 0.3, only cite snapshot values no fabrication, 250-400 chars, no investment advice
+
+### Verification (English)
+
+- Backend golden test 6/6 no regression; `build_snapshot()` returns composite_score=-2, data_as_of=2026-06, all 4 cycle frameworks present; unconfigured model returns `{status:empty, msg:暂无评论}` from `get_current()`
+- Frontend `vue-tsc --noEmit` 0 errors; vite proxy + SPA fallback + API proxy verified via curl
+- Chrome screenshot confirms: overview renders KPI tiles (M2 8.0%/CPI 1.0%/PMI 49.4 etc.), signal -2.0, CommentaryCard shows "暂无评论 — 点击「重新分析」生成（需配置模型）", cross-indicator interpretation section retained
+
+---
+
 ### 变更
 
 1. **[修复] `docs/data-sources-guide.md` §五 货币供应量**：`macro_china_supply_of_money()` 在 AKShare 中不存在，替换为正确的 `macro_china_m2_yearly()`，补充 `macro_china_money_supply()` 备选方案

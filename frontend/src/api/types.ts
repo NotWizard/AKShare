@@ -45,3 +45,14 @@ export interface RealEstateResponse {
   assessment?: RealEstateAssessment
   [k: string]: unknown
 }
+
+export interface Commentary {
+  ts: string | null
+  data_as_of: string | null
+  composite_score: number | null
+  text: string
+  model: string | null
+  stale: boolean
+  status: 'ok' | 'generating' | 'empty' | 'error'
+  msg: string | null
+}

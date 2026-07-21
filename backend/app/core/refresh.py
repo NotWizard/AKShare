@@ -132,6 +132,10 @@ def run_refresh(progress_cb=None, stop_event=None) -> dict:
         if progress_cb:
             progress_cb(1.0)
         clear_all_caches()
+        # Refresh-as-rerun policy: mark old commentary stale + trigger a fresh
+        # AI analysis on the updated data (fire-and-forget, non-blocking).
+        from backend.app.core import commentary
+        commentary.mark_stale_and_regenerate()
         return read_manifest_summary()
     except Exception as e:  # never let the API crash
         if proc is not None:

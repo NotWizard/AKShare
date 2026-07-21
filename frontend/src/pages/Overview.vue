@@ -2,27 +2,15 @@
 import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
-import { buildDualAxisLine, buildMultiLine, buildSpreadChart } from '@/components/charts/options'
-import EChart from '@/components/charts/EChart.vue'
-import GraphCard from '@/components/layout/GraphCard.vue'
 import MetricTile from '@/components/layout/MetricTile.vue'
+import CommentaryCard from '@/components/layout/CommentaryCard.vue'
 import type { SignalSummary } from '@/api/types'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const loading = ref(true)
 
-// Per-chart column groups, each with its own align_start — a late-starting
-// column (LPR-5Y 2019, 财新 PMI 2012) must not truncate an early one
-// (M2 1991, CPI 1986). KPI tiles read only the latest value, so they use a
-// single non-aligned fetch (latest survives regardless of start).
 const kpiDm = ref<Rec[]>([])        // latest-first for KPI latest(); no align
-const cpiPpi = ref<Rec[]>([])       // cpi_yoy,ppi_yoy         → 1995-08
-const m1m2 = ref<Rec[]>([])         // m1_yoy,m2_yoy           → 1991-12
-const spread = ref<Rec[]>([])       // m2_m1_spread            → 1991-12
-const cpiMom = ref<Rec[]>([])       // cpi_yoy,cpi_mom         → 1996-02
-const rate = ref<Rec[]>([])         // lpr_1y,lpr_5y,real_rate → 2019-09 (LPR5Y 真实起点)
-const pmi = ref<Rec[]>([])          // pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
 const signals = ref<SignalSummary | null>(null)
 let reqId = 0
 
@@ -39,24 +27,13 @@ async function load() {
   const mine = ++reqId
   loading.value = true
   const st = filters.start ?? undefined, en = filters.end ?? undefined
-  // M2 月度数据在 1996-12 前为年度碎片（仅年度结存），月度同比从 1996-12 起才有。
-  // 如果用户手动设 start < 1996-12，会被此默认值覆盖（保证图表不显示空洞段）。
-  const m2st = filters.start ?? '1996-12-01'
   try {
-    const [kpi, cp, m12, sp, cm, rt, pm, s] = await Promise.all([
+    const [kpi, s] = await Promise.all([
       api.getDerivedMonthly(st, en, 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'),
-      api.getDerivedMonthly(st, en, 'date,cpi_yoy,ppi_yoy', true),
-      api.getDerivedMonthly(m2st, en, 'date,m1_yoy,m2_yoy', true),
-      api.getDerivedMonthly(m2st, en, 'date,m2_m1_spread', true),
-      api.getDerivedMonthly(st, en, 'date,cpi_yoy,cpi_mom', true),
-      api.getDerivedMonthly(st, en, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true),
-      api.getDerivedMonthly(st, en, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true),
       api.getSignals(),
     ])
     if (mine !== reqId) return
     kpiDm.value = kpi.records.slice().reverse()  // latest first
-    cpiPpi.value = cp.records; m1m2.value = m12.records; spread.value = sp.records
-    cpiMom.value = cm.records; rate.value = rt.records; pmi.value = pm.records
     signals.value = s
   } finally { if (mine === reqId) loading.value = false }
 }
@@ -109,24 +86,7 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
     </div>
     <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
 
-    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比。" :loading="loading">
-      <EChart :option="buildDualAxisLine(cpiPpi, 'cpi_yoy', 'ppi_yoy')" height="300px" />
-    </GraphCard>
-    <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱。" :loading="loading">
-      <EChart :option="buildDualAxisLine(m1m2, 'm1_yoy', 'm2_yoy')" height="300px" />
-    </GraphCard>
-    <GraphCard title="M2−M1 剪刀差" tip="M2 同比减 M1 同比（百分点）。>0 资金活化偏弱（定期化）；0 线为增速持平。" :loading="loading">
-      <EChart :option="buildSpreadChart(spread, 'm2_m1_spread')" height="260px" />
-    </GraphCard>
-    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀）vs 环比（月度变动，0 上下波动）。" :loading="loading">
-      <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
-    </GraphCard>
-    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。" :loading="loading">
-      <EChart :option="buildMultiLine(rate, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10Y国债' }], '%')" height="300px" />
-    </GraphCard>
-    <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading">
-      <EChart :option="buildMultiLine(pmi, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)" height="300px" />
-    </GraphCard>
+    <CommentaryCard />
 
     <div v-if="signals?.cross_lags" class="text-xs text-text-2 space-y-1 px-4 py-3 rounded-lg bg-card border border-border">
       <div class="text-text-3 uppercase tracking-wide">跨指标领先</div>

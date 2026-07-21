@@ -7,5 +7,6 @@ openapi-typescript, so frontend TS types never drift.
 from backend.app.schemas.refresh import RefreshResult
 from backend.app.schemas.signals import SignalSummary
 from backend.app.schemas.cycles import CycleFrame, DerivedFrame
+from backend.app.schemas.commentary import Commentary
 
-__all__ = ["RefreshResult", "SignalSummary", "CycleFrame", "DerivedFrame"]
+__all__ = ["RefreshResult", "SignalSummary", "CycleFrame", "DerivedFrame", "Commentary"]
