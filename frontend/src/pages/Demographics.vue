@@ -11,17 +11,19 @@ type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
+const error = ref<string | null>(null)
 const dm = ref<Rec[]>([])
 let reqId = 0
 
 async function load() {
   const mine = ++reqId
   loading.value = true
+  error.value = null
   try {
     const d = await api.getTable('demographics', filters.start ?? undefined, filters.end ?? undefined)
     if (mine !== reqId) return
     dm.value = d.records
-  } finally { if (mine === reqId) loading.value = false }
+  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 
@@ -61,15 +63,15 @@ function latest(col: string): number | null {
       </div>
     </div>
 
-    <GraphCard title="常住人口城镇化率" tip="城镇常住人口占总人口比重，反映城镇化进程。NBS 年度数据。" :loading="loading">
+    <GraphCard title="常住人口城镇化率" tip="城镇常住人口占总人口比重，反映城镇化进程。NBS 年度数据。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(dm, [{ col: 'urbanization_rate', name: '城镇化率' }], '%')" height="300px" />
     </GraphCard>
 
-    <GraphCard title="年末总人口" tip="年末常住人口（万人），近年增速趋缓。NBS 年度数据。" :loading="loading">
+    <GraphCard title="年末总人口" tip="年末常住人口（万人），近年增速趋缓。NBS 年度数据。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(dm, [{ col: 'population', name: '年末总人口' }], '万人')" height="300px" />
     </GraphCard>
 
-    <GraphCard title="出生率与自然增长率" tip="出生率（‰）与自然增长率（‰，= 出生率 − 死亡率）。0 线为人口零增长。" :loading="loading">
+    <GraphCard title="出生率与自然增长率" tip="出生率（‰）与自然增长率（‰，= 出生率 − 死亡率）。0 线为人口零增长。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(dm, [{ col: 'birth_rate', name: '出生率' }, { col: 'natural_growth_rate', name: '自然增长率' }], '‰', 0)" height="300px" />
     </GraphCard>
   </div>

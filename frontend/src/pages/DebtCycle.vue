@@ -12,6 +12,7 @@ import type { CycleFrame } from '@/api/types'
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
+const error = ref<string | null>(null)
 // Read the leverage table DIRECTLY (quarterly, non-null). derived_quarterly's
 // leverage columns are now populated (02_compute_derived anchors on leverage
 // quarterly freq + GDP merge_asof ffill); the debt page reads leverage raw for
@@ -23,6 +24,7 @@ let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
+  error.value = null
   try {
     const [q, rt, c] = await Promise.all([
       api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined),
@@ -31,7 +33,7 @@ async function load() {
     ])
     if (mine !== reqId) return
     dq.value = q.records; rateDm.value = rt.records; cycle.value = c
-  } finally { if (mine === reqId) loading.value = false }
+  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 </script>
@@ -45,13 +47,13 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <span class="w-2 h-2 rounded-full" :style="{ background: phaseColor(cycle.latest_phase) }" />
       <span class="text-xs text-text-2">总体阶段：<b class="text-text">{{ phaseLabel(cycle.latest_phase) }}</b></span>
     </div>
-    <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading">
+    <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading" :error="error">
       <EChart :option="buildStackedArea(dq, ['household', 'non_fin_corp', 'gov_total'])" height="380px" />
     </GraphCard>
-    <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading">
+    <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading" :error="error">
       <EChart :option="buildStackedArea(dq, ['gov_central', 'gov_local'])" height="320px" />
     </GraphCard>
-    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。债务周期标准框架里 社融↔债券利率↔期限利差 为判定链路。" :loading="loading">
+    <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。债务周期标准框架里 社融↔债券利率↔期限利差 为判定链路。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(rateDm, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10Y国债' }], '%')" height="300px" />
     </GraphCard>
   </div>

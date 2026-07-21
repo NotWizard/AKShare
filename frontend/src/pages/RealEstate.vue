@@ -18,6 +18,7 @@ echartsUse([RadarChart, RadarComponent])
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
+const error = ref<string | null>(null)
 const hp = ref<Record<string, string | number | null>[]>([])
 const rate = ref<Record<string, string | number | null>[]>([])   // lpr_5y, real_rate → 房贷锚
 const assessment = ref<Record<string, any>>({})
@@ -28,6 +29,7 @@ let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
+  error.value = null
   try {
     const [h, a, r] = await Promise.all([
       api.getTable('house_price', filters.start ?? undefined, filters.end ?? undefined),
@@ -36,7 +38,7 @@ async function load() {
     ])
     if (mine !== reqId) return
     hp.value = h.records; assessment.value = a; rate.value = r.records
-  } finally { if (mine === reqId) loading.value = false }
+  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 
@@ -74,13 +76,13 @@ const scores = () => assessment.value.assessment ?? assessment.value
     <header><h1 class="text-xl font-bold text-text">房地产市场</h1>
       <p class="text-xs text-text-3 mt-1">多城市新房价格同比 + 三维评估（杠杆空间/利率环境/价格动能）</p>
     </header>
-    <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading">
+    <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading" :error="error">
       <EChart :option="priceOption()" height="380px" />
     </GraphCard>
-    <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading">
+    <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(rate, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')" height="300px" />
     </GraphCard>
-    <GraphCard title="房地产三维评估" tip="杠杆空间 / 利率环境 / 价格动能 三维评分（0–100，越高越支撑）。" :loading="loading">
+    <GraphCard title="房地产三维评估" tip="杠杆空间 / 利率环境 / 价格动能 三维评分（0–100，越高越支撑）。" :loading="loading" :error="error">
       <EChart :option="buildRadar(scores())" height="360px" />
       <p v-if="scores()?.summary" class="text-xs text-text-2 mt-3">
         {{ scores().summary }}<span v-if="scores()?.composite_score">

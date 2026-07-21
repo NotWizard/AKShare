@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ChartTip from '@/components/controls/ChartTip.vue'
 
-defineProps<{ title: string; tip?: string; loading?: boolean; height?: string }>()
+defineProps<{ title: string; tip?: string; loading?: boolean; height?: string; error?: string | null }>()
 </script>
 
 <template>
@@ -13,6 +13,9 @@ defineProps<{ title: string; tip?: string; loading?: boolean; height?: string }>
     </div>
     <div v-if="loading" class="flex items-center justify-center min-h-[320px] text-text-3 text-xs">
       加载中…
+    </div>
+    <div v-else-if="error" role="alert" class="flex items-center justify-center min-h-[320px] text-red-400 text-xs">
+      {{ error }}
     </div>
     <slot v-else />
   </section>

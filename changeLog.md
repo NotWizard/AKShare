@@ -509,6 +509,30 @@
 
 ---
 
+### GraphCard 数据拉取失败显示错误（修空白图 + 未处理 rejection）
+
+### 修复
+
+1. **[修复] `frontend/src/components/layout/GraphCard.vue`**：加 `error?: string | null` prop + `v-else-if="error"` 分支（`role="alert"`，text-red-400），置于 loading 与 slot 之间。
+2. **[修复] `frontend/src/pages/*.vue`（7 页：MerrillClock/CreditCycle/DebtCycle/InventoryCycle/RealEstate/Demographics/Overview）**：各加 `error` ref + `load()` 起 `error.value = null` 重置 + `catch (e) { if (mine === reqId) error.value = (e as Error).message }`（带 reqId race-guard 镜像既有 finally guard，防陈旧失败请求覆盖新请求 error 态）；6 个 GraphCard 页传 `:error="error"`（21 张图全覆盖）；Overview 无 GraphCard 故 error 捕获（修未处理 rejection）但不显示（"静默空瓦"，前向兼容）。
+- 修：`api.*` 拒绝（后端挂 / 5xx / 30s 超时）时不再渲染空白图、控制台无未处理 promise rejection；显示 `client.ts` 抛出的有意义中文 / HTTP 错误文本。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 1.98s 成功；7 页 reset + catch + reqId guard 一致；21/21 GraphCard 接 `:error`；Overview `const A`/`void A` 死码（CQ-02）未动；独立审查 Agent 通过。
+
+### Fix (English)
+
+1. **[fix] `frontend/src/components/layout/GraphCard.vue`**: added `error?: string | null` prop + `v-else-if="error"` branch (`role="alert"`, text-red-400) between the loading branch and the slot.
+2. **[fix] `frontend/src/pages/*.vue` (7 pages: MerrillClock/CreditCycle/DebtCycle/InventoryCycle/RealEstate/Demographics/Overview)**: each adds an `error` ref + `error.value = null` reset at `load()` start + `catch (e) { if (mine === reqId) error.value = (e as Error).message }` (with the reqId race-guard mirroring the existing finally guard, preventing a stale failed request from overwriting a newer in-flight error state); the 6 GraphCard pages pass `:error="error"` (all 21 charts covered); Overview has no GraphCard so the error is captured (fixes unhandled rejection) but not displayed ("silent empty tiles", forward-compatible).
+- Fixes: on `api.*` rejection (backend down / 5xx / 30s timeout) no longer renders a blank chart and no console unhandled promise rejection; shows `client.ts`'s meaningful Chinese / HTTP error text.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` 1.98s success; 7 pages' reset + catch + reqId guard consistent; 21/21 GraphCards receive `:error`; Overview's `const A`/`void A` dead code (CQ-02) untouched; independent review agent approved.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

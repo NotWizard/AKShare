@@ -11,6 +11,7 @@ type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
+const error = ref<string | null>(null)
 
 const kpiDm = ref<Rec[]>([])        // latest-first for KPI latest(); no align
 const signals = ref<SignalSummary | null>(null)
@@ -28,6 +29,7 @@ const A = (s?: string, e?: string) => [s, e] as const
 async function load() {
   const mine = ++reqId
   loading.value = true
+  error.value = null
   const st = filters.start ?? undefined, en = filters.end ?? undefined
   try {
     const [kpi, s] = await Promise.all([
@@ -37,7 +39,7 @@ async function load() {
     if (mine !== reqId) return
     kpiDm.value = kpi.records.slice().reverse()  // latest first
     signals.value = s
-  } finally { if (mine === reqId) loading.value = false }
+  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 void A

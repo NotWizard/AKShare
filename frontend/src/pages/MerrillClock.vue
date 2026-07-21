@@ -12,6 +12,7 @@ import type { CycleFrame } from '@/api/types'
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
+const error = ref<string | null>(null)
 const merrill = ref<CycleFrame | null>(null)
 // 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
 type Rec = Record<string, string | number | null>
@@ -21,6 +22,7 @@ let reqId = 0
 async function load() {
   const mine = ++reqId
   loading.value = true
+  error.value = null
   try {
     const [r, cp, cm] = await Promise.all([
       api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined),
@@ -30,6 +32,7 @@ async function load() {
     if (mine !== reqId) return
     merrill.value = r; cpiPpi.value = cp.records; cpiMom.value = cm.records
   }
+  catch (e) { if (mine === reqId) error.value = (e as Error).message }
   finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
@@ -44,13 +47,13 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <span class="w-2 h-2 rounded-full" :style="{ background: phaseColor(merrill.latest_phase) }" />
       <span class="text-xs text-text-2">当前：<b class="text-text">{{ phaseLabel(merrill.latest_phase) }}</b></span>
     </div>
-    <GraphCard title="美林投资时钟" tip="横轴 GDP 同比、纵轴 CPI 同比；点的颜色为投资时钟阶段。" :loading="loading">
+    <GraphCard title="美林投资时钟" tip="横轴 GDP 同比、纵轴 CPI 同比；点的颜色为投资时钟阶段。" :loading="loading" :error="error">
       <EChart :option="buildScatterQuadrant(merrill?.series ?? [], 'gdp_yoy', 'cpi_yoy', 'GDP同比(%)', 'CPI同比(%)', 2, 0)" height="420px" />
     </GraphCard>
-    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading">
+    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading" :error="error">
       <EChart :option="buildDualAxisLine(cpiPpi, 'cpi_yoy', 'ppi_yoy')" height="300px" />
     </GraphCard>
-    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀主轴）vs 环比（月度高频先行，0 上下波动）。" :loading="loading">
+    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀主轴）vs 环比（月度高频先行，0 上下波动）。" :loading="loading" :error="error">
       <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
     </GraphCard>
   </div>
