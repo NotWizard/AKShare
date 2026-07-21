@@ -58,7 +58,7 @@ watch(() => refresh.lastRefreshedAt, pull)
     <div class="flex items-center justify-between mb-2">
       <div class="text-xs text-text-3 uppercase tracking-wide">AI 宏观分析评论</div>
       <button
-        class="text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors disabled:opacity-50"
+        class="text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         :disabled="loading || data.status === 'generating'"
         @click="regenerate"
       >

@@ -407,6 +407,26 @@
 
 ---
 
+### 交互元素 focus-visible 焦点环（WCAG 2.4.7）
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/components/layout/Sidebar.vue` + `RefreshBar.vue` + `CommentaryCard.vue`**：RouterLink + preset / refresh / cancel / 重新分析 按钮加 `focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2`——键盘 Tab 有可见焦点环（鼠标点击不显示，无视觉回归）。WCAG 2.4.7 Focus Visible。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；5 处交互元素全覆盖（含 UX-04 加的 cancel 按钮）；`outline-accent` 解析（`accent: #6366f1`）。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/components/layout/Sidebar.vue` + `RefreshBar.vue` + `CommentaryCard.vue`**: RouterLink + preset / refresh / cancel / regenerate buttons get `focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2` — keyboard Tab shows a visible focus ring (mouse clicks don't, no visual regression). WCAG 2.4.7 Focus Visible.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; all 5 interactive elements covered (incl. the UX-04 cancel button); `outline-accent` resolves (`accent: #6366f1`).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

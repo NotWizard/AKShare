@@ -16,7 +16,7 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
     <div class="flex gap-1.5">
       <button
         v-for="p in presets" :key="p"
-        class="px-2.5 py-1 text-[11px] rounded border transition-all"
+        class="px-2.5 py-1 text-[11px] rounded border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         :class="filters.preset === p
           ? 'border-accent text-text bg-[rgba(99,102,241,0.15)]'
           : 'border-border text-text-3 hover:border-border-hi'"
@@ -27,7 +27,7 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
     <div class="w-px h-4 bg-border" />
 
     <button
-      class="px-3 py-1 text-xs font-semibold rounded-lg border transition-all"
+      class="px-3 py-1 text-xs font-semibold rounded-lg border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       :class="refresh.running
         ? 'border-border text-text-3 cursor-wait'
         : 'border-border-hi text-text hover:border-accent'"
@@ -38,7 +38,7 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
     </button>
     <button
       v-if="refresh.running"
-      class="px-3 py-1 text-xs font-semibold rounded-lg border border-border-hi text-text-2 hover:border-accent transition-all"
+      class="px-3 py-1 text-xs font-semibold rounded-lg border border-border-hi text-text-2 hover:border-accent transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       @click="refresh.cancel()"
     >取消</button>
 

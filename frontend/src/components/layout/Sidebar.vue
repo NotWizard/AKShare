@@ -28,7 +28,7 @@ const isActive = (to: string) => computed(() =>
         v-for="it in items"
         :key="it.to"
         :to="it.to"
-        class="flex items-center gap-2.5 px-3.5 py-2 mx-0 mb-0.5 rounded-lg text-[13px] font-medium transition-all"
+        class="flex items-center gap-2.5 px-3.5 py-2 mx-0 mb-0.5 rounded-lg text-[13px] font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         :class="isActive(it.to).value
           ? 'bg-[rgba(99,102,241,0.15)] text-text border-l-2 border-accent pl-3'
           : 'text-text-3 hover:bg-[rgba(255,255,255,0.04)] hover:text-text-2'"
