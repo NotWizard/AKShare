@@ -52,13 +52,13 @@ def derived_monthly(
         df = df[[c for c in keep if c in df.columns]]
 
     if align_start and "date" in df.columns:
-        # Start at the earliest row where every requested value column is
-        # non-null — charts no longer begin in 1978 with a long empty run when
-        # the series only exists from (e.g.) 2019. Respects an explicit user
-        # `start` (takes the later of the two).
+        # Start at the earliest row where every populated value column is
+        # non-null. All-null columns (e.g. bond_10y not yet fetched) are
+        # excluded so they don't block alignment entirely.
         value_cols = [c for c in df.columns if c != "date"]
-        if value_cols:
-            mask = df[value_cols].notna().all(axis=1)
+        populated = [c for c in value_cols if df[c].notna().any()]
+        if populated:
+            mask = df[populated].notna().all(axis=1)
             if mask.any():
                 first_valid = df.loc[mask, "date"].iloc[0]
                 if start is None or pd.Timestamp(first_valid) > pd.Timestamp(start):
