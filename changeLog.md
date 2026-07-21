@@ -66,6 +66,28 @@
 
 ---
 
+### 债务周期杠杆率数据刷新保护
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py` `fetch_leverage`**：刷新数据时 `ak.macro_cnbs()` 仅返回 80 行（至 2024-Q4），`save_to_db` 以 `if_exists="replace"` 覆盖整张 leverage 表——手动补充的 NIFD 数据（5 个季度）会被清除。新增保留逻辑：在 `save_to_db` 前从 staging 表中读取日期晚于 CNBS 最新日期的行，合并入 DataFrame，使刷新后仍保留补充数据。当 AKShare 更新 `macro_cnbs()` 至 2025+ 后，补充数据自然被更新数据取代。
+
+### 验证
+
+- 模拟刷新测试：staging DB 85 行 → `ak.macro_cnbs()` 80 行 → 保留 5 行 NIFD 数据 → 最终 85 行，max date 2026-03-01
+- 未修复时确认数据丢失：85 → 80 行，max date 2024-12-01
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py` `fetch_leverage`**: on data refresh, `ak.macro_cnbs()` returns 80 rows (through 2024-Q4); `save_to_db` with `if_exists="replace"` overwrites the entire leverage table — manually-supplemented NIFD data (5 quarters) would be wiped. Added preservation logic: before `save_to_db`, read rows from the staging table with dates newer than CNBS max and merge into the DataFrame. When AKShare updates `macro_cnbs()` to 2025+, supplemented data is naturally superseded by fresher CNBS data.
+
+### Verification (English)
+
+- Simulated refresh test: staging DB 85 rows -> `ak.macro_cnbs()` 80 rows -> preserved 5 NIFD rows -> final 85 rows, max date 2026-03-01
+- Confirmed data loss without fix: 85 -> 80 rows, max date 2024-12-01
+
+---
+
 ### 债务周期杠杆率数据补全（NIFD 季度报告）
 
 ### 数据补全

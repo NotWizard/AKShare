@@ -299,6 +299,22 @@ def fetch_leverage(conn):
         "fin_liability": pd.to_numeric(df["金融部门负债方"], errors="coerce"),
     })
     result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+
+    # Preserve manually-supplemented rows (e.g. NIFD quarterly reports) for
+    # dates newer than what ak.macro_cnbs() provides. When AKShare catches up,
+    # these rows are naturally superseded by fresher CNBS data.
+    cnbs_max = result["date"].max()
+    try:
+        existing = pd.read_sql(
+            "SELECT * FROM leverage WHERE date > ?", conn, params=[cnbs_max]
+        )
+        if not existing.empty:
+            result = pd.concat([result, existing], ignore_index=True)
+            result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+            log(f"  ℹ️  leverage: preserved {len(existing)} rows after CNBS max ({cnbs_max})")
+    except Exception:
+        pass  # leverage table may not exist yet (first run)
+
     save_to_db(result, "leverage", conn)
     return result
 
