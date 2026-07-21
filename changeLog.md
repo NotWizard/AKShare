@@ -387,6 +387,26 @@
 
 ---
 
+### App skip-link + main id（WCAG 2.4.1 跳过导航）
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/App.vue`**：root div 首子加 `<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:bg-surface focus:text-text focus:px-3 focus:py-2 focus:rounded">跳到主内容</a>` + `<main id="main">`——键盘/SR 用户可跳过 7 项侧栏直达主内容（WCAG 2.4.1 Bypass Blocks）。`z-[200]` > sidebar `z-[100]`，焦点时浮于其上。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；skip-link 是 root 首子（Sidebar 前）；`href="#main"` 匹配 `main` 的 `id`；`sr-only` / `focus:not-sr-only` 可用。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/App.vue`**: added `<a href="#main" ...>跳到主内容</a>` as the first child of the root div + `id="main"` on `<main>` — keyboard/SR users skip the 7 sidebar links to reach main content (WCAG 2.4.1 Bypass Blocks). `z-[200]` > sidebar's `z-[100]`, so it floats above when focused.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; skip-link is the root's first child (before Sidebar); `href="#main"` matches `main`'s `id`; `sr-only` / `focus:not-sr-only` available.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
