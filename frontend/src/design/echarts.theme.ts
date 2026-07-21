@@ -143,14 +143,3 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
   applyDateFormat(merged)
   return merged
 }
-
-// Line series default — connectNulls:true bridges gaps natively (the Dash
-// connectgaps fix, but cleaner: one flag per series).
-export const baseLine = (extra: Record<string, unknown> = {}) => ({
-  type: 'line',
-  smooth: false,
-  connectNulls: true,
-  symbol: 'none',
-  lineStyle: { width: 2 },
-  ...extra,
-})

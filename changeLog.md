@@ -267,6 +267,26 @@
 
 ---
 
+### 删除未使用的 baseLine 导出
+
+### 清理
+
+1. **[清理] `frontend/src/design/echarts.theme.ts`**：删除零调用方的 `baseLine` 线序列工厂导出及注释——9 个 builder 与 RealEstate 内联手写 `type:'line',connectNulls:true,...` 均未用此工厂，`grep baseLine frontend/src` 仅定义点无调用。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error；`vite build` 成功；`grep baseLine frontend/src` 零命中（仅陈旧 worktree 副本残留）。
+
+### Cleanup (English)
+
+1. **[cleanup] `frontend/src/design/echarts.theme.ts`**: removed the zero-caller `baseLine` line-series factory export + comment — the 9 builders + RealEstate inline all hand-write `type:'line',connectNulls:true,...` without this factory; `grep baseLine frontend/src` shows only the definition, no call sites.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors; `vite build` success; `grep baseLine frontend/src` zero hits (only the stale worktree copy remains).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
