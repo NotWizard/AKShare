@@ -9,7 +9,7 @@ const style = ref<Record<string, string>>({})
 
 // Teleport to <body> so NO ancestor's overflow can ever clip the popup, and
 // position via the icon's viewport rect with flip/clamp — always visible.
-async function show(e: MouseEvent) {
+async function show(e: MouseEvent | FocusEvent) {
   const target = e.currentTarget as HTMLElement
   const r = target.getBoundingClientRect()
   visible.value = true
@@ -33,8 +33,14 @@ function hide() { visible.value = false }
 <template>
   <span
     class="inline-flex items-center align-middle ml-1 text-text-3 text-xs cursor-help select-none"
+    tabindex="0"
+    role="button"
+    aria-label="查看图表说明"
     @mouseenter="show"
     @mouseleave="hide"
+    @focus="show"
+    @blur="hide"
+    @keydown.escape="hide"
   >ⓘ
     <Teleport to="body">
       <div v-if="visible && text" ref="pop" class="chart-tip-pop" :style="style">{{ text }}</div>

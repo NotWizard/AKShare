@@ -347,6 +347,26 @@
 
 ---
 
+### ChartTip ⓘ 键盘/触屏可达
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/components/controls/ChartTip.vue`**：ⓘ 说明图标原仅 `@mouseenter`/`@mouseleave`，键盘用户无法触发、触屏无法悬停。加 `tabindex=0` + `role=button` + `aria-label` + `@focus=show` + `@blur=hide` + `@keydown.escape=hide`；`show` 签名 widen 到 `MouseEvent | FocusEvent`（`@focus` 类型安全）。~25 个 tip（GraphCard + MetricTile）经组件继承全部可达。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error（签名 widen 由参数逆变保证类型安全）；`vite build` 1.95s 成功；定位纯 `getBoundingClientRect` + 视口数学，鼠标/焦点一致；`hide` 无参，三处调用安全；Esc 保持焦点 Tab 可续；popup `pointer-events:none` 杜绝伪 blur。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/components/controls/ChartTip.vue`**: the ⓘ info icon had only `@mouseenter`/`@mouseleave` — keyboard users couldn't trigger it, touch users couldn't hover. Added `tabindex=0` + `role=button` + `aria-label` + `@focus=show` + `@blur=hide` + `@keydown.escape=hide`; widened `show` signature to `MouseEvent | FocusEvent` (type-safe for `@focus`). ~25 tips (GraphCard + MetricTile) inherit the fix via the component.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors (signature widen type-safe by parameter contravariance); `vite build` 1.95s success; positioning is pure `getBoundingClientRect` + viewport math, identical for mouse/focus; `hide` is arg-agnostic, safe from all 3 callers; Esc keeps focus so Tab continues; popup `pointer-events:none` prevents spurious blur.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
