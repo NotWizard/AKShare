@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from backend.app.core.cache import clear_all_caches
+from backend.app.core.db import _load_full
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FETCH_SCRIPT = PROJECT_ROOT / "scripts" / "01_fetch_data.py"
@@ -135,6 +136,13 @@ def run_refresh(progress_cb=None, stop_event=None) -> dict:
         if progress_cb:
             progress_cb(1.0)
         clear_all_caches()
+        # Re-warm the 4 hot tables (mirrors lifespan preload) so the first
+        # post-refresh request isn't cold-cache (~11ms → ~2ms each).
+        for t in ("derived_monthly", "derived_quarterly", "leverage", "house_price"):
+            try:
+                _load_full(t)
+            except Exception:
+                pass
         # Refresh-as-rerun policy: mark old commentary stale + trigger a fresh
         # AI analysis on the updated data (fire-and-forget, non-blocking).
         from backend.app.core import commentary

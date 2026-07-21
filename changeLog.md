@@ -553,6 +553,26 @@
 
 ---
 
+### 刷新后 re-warm 4 张热表（免首请求冷缓存）
+
+### 性能
+
+1. **[性能] `backend/app/core/refresh.py`**：`clear_all_caches()` 后补 re-warm 4 张热表（`derived_monthly` / `derived_quarterly` / `leverage` / `house_price`，镜像 `main.py` lifespan preload）——刷新后首请求不再冷缓存（~11ms → ~2ms / 端点）。subprocess 已 `proc.wait()` 完成无死锁；best-effort（失败则退回原冷缓存行为，无数据损失）。
+
+### 验证
+
+- golden test 6/6（refresh.py 导入链）；re-warm 顺序正确（`clear_all_caches` 后、`commentary.mark_stale_and_regenerate` / `return` 前）；无循环 import（db.py 仅 stdlib + pandas）；4 表元组与 lifespan 字节一致。
+
+### Performance (English)
+
+1. **[perf] `backend/app/core/refresh.py`**: after `clear_all_caches()` add a re-warm of the 4 hot tables (`derived_monthly` / `derived_quarterly` / `leverage` / `house_price`, mirrors `main.py` lifespan preload) — first post-refresh request no longer cold-cache (~11ms → ~2ms / endpoint). Subprocess already `proc.wait()`-complete, no deadlock; best-effort (failure falls back to original cold-cache, no data loss).
+
+### Verification (English)
+
+- golden test 6/6 (refresh.py import chain); re-warm order correct (after `clear_all_caches`, before `commentary.mark_stale_and_regenerate` / `return`); no circular import (db.py only stdlib + pandas); 4-table tuple byte-identical to lifespan.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
