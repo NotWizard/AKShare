@@ -489,6 +489,26 @@
 
 ---
 
+### 路由切换更新 document.title
+
+### 修复
+
+1. **[修复] `frontend/src/router/index.ts`**：7 条路由的 `meta.title`（「综合概览」等）原无人消费，tab / 书签 / SR 全显示静态 title。加 `router.afterEach` 设 `document.title = `${to.meta.title} · 宏观经济分析平台``；补 `declare module 'vue-router' { interface RouteMeta { title?: string; icon?: string } }` 类型增强（strict 下 `to.meta.title` 与 `meta.icon` 类型安全）。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；`afterEach` 在重定向解析后的目标路由触发（`/` → `/overview` 也更新 title 为「综合概览 · 宏观经济分析平台」）。
+
+### Fix (English)
+
+1. **[fix] `frontend/src/router/index.ts`**: the 7 routes' `meta.title` ("综合概览" etc.) was never consumed; tab/bookmarks/SR showed the static title. Added `router.afterEach` setting `document.title = `${to.meta.title} · 宏观经济分析平台``; added `declare module 'vue-router' { interface RouteMeta { title?: string; icon?: string } }` augmentation (type-safe `to.meta.title` and `meta.icon` under strict).
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; `afterEach` fires on the resolved route after redirects (`/` → `/overview` also updates the title to "综合概览 · 宏观经济分析平台").
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

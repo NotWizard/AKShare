@@ -1,5 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    icon?: string
+  }
+}
+
 const lazy = (p: string) => () => import(`../pages/${p}.vue`)
 
 export const router = createRouter({
@@ -15,4 +22,8 @@ export const router = createRouter({
     { path: '/demographics', component: lazy('Demographics'), meta: { title: '人口与城镇化', icon: '◎' } },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
+})
+
+router.afterEach((to) => {
+  if (to.meta?.title) document.title = `${to.meta.title} · 宏观经济分析平台`
 })
