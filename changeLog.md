@@ -307,6 +307,26 @@
 
 ---
 
+### refresh.py expat 路径改为可覆盖 env var
+
+### 清理
+
+1. **[清理] `backend/app/core/refresh.py`**：`_subprocess_env` 写死的 `/opt/homebrew/opt/expat/lib` 改 `os.getenv("EXPAT_LIB_PATH", "/opt/homebrew/opt/expat/lib")`——Apple Silicon 默认不变（行为保留），加 Intel macs（`/usr/local/opt/expat/lib`）与 Linux（空）覆盖旋钮。直接经 uvicorn/pytest 启动时（绕过 run_app.sh 的 `DYLD_LIBRARY_PATH`）本处是唯一来源，故默认不可空。
+
+### 验证
+
+- 默认与旧值 + `run_app.sh:13` 字节一致（Apple Silicon 行为保留）；`os` 已 import；无测试覆盖（runtime infra，可接受）；独立审查 Agent 通过（无工作流破坏）。
+
+### Cleanup (English)
+
+1. **[cleanup] `backend/app/core/refresh.py`**: `_subprocess_env`'s hardcoded `/opt/homebrew/opt/expat/lib` → `os.getenv("EXPAT_LIB_PATH", "/opt/homebrew/opt/expat/lib")` — Apple-Silicon default unchanged (behavior-preserving), adds an override knob for Intel macs (`/usr/local/opt/expat/lib`) and Linux (empty). When launched directly via uvicorn/pytest (bypassing run_app.sh's `DYLD_LIBRARY_PATH`) this is the sole source, so the default can't be empty.
+
+### Verification (English)
+
+- Default byte-identical to old value + `run_app.sh:13` (Apple-Silicon behavior preserved); `os` already imported; no test coverage (runtime infra, acceptable); independent review agent approved (no workflow break).
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

@@ -42,7 +42,10 @@ def is_running() -> bool:
 
 def _subprocess_env() -> dict:
     env = dict(os.environ)
-    extra = "/opt/homebrew/opt/expat/lib"
+    # Apple-Silicon Homebrew default; override via EXPAT_LIB_PATH for Intel macs
+    # (/usr/local/opt/expat/lib) or Linux (empty). run_app.sh 也设此值；直接经
+    # uvicorn/pytest 启动时本处是唯一来源（不可空默认，否则子进程 expat 导入失败）。
+    extra = os.getenv("EXPAT_LIB_PATH", "/opt/homebrew/opt/expat/lib")
     existing = env.get("DYLD_LIBRARY_PATH")
     env["DYLD_LIBRARY_PATH"] = extra + (":" + existing if existing else "")
     return env
