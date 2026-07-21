@@ -427,6 +427,26 @@
 
 ---
 
+### Sidebar 装饰图标 aria-hidden
+
+### 无障碍
+
+1. **[无障碍] `frontend/src/components/layout/Sidebar.vue`**：导航项的装饰性 unicode 图标 glyph（◉ ◐ ◈ ▣ ◆ ▧ ◎）加 `aria-hidden="true"`——避免 SR 读出 "circled bullet" 等噪音；标签文字已承载语义。MACRO 品牌名与「中国经济分析平台」副标题是有意义文字，不加 aria-hidden（验证强调）。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；仅 icon span 改动（MACRO / 副标题未动）；1 属性最小改动。
+
+### A11y (English)
+
+1. **[a11y] `frontend/src/components/layout/Sidebar.vue`**: decorative unicode icon glyphs (◉ ◐ ◈ ▣ ◆ ▧ ◎) get `aria-hidden="true"` — prevents SR reading "circled bullet" noise; the label span carries meaning. MACRO brand + subline are meaningful text, NOT aria-hidden (validation emphasized).
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; only the icon span changed (MACRO/subline untouched); 1 attribute minimal.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

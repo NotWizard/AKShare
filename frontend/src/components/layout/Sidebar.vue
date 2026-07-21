@@ -33,7 +33,7 @@ const isActive = (to: string) => computed(() =>
           ? 'bg-[rgba(99,102,241,0.15)] text-text border-l-2 border-accent pl-3'
           : 'text-text-3 hover:bg-[rgba(255,255,255,0.04)] hover:text-text-2'"
       >
-        <span class="text-sm opacity-60 w-4 text-center">{{ it.icon }}</span>
+        <span class="text-sm opacity-60 w-4 text-center" aria-hidden="true">{{ it.icon }}</span>
         <span>{{ it.label }}</span>
       </RouterLink>
     </nav>
