@@ -28,8 +28,9 @@ async function load() {
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 
 function latest(col: string): number | null {
-  for (const r of dm.value) {
-    const v = r[col]
+  // dm 按日期升序, 从后往前取第一个有值行 = 最新一年
+  for (let i = dm.value.length - 1; i >= 0; i--) {
+    const v = dm.value[i][col]
     if (typeof v === 'number') return v
   }
   return null
