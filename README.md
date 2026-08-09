@@ -1,6 +1,6 @@
 # 中国宏观经济数据分析平台
 
-[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3.5-42b883)](https://vuejs.org/)
 [![ECharts](https://img.shields.io/badge/ECharts-5.5-aa344d)](https://echarts.apache.org/)
@@ -92,7 +92,7 @@
 │  scripts/_pipeline.py + 01_fetch_data.py + 02_compute_derived│
 └─────────────────────────────────────────────────────────────┘
                       │
-              data/macro_data.db (SQLite, 13 表)
+              data/macro_data.db (SQLite, 14 原始 + 2 衍生 + commentary)
 ```
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
@@ -143,11 +143,11 @@ AKShare/
 ├── scripts/                     # 采集与衍生计算（后端复用）
 │   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
 │   ├── _pipeline_test.py        # 管道离线测试（15/15）
-│   ├── 01_fetch_data.py         # AKShare 采集（12 fetcher，走闸门管道）
+│   ├── 01_fetch_data.py         # 宏观数据采集（14 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
 ├── data/                        # SQLite 数据库（gitignored）
-│   ├── macro_data.db            # 13 张表：11 原始 + derived_monthly/quarterly
+│   ├── macro_data.db            # 14 张原始表 + derived_monthly/derived_quarterly + commentary
 │   ├── backups/                 # 采集前自动备份（留 10 份）
 │   └── last_run.json            # 上次采集审计 manifest
 │
@@ -167,9 +167,9 @@ AKShare/
 
 ### 环境要求
 
-- Python 3.12（macOS 需 Homebrew Python + `DYLD_LIBRARY_PATH` 处理 expat，启动脚本已内置）
+- Python 3.12+（当前 `.venv312` 为 Python 3.14.6，akshare 1.18.x 实测正常；macOS 需 `DYLD_LIBRARY_PATH` 处理 expat，启动脚本已内置）
 - Node 20+（前端构建）
-- 网络连接（首次采集数据时需要；NBS 接口在某些出口 IP 可能被 WAF 拦截，见下）
+- 网络连接（首次采集数据时需要；NBS 2026-03 改版曾封禁旧接口，akshare ≥1.18 已适配新接口，详见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md) §十一）
 
 ### 一键启动
 
@@ -193,8 +193,8 @@ cd frontend && npm run dev
 ### 手动采集 / 重算衍生
 
 ```bash
-python3 scripts/01_fetch_data.py     # 采集（走闸门管道：暂存→校验→原子切换→备份→manifest）
-python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarterly
+.venv312/bin/python scripts/01_fetch_data.py     # 采集（走闸门管道：暂存→校验→原子切换→备份→manifest）
+.venv312/bin/python scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarterly
 ```
 
 > 首次启动若 `data/macro_data.db` 不存在，`run_app.sh` 会自动跑这两个脚本。
@@ -205,7 +205,7 @@ python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarte
 
 ### 原始数据采集
 
-`scripts/01_fetch_data.py` 从 AKShare 采集 12 类宏观指标，清洗后经**闸门管道**落 SQLite：
+`scripts/01_fetch_data.py` 采集 14 类宏观指标（AKShare 为主，CPI/PPI 走东方财富数据中心、国债收益率直连中债信息网、人口数据走世界银行），清洗后经**闸门管道**落 SQLite：
 
 | # | 表 | 指标 | 频率 |
 |---|---|---|---|
@@ -220,7 +220,11 @@ python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarte
 | 9 | `industrial` | 工业增加值同比 + 累计 | 月 |
 | 10 | `house_price` | 70 城房价指数（新建/二手 同比/环比/定基）| 月 |
 | 11 | `new_credit` | 新增人民币贷款 | 月 |
-| 12 | `household_income` | 居民可支配收入（NBS，部分环境被拦）| 年 |
+| 12 | `household_income` | 居民可支配收入（NBS；2026-03 改版曾失效，2026-08-09 已修复为 akshare 1.18 新路径）| 年 |
+| 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样）| 月 |
+| 14 | `demographics` | 总人口/城镇化率/出生率/自然增长率（世界银行）| 年 |
+
+> 注：`household_income` / `demographics` 两张表在 NBS 失效期间未生成，修复后（2026-08-09）下次采集自动重建。数据源现状与实测记录详见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md)。
 
 ### 采集闸门管道（`scripts/_pipeline.py`）
 
@@ -350,7 +354,7 @@ font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe 
 ### 后端（`requirements.txt` + `backend/pyproject.toml`）
 
 ```text
-akshare>=1.14.0
+akshare>=1.14.0        # NBS 新接口需 ≥1.18（实测 1.18.83）
 pandas>=1.5
 numpy>=1.24
 scipy>=1.10
