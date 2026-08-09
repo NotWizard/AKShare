@@ -111,12 +111,13 @@ def fetch_gdp(conn):
     log("采集: GDP ...")
     df = ak.macro_china_gdp()
 
-    # 解析季度日期: "2024年第1季度" → "2024-01-01"
+    # 解析季度日期: "2024年第1季度" → "2024-01-01"; 累计 "2026年第1-2季度" → 末季 "2026-04-01"
     def parse_quarter(s):
         import re
-        m = re.match(r"(\d{4})年第(\d)季度", str(s))
+        m = re.match(r"(\d{4})年第(\d)(?:-(\d))?季度", str(s))
         if m:
-            year, q = int(m.group(1)), int(m.group(2))
+            year = int(m.group(1))
+            q = int(m.group(3) or m.group(2))   # 累计取末季
             month = (q - 1) * 3 + 1
             return f"{year}-{month:02d}-01"
         return None
@@ -392,6 +393,72 @@ def fetch_leverage(conn):
 # ─────────────────────────────────────────────
 # 7. 社会融资规模增量
 # ─────────────────────────────────────────────
+def _pbc_shrzgm_supplement_df() -> pd.DataFrame:
+    """PBoC 调查统计司 社融增量 XLSX 备用源（akshare shrzgm 滞后时补齐）。解析失败返回空。"""
+    import re, io, requests
+    try:
+        import datetime
+        yr = datetime.date.today().year
+        hrefs = []
+        for y in (yr, yr - 1):
+            lu = f"http://www.pbc.gov.cn/diaochatongjisi/116219/116319/{y}ntjsj/shrzgm/index.html"
+            try:
+                r = requests.get(lu, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+                hrefs = re.findall(r'(attachDir/[^"\'\s]+\.xlsx)', r.text)
+                if hrefs:
+                    break
+            except Exception:
+                continue
+        if not hrefs:
+            return pd.DataFrame()
+        xls = None; hdr = None
+        for h in hrefs[:4]:   # 选增量表(title 含"增量")且有列头行(含"人民币贷款")
+            try:
+                xr = requests.get("http://www.pbc.gov.cn/diaochatongjisi/" + h,
+                                  headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+                x = pd.read_excel(io.BytesIO(xr.content), header=None)
+                if not any("增量" in str(v) for v in x.iloc[0]):
+                    continue
+                hd = next((i for i in range(min(20, len(x)))
+                           if any("人民币贷款" in str(v) for v in x.iloc[i])), None)
+                if hd is not None:
+                    xls, hdr = x, hd; break
+            except Exception:
+                continue
+        if xls is None or hdr is None:
+            return pd.DataFrame()
+        cols = [str(v) for v in xls.iloc[hdr]]
+        def colidx(*names):
+            for n in names:
+                for j, c in enumerate(cols):
+                    if n in c:
+                        return j
+            return None
+        idx = {k: colidx(*ns) for k, ns in {
+            "total": ("社会融资规模增量", "社会融资规模"), "rmb_loan": ("人民币贷款",), "entrusted_loan": ("委托贷款",),
+            "trust_loan": ("信托贷款",), "acceptance_bill": ("未贴现",), "corp_bond": ("企业债券",),
+            "equity": ("股票",)}.items()}
+        rows = []
+        for i in range(hdr + 1, len(xls)):
+            mo = xls.iloc[i, 0]
+            try:
+                y = int(mo); month = round((float(mo) - y) * 100)   # 2026.05→5; 2026.1→10
+            except Exception:
+                continue
+            if not (1 <= month <= 12):
+                continue
+            def gv(j):
+                if j is None:
+                    return None
+                v = pd.to_numeric(xls.iloc[i, j], errors="coerce")
+                return None if pd.isna(v) else float(v)
+            rows.append({"date": f"{y}-{month:02d}-01", **{k: gv(j) for k, j in idx.items()}})
+        return pd.DataFrame(rows)
+    except Exception as e:
+        log(f"  ⚠️ PBoC 社融补充失败, 保留主源: {type(e).__name__}")
+        return pd.DataFrame()
+
+
 def fetch_social_finance(conn):
     log("采集: 社会融资规模增量 ...")
     try:
@@ -411,6 +478,17 @@ def fetch_social_finance(conn):
         log(f"  ⚠️ 社融数据采集失败 (SSL问题): {e}")
         log(f"  → 请在正式 Python 环境中重新运行")
         result = pd.DataFrame()
+
+    # PBoC 官方 XLSX 备用源: 仅追加比主源更新的月份(如主源滞后时的 2026-05/06)
+    sup = _pbc_shrzgm_supplement_df()
+    if not sup.empty:
+        base_max = result["date"].max() if not result.empty else None
+        if base_max is not None:
+            sup = sup[sup["date"] > base_max]
+        sup = sup.dropna(subset=["total"])   # 不追加未发布月份(NaN)
+        if not sup.empty:
+            result = pd.concat([result, sup], ignore_index=True).sort_values("date").reset_index(drop=True)
+            log(f"  ℹ️ 社融 PBoC 补充 {len(sup)} 行 (>{base_max})")
 
     save_to_db(result, "social_finance", conn)
     return result

@@ -853,6 +853,28 @@
 
 ---
 
+### GDP 补 2026-Q2 + 社融补 2026-05/06（case1/case2）
+
+### 数据
+
+1. **[数据] `scripts/01_fetch_data.py`**：`fetch_gdp` 正则扩展接受累计季度（"2026年第1-2季度"→2026-04-01），gdp 补到 **2026-Q2**。`fetch_social_finance` 新增 PBoC 调查统计司 XLSX 备用源（仅追加 >主源max 月份、dropna 未发布月），社融补到 **2026-06**（2026-05=20293亿 / 06=33645亿，与官方一致；保留主源历史）。
+2. **[修复] `scripts/02_compute_derived.py`**：`hh_debt_to_income` 年化基数改用该年 Q4(10月)累计 GDP（ffill 上年、回退 Q1×4），适配 gdp 累计行。
+
+### 验证
+
+- gdp max=2026-04；social_finance max=2026-06；hh_debt_to_income 2026-06=132.7（合理）；API 对齐。
+
+### Data (English)
+
+1. **[data] `scripts/01_fetch_data.py`**: `fetch_gdp` regex accepts cumulative quarters ("2026年第1-2季度"→2026-04-01), GDP to **2026-Q2**; `fetch_social_finance` gains a PBoC XLSX backup (append only rows >primary-max, dropna unpublished), social-financing to **2026-06** (2026-05=20293亿 / 06=33645亿, matches official; primary history kept).
+2. **[fix] `scripts/02_compute_derived.py`**: `hh_debt_to_income` annual base now uses that year's Q4(Oct) cumulative GDP (ffill prior year, fallback Q1×4), adapted to cumulative gdp rows.
+
+### Verification (English)
+
+- gdp max=2026-04; social_finance max=2026-06; hh_debt_to_income 2026-06=132.7 (sane); API aligned.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

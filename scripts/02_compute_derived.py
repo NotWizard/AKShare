@@ -212,7 +212,20 @@ def compute_derived(conn):
         quarterly = pd.merge_asof(quarterly.sort_values("date"), hi[["date", "income_abs"]],
                                   on="date", direction="backward")
         if "household" in quarterly.columns:
-            gdp_annual = quarterly["gdp_abs"] * 4.0   # Q1 累计年化≈全年 GDP
+            # 年度GDP 优先用该年 Q4(10月)累计行; 当年无 Q4 用上年全年; 仍无则 Q1×4 近似。
+            g = load_table(conn, "gdp")
+            ann = pd.Series(dtype=float)
+            if not g.empty:
+                gg = g.copy(); gg["date"] = pd.to_datetime(gg["date"])
+                gg["year"] = gg["date"].dt.year; gg["month"] = gg["date"].dt.month
+                q4 = gg[gg["month"] == 10]
+                if not q4.empty:
+                    ann = q4.groupby("year")["gdp_abs"].last()
+            q = quarterly.copy(); q["year"] = pd.to_datetime(q["date"]).dt.year
+            if not ann.empty:
+                gdp_annual = q["year"].map(ann).ffill().fillna(q["gdp_abs"] * 4.0)
+            else:
+                gdp_annual = q["gdp_abs"] * 4.0
             quarterly["hh_debt_abs"] = quarterly["household"] / 100.0 * gdp_annual
             quarterly["hh_income_share"] = quarterly["income_abs"] / gdp_annual * 100.0
             quarterly["hh_debt_to_income"] = quarterly["hh_debt_abs"] / quarterly["income_abs"] * 100.0
