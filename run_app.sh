@@ -31,6 +31,14 @@ fi
   "$VENV/pip" install -q fastapi 'uvicorn[standard]' pydantic httpx
 }
 
+# ---------- 采集依赖检查（刷新子进程 01_fetch_data.py 需要 akshare）----------
+# 后端本身不 import akshare，但「刷新数据」的采集子进程必须 import；
+# 缺它会导致刷新 exit 1（ModuleNotFoundError: akshare）。重建 venv 后自动补齐防复发。
+"$VENV/python" -c "import akshare" 2>/dev/null || {
+  echo "  📦 安装采集依赖 (akshare)..."
+  "$VENV/pip" install -q -r requirements.txt
+}
+
 cleanup() {
   echo ""; echo "  停止服务..."
   [ -n "$API_PID" ] && kill "$API_PID" 2>/dev/null

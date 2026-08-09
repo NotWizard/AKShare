@@ -1,5 +1,9 @@
 # 架构升级方案：Dash+Plotly → FastAPI + Vue 3 + ECharts
 
+> 📦 **状态（2026-08-09）：本迁移已完成** —— Vue 为唯一入口，旧 Dash（`dashboard/`）已下线，
+> `backend/` + `frontend/` 生产运行中。本文档为历史方案存档；当前架构以 `README.md` 为准
+> （其中 Python 版本 pin 等细节以实际环境为准：当前 venv 为 Python 3.14.6）。
+
 > 目标：在**保留全部 Python 分析投资**（`analysis/`、采集管道、刷新逻辑零改动）的前提下，把前端从 Dash+Plotly 升级为 **Vue 3 + ECharts**，解锁 Dash 摸不到的「极致效果 + 极致功能」天花板。
 > 约束：成本不是首要考量；`analysis/` 是核心价值，一行不改；迁移**增量、可回退**（新旧并行到 parity 再切换）。
 

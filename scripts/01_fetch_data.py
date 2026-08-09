@@ -215,6 +215,32 @@ def fetch_cpi(conn):
 # ─────────────────────────────────────────────
 # 4. PPI 年率 (东方财富)
 # ─────────────────────────────────────────────
+def _derive_ppi_mom(df: pd.DataFrame) -> pd.DataFrame:
+    """由 PPI 同比重建定基指数、再求环比(%)。
+
+    东财/akshare 均无免费 PPI 环比源（东财只有同比 BASE_SAME），
+    此为行业标准的同比→定基→环比推导（P_t = P_{t-12}×(1+同比)），
+    用户确认接受推导；前端图注标明"推导值"。
+    """
+    level, rows = {}, []
+    prev_dt = None
+    for _, r in df.sort_values("date").iterrows():
+        dt = pd.to_datetime(r["date"]); yoy = r["ppi_yoy"]
+        y12 = dt - pd.DateOffset(months=12)
+        if pd.notna(yoy) and y12 in level:
+            lv = level[y12] * (1 + yoy / 100)
+        elif pd.notna(yoy):
+            lv = 100.0                      # 种子月
+        else:
+            lv = level.get(prev_dt)         # 同比缺失→沿用上期水平
+        if lv is not None:
+            level[dt] = lv
+            if prev_dt is not None and prev_dt in level and level[prev_dt]:
+                rows.append((r["date"], (lv / level[prev_dt] - 1) * 100))
+        prev_dt = dt
+    return pd.DataFrame(rows, columns=["date", "ppi_mom"])
+
+
 def fetch_ppi(conn):
     log("采集: PPI 年率 ...")
     em = _fetch_eastmoney("RPT_ECONOMY_PPI", {
@@ -237,6 +263,8 @@ def fetch_ppi(conn):
     result = pd.concat([old, em], ignore_index=True)
     result = result.drop_duplicates(subset=["date"], keep="last")
     result = result.sort_values("date").reset_index(drop=True)
+    # PPI 环比(推导值): 无免费直接源, 由同比重建定基指数再求环比, 图注标明推导值
+    result = result.merge(_derive_ppi_mom(result), on="date", how="left")
     save_to_db(result, "ppi", conn)
     return result
 
@@ -245,31 +273,54 @@ def fetch_ppi(conn):
 # 5. PMI (官方 + 财新 + 非制造业)
 # ─────────────────────────────────────────────
 def fetch_pmi(conn):
-    log("采集: PMI (官方 + 财新) ...")
-    df_off = ak.macro_china_pmi_yearly()
+    log("采集: PMI (官方/非制造业=东财, 财新/财新服务=akshare) ...")
+    # 官方 + 非制造业 PMI: 东财 RPT_ECONOMY_PMI（当前；akshare macro_china_pmi_yearly
+    # 滞后约一年，同杠杆率同款"源滞后"）。东财无数据时回退 akshare。
+    em = _fetch_eastmoney("RPT_ECONOMY_PMI", {
+        "REPORT_DATE": "date", "MAKE_INDEX": "pmi_official", "NMAKE_INDEX": "pmi_non_mfg",
+    })
     df_cx = ak.macro_china_cx_pmi_yearly()
 
-    off = pd.DataFrame({
+    # akshare 官方/非制造业 = 全历史(2005+)底；东财(2008+ 更当前) 覆盖近期，
+    # 合并避免切源丢掉 2008 前历史（审查发现的回归）。
+    df_off = ak.macro_china_pmi_yearly()
+    off_ak = pd.DataFrame({
         "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
         "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
     }).dropna(subset=["pmi_official"])
+    try:
+        df_non = ak.macro_china_non_man_pmi()
+        non_ak = pd.DataFrame({
+            "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
+            "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
+        }).dropna(subset=["pmi_non_mfg"])
+    except Exception:
+        non_ak = pd.DataFrame(columns=["date", "pmi_non_mfg"])
+
+    if em.empty:
+        log("  ⚠️ 东财 PMI 无数据，官方/非制造业仅用 akshare")
+        off, non = off_ak, non_ak
+    else:
+        em2 = pd.DataFrame({
+            "date": pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01"),
+            "pmi_official": pd.to_numeric(em["pmi_official"], errors="coerce"),
+            "pmi_non_mfg": pd.to_numeric(em["pmi_non_mfg"], errors="coerce"),
+        }).dropna(subset=["pmi_official"])
+        # 东财优先(更当前), akshare 补东财没有的早期月份
+        off = em2[["date", "pmi_official"]].merge(off_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        off["pmi_official"] = off["pmi_official_em"].combine_first(off["pmi_official_ak"])
+        off = off[["date", "pmi_official"]].dropna(subset=["pmi_official"])
+        non = em2[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"]).merge(
+            non_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        non["pmi_non_mfg"] = non["pmi_non_mfg_em"].combine_first(non["pmi_non_mfg_ak"])
+        non = non[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"])
 
     cx = pd.DataFrame({
         "date": pd.to_datetime(df_cx["日期"]).dt.strftime("%Y-%m-01"),
         "pmi_caixin": pd.to_numeric(df_cx["今值"], errors="coerce"),
     }).dropna(subset=["pmi_caixin"])
 
-    # 非制造业 PMI
-    try:
-        df_non = ak.macro_china_non_man_pmi()
-        non = pd.DataFrame({
-            "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
-            "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
-        }).dropna(subset=["pmi_non_mfg"])
-    except Exception:
-        non = pd.DataFrame(columns=["date", "pmi_non_mfg"])
-
-    # 财新服务业 PMI
+    # 财新服务业 PMI（东财无财新口径，仍用 akshare）
     try:
         df_svc = ak.macro_china_cx_services_pmi_yearly()
         svc = pd.DataFrame({
@@ -290,6 +341,27 @@ def fetch_pmi(conn):
 # ─────────────────────────────────────────────
 # 6. 宏观杠杆率 (CNBS)
 # ─────────────────────────────────────────────
+# NIFD（国家金融与发展实验室）季度杠杆率报告提取值（官方发布，非自算）。
+# 出处见 scripts/03_supplement_leverage.py 头部报告链接；AKShare macro_cnbs 滞后时补齐。
+_NIFD_DATA = [
+    # date, household, non_fin_corp, gov_total,
+    #   gov_central, gov_local, real_economy, fin_asset, fin_liability
+    ("2025-03-01", 61.5, 173.7, 63.2, 26.4, 36.8, 298.4, 50.3, 69.4),
+    ("2025-06-01", 61.1, 174.0, 65.3, 27.6, 37.8, 300.4, 51.7, 71.8),
+    ("2025-09-01", 60.4, 174.4, 67.5, 28.8, 38.7, 302.3, 51.3, 73.4),
+    ("2025-12-01", 59.4, 174.6, 68.4, 29.4, 39.1, 302.4, 50.5, 73.5),
+    ("2026-03-01", 59.0, 180.0, 70.3, 29.9, 40.4, 309.3, None, None),
+]
+_NIFD_COLUMNS = [
+    "date", "household", "non_fin_corp", "gov_total",
+    "gov_central", "gov_local", "real_economy", "fin_asset", "fin_liability",
+]
+
+
+def _nifd_supplement_df() -> pd.DataFrame:
+    return pd.DataFrame(_NIFD_DATA, columns=_NIFD_COLUMNS)
+
+
 def fetch_leverage(conn):
     log("采集: 宏观杠杆率 ...")
     df = ak.macro_cnbs()
@@ -314,20 +386,17 @@ def fetch_leverage(conn):
     })
     result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
-    # Preserve manually-supplemented rows (e.g. NIFD quarterly reports) for
-    # dates newer than what ak.macro_cnbs() provides. When AKShare catches up,
-    # these rows are naturally superseded by fresher CNBS data.
+    # Fold NIFD official quarterly leverage (report-extracted, not self-computed)
+    # for dates newer than what ak.macro_cnbs() provides; goes through the same
+    # gated save_to_db. date>cnbs_max filter means once AKShare catches up, the
+    # NIFD rows for those dates drop out and fresher CNBS data supersedes them.
     cnbs_max = result["date"].max()
-    try:
-        existing = pd.read_sql(
-            "SELECT * FROM leverage WHERE date > ?", conn, params=[cnbs_max]
-        )
-        if not existing.empty:
-            result = pd.concat([result, existing], ignore_index=True)
-            result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-            log(f"  ℹ️  leverage: preserved {len(existing)} rows after CNBS max ({cnbs_max})")
-    except Exception:
-        pass  # leverage table may not exist yet (first run)
+    nifd_new = _nifd_supplement_df()
+    nifd_new = nifd_new[nifd_new["date"] > cnbs_max]
+    if not nifd_new.empty:
+        result = pd.concat([result, nifd_new], ignore_index=True)
+        log(f"  ℹ️  leverage: +{len(nifd_new)} NIFD rows after CNBS max ({cnbs_max})")
+    result = result.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
 
     save_to_db(result, "leverage", conn)
     return result
@@ -471,11 +540,12 @@ def fetch_household_income(conn):
     try:
         df = ak.macro_china_nbs_nation(
             kind="年度数据",
-            path="人民生活 > 居民人均可支配收入",
+            # NBS 目录树改版：收入指标收入「全国居民人均收入情况」三级分类下（原二级节点已不存在）
+            path="人民生活 > 全国居民人均收入情况",
             period="LAST30",
         )
-        # Find absolute-value per-capita row
-        idx = [i for i in df.index if "居民人均可支配收入" in str(i) and "累计" not in str(i)]
+        # Find absolute-value per-capita row（排除中位数/增速/累计变体，新路径一次返回 12 个指标行）
+        idx = [i for i in df.index if "居民人均可支配收入" in str(i) and "中位数" not in str(i) and "增长" not in str(i) and "累计" not in str(i)]
         if idx:
             row = df.loc[idx[0]]
             records = []
@@ -636,7 +706,7 @@ def fetch_demographics(conn):
     def _fetch_wb(indicator_code, col_name):
         try:
             url = f"https://api.worldbank.org/v2/country/CHN/indicator/{indicator_code}"
-            r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=15)
+            r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=60)
             r.raise_for_status()
             records = r.json()[1]
             rows = []

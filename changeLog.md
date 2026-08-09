@@ -52,6 +52,38 @@
 - ✅ frontend `vue-tsc --noEmit` 0 errors (re-run 2026-08-09); health light keyboard-accessible (Tab/Enter/Esc/focus return)
 - ✅ shared/openapi.json matches the live app (`app.openapi()` vs on-disk file, field-by-field equal); requirements.txt / package.json unchanged
 
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：NBS「居民人均可支配收入」采集路径适配国家统计局目录树改版——`人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况`（原二级指标节点已被收进三级分类，新路径一次返回 12 个指标行），行筛选同步排除「中位数/增长/累计」变体，确保取到绝对值行；22 项数据源连通性测试全部通过
+2. **[修复] `scripts/01_fetch_data.py`**：世界银行 API 超时 15s → 60s——该端点首个请求响应慢，15s 必然超时；60s 实测稳定（CHN 人口指标 66 年数据，至 2025）
+3. **[文档] `docs/data-sources-guide.md`**（v1.3→v1.4）：NBS 节由"失效"更新为"已恢复"（akshare 1.18.x 切换新站 API，2026-08-09 实测可用；指标目录重构，人均可支配收入路径改为 `人民生活 > 全国居民人均收入情况`）；修正货币供应量接口描述（`macro_china_supply_of_money` 现存在且生产在用）；新增世界银行超时注意与 22/22 全量连通性实测记录
+4. **[文档] `README.md`**：数据流水线 12→14 fetcher（补 `bond_yield`/`demographics` 两表及数据源说明）、`household_income` 状态更新、Python 版本 3.12→3.12+（实测 3.14.6）、手动采集命令改用 venv 解释器、数据库表数与徽章同步
+5. **[文档] `docs/architecture-upgrade.md`**：顶部加"迁移已完成、历史存档"状态横幅（迁移早已落地，避免误读为进行中方案）
+6. **[修复] `frontend/src/components/charts/options.ts`**：PMI 荣枯线 50 由琥珀实线 1.5px 改为隐晦灰色细虚线（`text3` #64748b @80%、1px、dashed）+ 同灰小字标注——退为背景维度参考，不再与「服务」序列（琥珀）撞色争焦；与四象限十字线、剪刀差零线统一参考线语汇。`markLineName` 参数化，顺带修正人口页 0 线误标「荣枯线 0」→「零线」
+7. **[文档] `README.md`**：PMI 荣枯线样式描述与设计系统 warn 用途同步实际实现
+
+### 说明
+
+- **环境修复（非代码）**：本机 `.venv312` 缺失 requirements.txt 声明的 akshare/requests，已按 requirements 补装（akshare 1.18.83 / requests 2.34.2，Python 3.14.6 下 import 与运行正常）——这是管道此前无法运行的直接原因
+
+### 验证
+
+- 浏览器截图对比（库存周期「PMI 多维」图）：改前琥珀实线醒目撞色 → 改后灰色细虚线隐晦可寻；人口页 0 线标签改「零线」
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: adapt NBS household-income path to the NBS catalog restructure — `人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况` (the indicator moved into a 3rd-level catalog that now returns 12 indicator rows); row filter additionally excludes median/growth/cumulative variants to keep the absolute-value row; all 22 datasource connectivity tests pass
+2. **[fix] `scripts/01_fetch_data.py`**: World Bank API timeout 15s → 60s — first request to the endpoint is slow, 15s always timed out; 60s verified stable (66 years of CHN population data, through 2025)
+3. **[docs] `docs/data-sources-guide.md`** (v1.3→v1.4): NBS section updated from "unavailable" to "recovered" (akshare 1.18.x switched to the new-site API, verified working 2026-08-09; catalog restructured, household-income path now `人民生活 > 全国居民人均收入情况`); corrected money-supply interface description (`macro_china_supply_of_money` now exists and is used in production); added World Bank timeout note and the 22/22 full connectivity test record
+4. **[docs] `README.md`**: data pipeline 12→14 fetchers (added `bond_yield`/`demographics` tables + source notes), `household_income` status updated, Python version 3.12→3.12+ (verified on 3.14.6), manual fetch commands now use the venv interpreter, DB table counts & badge synced
+5. **[docs] `docs/architecture-upgrade.md`**: added "migration completed, historical archive" status banner at top (the migration landed long ago; avoids misreading it as an in-flight plan)
+6. **[fix] `frontend/src/components/charts/options.ts`**: PMI 50 threshold restyled from bright amber solid 1.5px to a subdued thin dashed slate line (`text3` @80%, 1px, dashed) with a small same-gray label — recedes to a background dimension, no longer clashes with the amber 服务 series; matches the quadrant cross-hair / spread zero-line reference vocabulary. `markLineName` parameterized; also fixes the demographics zero line mislabeled "荣枯线 0" → "零线"
+7. **[docs] `README.md`**: PMI threshold style description + warn token usage synced with the implementation
+
+### Notes (English)
+
+- **Env fix (non-code)**: local `.venv312` was missing akshare/requests declared in requirements.txt; installed per requirements (akshare 1.18.83 / requests 2.34.2, imports & runs fine on Python 3.14.6) — this was the direct cause of the pipeline being unrunnable
+
 ### 首页重构与 AI 评论功能
 
 ### 重构
@@ -640,6 +672,156 @@
 ### Verification (English)
 
 - `vue-tsc --noEmit` 0 errors + `vite build` success; vendor-echarts +1.18KB gzip (AriaComponent expected); `aria` registered in both import + `use([...])`; `base.aria` propagates to all charts via `{...base, ...option}` (no chart overrides `aria`). Non-blocking notes: scatter/radar label text slightly off (still WCAG-compliant), `aria` not deep-merged (latent, no chart overrides so not triggered).
+
+---
+
+### run_app.sh 启动自检补 akshare（防刷新 exit 1 复发）
+
+### 修复
+
+1. **[修复] `run_app.sh`**：后端依赖自检之后新增采集依赖自检——`import akshare` 失败时 `pip install -q -r requirements.txt`。后端本身不 import akshare，但「刷新数据」的采集子进程（`scripts/01_fetch_data.py`）必须 import；缺它导致刷新 exit 1（`ModuleNotFoundError: akshare`）。重建 venv 后启动脚本自动补齐，防复发。
+
+### 验证
+
+- `bash -n run_app.sh` 语法 OK；akshare 已装时检查返回 0 跳过安装分支；未装时触发 `pip install -r requirements.txt`。
+
+### Fix (English)
+
+1. **[fix] `run_app.sh`**: after the backend-dependency self-check, add a collection-dependency self-check — on `import akshare` failure run `pip install -q -r requirements.txt`. The FastAPI backend does not import akshare, but the refresh collection subprocess (`scripts/01_fetch_data.py`) must; missing it made refresh exit 1 (`ModuleNotFoundError: akshare`). After a venv rebuild the startup script auto-installs it, preventing recurrence.
+
+### Verification (English)
+
+- `bash -n run_app.sh` OK; with akshare installed the check returns 0 (skips install); when missing it triggers `pip install -r requirements.txt`.
+
+---
+
+### 美林时钟新增「PPI 同比」图（源数据，无自加工）
+
+### 新功能
+
+1. **[新功能] `frontend/src/pages/MerrillClock.vue`**：新增「PPI 同比」GraphCard，`buildMultiLine(cpiPpi, [{ col: 'ppi_yoy', name: 'PPI同比' }], '%', 0)` 带 0 荣枯线（正=出厂价上行、负=下行）；复用现有 `cpiPpi` 取数（`derived_monthly.ppi_yoy` 为东财 `BASE_SAME` 源数据）。**零数据加工、零采集/衍生改动**（应需求不自行推导环比，只放源数据同比），样式与现有图一致。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；DOM 确认新卡渲染（ECharts canvas + aria 标签）；浏览器截图核对样式与现有多线/双轴图一致。
+
+### New Feature (English)
+
+1. **[feat] `frontend/src/pages/MerrillClock.vue`**: added a "PPI 同比" (PPI YoY) GraphCard via `buildMultiLine(cpiPpi, [{ col: 'ppi_yoy', name: 'PPI同比' }], '%', 0)` with a 0 boom/bust line; reuses the existing `cpiPpi` fetch (`derived_monthly.ppi_yoy` = eastmoney `BASE_SAME` source data). **Zero self-computation, zero fetch/derived changes** (per requirement, no self-derived MoM — source-provided YoY only); style consistent with existing charts.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; DOM confirms the new card renders (ECharts canvas + aria label); browser screenshot verifies style matches existing multi/dual-line charts.
+
+---
+
+### 杠杆率折进 NIFD 补充走闸门（补到 2026-03）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_leverage` 折进 NIFD 季度杠杆率（官方报告提取值，非自算）——`ak.macro_cnbs()` 滞后到 2024-12，而 NIFD 已发布 2025Q1–2026Q1。用 `date > cnbs_max` 过滤补齐滞后季度，并保证 AKShare 追上后 CNBS 自动取代；经 `save_to_db` 闸门落库；替换原"读 DB 保留行"逻辑。
+   （本提交同时包含此前工作区未提交的：`household_income` NBS 目录路径修正、`demographics` WorldBank 超时 15→60s。）
+
+### 验证
+
+- 临时库副本：85 行（80 CNBS + 5 NIFD）、max 2026-03、闸门接受（85>80 非缩水）；真实刷新后生产库 `leverage` max=2026-03，2025+ 五期齐全。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_leverage` folds in NIFD quarterly leverage (official report values, not self-computed) — `ak.macro_cnbs()` lags at 2024-12 while NIFD has published 2025Q1–2026Q1. A `date > cnbs_max` filter backfills the lagging quarters and lets fresher CNBS data supersede once AKShare catches up; goes through the gated `save_to_db`; replaces the old "preserve DB rows" logic.
+   (This commit also includes previously-uncommitted: `household_income` NBS path fix, `demographics` WorldBank timeout 15→60s.)
+
+### Verification (English)
+
+- Temp-copy test: 85 rows (80 CNBS + 5 NIFD), max 2026-03, gate accepted (85>80, not a shrink); after a real refresh the live `leverage` max=2026-03 with all five 2025+ quarters.
+
+---
+
+### PMI 切东财补到 2026-07（源滞后修复）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_pmi` 官方/非制造业改东财 `RPT_ECONOMY_PMI`（`MAKE_INDEX`→pmi_official、`NMAKE_INDEX`→pmi_non_mfg，实测到 2026-07；akshare 官方滞后约一年，与杠杆率同款"源滞后"），复用 `_fetch_eastmoney`，东财无数据回退 akshare；财新/财新服务东财无口径仍用 akshare。
+2. **排查结论**：GDP 为年度序列（`2026-01-01` 即最新年度点，2026-Q2 是年内季度非新年度点）不滞后、不切换；社融无免费当前源（东财无对应 reportName），滞后 2-3 月属正常发布滞后，接受。
+
+### 验证
+
+- 临时库 281 行、max 2026-07、列齐全、闸门接受（281>248 非缩水）；真实刷新后生产库 pmi max=2026-07，2026 全年 7 期官方值齐全。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_pmi` official/non-mfg switched to eastmoney `RPT_ECONOMY_PMI` (`MAKE_INDEX`→pmi_official, `NMAKE_INDEX`→pmi_non_mfg, current to 2026-07; akshare official lagged ~1yr, same "source lag" as leverage), reusing `_fetch_eastmoney` with akshare fallback; caixin/caixin-svc stay on akshare (eastmoney has no caixin).
+2. **Audit conclusion**: GDP is an annual series (`2026-01-01` = latest annual point; 2026-Q2 is intra-year, not a new annual point) — not stale, not switched; social financing has no free current source (eastmoney lacks the reportName), 2-3 month lag is normal publication lag — accepted.
+
+### Verification (English)
+
+- Temp-copy 281 rows, max 2026-07, columns intact, gate accepted (281>248, not a shrink); after real refresh live pmi max=2026-07 with all 7 official 2026 months.
+
+---
+
+### PMI 切东财保留 2008 前历史（修复审查发现的历史丢失）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_pmi` 改为 akshare 全历史（2005+）为底 + 东财（2008+ 更当前）`combine_first` 覆盖近期——修复上一提交切源时丢掉 2005-02..2007-12 共 35 个月历史的回归（东财序列自 2008-01 起；缩水闸门 0.8 地板未拦住 14% 侵蚀，独立审查发现）。
+
+### 验证
+
+- 临时库 331 行、min 2005-02、max 2026-07、2005-07 官方 35 期恢复；真实刷新后生产库 pmi min=2005-02 / max=2026-07。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_pmi` now uses akshare full-history (2005+) as base + eastmoney (2008+, more current) overlaid via `combine_first` — fixes the prior commit's regression that dropped 35 months (2005-02..2007-12) because eastmoney's series starts 2008-01 and the 0.8 shrink floor didn't catch the 14% erosion (found by independent review).
+
+### Verification (English)
+
+- Temp-copy 331 rows, min 2005-02, max 2026-07, 35 official 2005-07 rows restored; after real refresh live pmi min=2005-02 / max=2026-07.
+
+---
+
+### 美林页两图合一为「CPI vs PPI 环比」+ PPI 环比推导
+
+### 重构
+
+1. **[重构] `frontend/src/pages/MerrillClock.vue`**：删冗余「单独 PPI 同比」（ppi_yoy 已在「CPI vs PPI 同比」）与「CPI 同比 vs 环比」，合并为一张「CPI vs PPI 环比」双轴图，与同比图呼应（一张同比、一张环比）。行业调研：美林时钟轴用 CPI 同比；环比作领先/动能指标被行业广泛使用，故保留环比视图。
+2. **[新功能] `scripts/01_fetch_data.py`**：新增 `_derive_ppi_mom`——东财/akshare 均无免费 PPI 环比源（东财仅同比 BASE_SAME），由同比重建定基指数再求环比（行业标准推导，图注标明"推导值"）；ppi 表加 `ppi_mom` 列。
+3. **[新功能] `scripts/02_compute_derived.py`**：derived_monthly 合并 `ppi_mom`（列存在才并，兼容旧表）。
+
+### 验证
+
+- 推导值符号/量级随同比趋势一致（2026-03 +0.69 / 04 +2.36 / 06 −0.75）；刷新后 derived_monthly 含 ppi_mom；`vue-tsc` 0 + `vite build` 成功。
+
+### Refactor (English)
+
+1. **[refactor] `frontend/src/pages/MerrillClock.vue`**: removed redundant "PPI YoY" (ppi_yoy already in "CPI vs PPI YoY") and "CPI YoY vs MoM", combined into one "CPI vs PPI MoM" dual-axis chart echoing the YoY chart (one YoY, one MoM). Industry research: the Merrill clock axis uses CPI YoY; MoM is widely watched as a leading/momentum indicator, so the MoM view is kept.
+2. **[feat] `scripts/01_fetch_data.py`**: added `_derive_ppi_mom` — no free PPI-MoM source exists (eastmoney only has YoY BASE_SAME), so derive MoM from YoY via base-index reconstruction (industry-standard, labeled "derived"); ppi table gains `ppi_mom`.
+3. **[feat] `scripts/02_compute_derived.py`**: derived_monthly merges `ppi_mom` (only if the column exists, backward-compatible).
+
+### Verification (English)
+
+- Derived MoM sign/magnitude track the YoY trend (2026-03 +0.69 / 04 +2.36 / 06 −0.75); after refresh derived_monthly contains ppi_mom; `vue-tsc` 0 + `vite build` success.
+
+---
+
+### 图表图例统一中文化
+
+### 优化
+
+1. **[优化] `frontend/src/components/charts/options.ts`**：新增集中「列 key→中文图例名」映射 `COL_ZH`（采用 NBS/央行/NIFD 官方术语；CPI/PPI/M2/M1/PMI/LPR/GDP 等特有名词保留英文缩语，未收录 key 原样回退）；`buildDualAxisLine` 与 `buildStackedArea` 的序列名/双轴名改经 `zh()` 翻译——此前这两类图图例直接显示列 key（`cpi_yoy`/`household`/`non_fin_corp` 等英文）。全部调用点无需改动。
+2. **[优化] `frontend/src/pages/DebtCycle.vue`**：利率环境图「10Y国债」统一为「10年期国债」。
+
+### 验证
+
+- 债务周期图例=居民部门/非金融企业部门/政府部门、中央政府/地方政府；美林双轴=CPI同比/PPI同比、CPI环比/PPI环比（截图确认，轴名同步中文化）；`vue-tsc` 0 + `vite build` 成功。
+
+### Optimization (English)
+
+1. **[opt] `frontend/src/components/charts/options.ts`**: added a central col-key→Chinese-legend map `COL_ZH` (official NBS/PBoC/NIFD terminology; CPI/PPI/M2/M1/PMI/LPR/GDP keep English abbreviations; unmapped keys fall back to the raw key); `buildDualAxisLine` + `buildStackedArea` series/axis names now go through `zh()` — previously these charts showed raw column keys (`cpi_yoy`/`household`/`non_fin_corp`) as English legends. No call-site changes needed.
+2. **[opt] `frontend/src/pages/DebtCycle.vue`**: rate-env chart "10Y国债" → "10年期国债".
+
+### Verification (English)
+
+- Debt-cycle legends = 居民部门/非金融企业部门/政府部门 and 中央政府/地方政府; Merrill dual-axis = CPI同比/PPI同比 and CPI环比/PPI环比 (screenshot-verified, axis names localized too); `vue-tsc` 0 + `vite build` success.
 
 ---
 

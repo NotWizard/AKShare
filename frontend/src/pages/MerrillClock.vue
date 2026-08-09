@@ -17,7 +17,7 @@ const merrill = ref<CycleFrame | null>(null)
 // 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
 type Rec = Record<string, string | number | null>
 const cpiPpi = ref<Rec[]>([])   // cpi_yoy,ppi_yoy
-const cpiMom = ref<Rec[]>([])   // cpi_yoy,cpi_mom
+const cpiMom = ref<Rec[]>([])   // cpi_mom,ppi_mom (环比呼应图)
 let reqId = 0
 async function load() {
   const mine = ++reqId
@@ -27,7 +27,7 @@ async function load() {
     const [r, cp, cm] = await Promise.all([
       api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined),
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,ppi_yoy', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,cpi_mom', true),
+      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_mom,ppi_mom', true),
     ])
     if (mine !== reqId) return
     merrill.value = r; cpiPpi.value = cp.records; cpiMom.value = cm.records
@@ -53,8 +53,8 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
     <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading" :error="error">
       <EChart :option="buildDualAxisLine(cpiPpi, 'cpi_yoy', 'ppi_yoy')" height="300px" />
     </GraphCard>
-    <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀主轴）vs 环比（月度高频先行，0 上下波动）。" :loading="loading" :error="error">
-      <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
+    <GraphCard title="CPI vs PPI 环比" tip="居民消费价格 vs 工业生产者出厂价格环比（月度高频先行、0 上下波动），与同比图呼应。PPI 环比为同比推导值（东财无免费直接源）。" :loading="loading" :error="error">
+      <EChart :option="buildDualAxisLine(cpiMom, 'cpi_mom', 'ppi_mom')" height="260px" />
     </GraphCard>
   </div>
 </template>

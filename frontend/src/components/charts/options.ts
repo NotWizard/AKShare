@@ -7,6 +7,28 @@ import { hexA, mergePhaseSegments } from './utils'
 
 type Rec = Record<string, string | number | null>
 
+/** 列 key → 中文图例名（NBS / 央行 / NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等
+ *  特有名词保留英文缩语）。未收录的 key 原样回退。 */
+const COL_ZH: Record<string, string> = {
+  cpi_yoy: 'CPI同比', cpi_mom: 'CPI环比',
+  ppi_yoy: 'PPI同比', ppi_mom: 'PPI环比',
+  m2_yoy: 'M2同比', m1_yoy: 'M1同比', m0_yoy: 'M0同比',
+  m2_m1_spread: 'M2-M1剪刀差',
+  pmi_official: '官方PMI', pmi_caixin: '财新PMI',
+  pmi_non_mfg: '非制造业PMI', pmi_caixin_svc: '财新服务业PMI',
+  ip_yoy: '工业增加值同比', gdp_yoy: 'GDP同比',
+  household: '居民部门', non_fin_corp: '非金融企业部门',
+  gov_total: '政府部门', gov_central: '中央政府', gov_local: '地方政府',
+  real_economy: '实体经济部门',
+  lpr_1y: 'LPR 1年', lpr_5y: 'LPR 5年', real_rate: '实际利率', bond_10y: '10年期国债',
+  total: '社融增量', sf_stock_yoy: '社融存量增速',
+  new_rmb_loan: '新增人民币贷款', loan_yoy: '新增贷款同比',
+  urbanization_rate: '城镇化率', population: '年末总人口',
+  birth_rate: '出生率', natural_growth_rate: '自然增长率',
+  credit_impulse: '信贷脉冲',
+}
+const zh = (col: string): string => COL_ZH[col] ?? col
+
 /** Credit cycle flagship: M2 同比 line (connectNulls) + M2 趋势 dashed +
  *  phase-background markArea + the 1991–1996 source-gap markArea + caption. */
 export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string, any> {
@@ -68,14 +90,14 @@ export function buildDualAxisLine(
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: [
-      { type: 'value', name: aName ?? a, scale: true, ...baseAxis() },
-      { type: 'value', name: bName ?? b, scale: true, ...baseAxis({ splitLine: { show: false } }) },
+      { type: 'value', name: aName ?? zh(a), scale: true, ...baseAxis() },
+      { type: 'value', name: bName ?? zh(b), scale: true, ...baseAxis({ splitLine: { show: false } }) },
     ],
     series: [
-      { name: a, type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
+      { name: aName ?? zh(a), type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[a]),
         itemStyle: { color: aColor }, lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
-      { name: b, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
+      { name: bName ?? zh(b), type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[b]),
         itemStyle: { color: bColor }, lineStyle: { color: bColor, width: 2 } },
     ],
@@ -93,7 +115,7 @@ export function buildStackedArea(
     series: cols.map((c, i) => {
       const color = PALETTE[i % PALETTE.length]
       return {
-        name: c, type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
+        name: zh(c), type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
         itemStyle: { color },          // legend marker + area fill use the same color as the line
         areaStyle: { opacity: 0.12 }, // no explicit color → inherits itemStyle.color
         lineStyle: { width: 1.5, color },
@@ -209,9 +231,10 @@ export function buildBarLineCombo(
 
 /** Multi-line — N series on one value axis (e.g. PMI 官方+财新+非制造业, LPR 1Y+5Y).
  *  Single-column input also renders a one-series line.
- *  markLineAt: draw an emphasized reference line (e.g. PMI 荣枯线 50). */
+ *  markLineAt: draw a subdued reference line (e.g. PMI 荣枯线 50);
+ *  markLineName overrides the label (e.g. 零线 for the demographics zero line). */
 export function buildMultiLine(
-  derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number,
+  derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number, markLineName = '荣枯线',
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
   const series: Record<string, any>[] = cols.map((c, i) => {
@@ -227,11 +250,15 @@ export function buildMultiLine(
     // Attach the reference line to EVERY series, not just [0], so toggling any
     // one off in the legend still leaves the line on the others. It only
     // disappears when all series are hidden — which is correct.
+    // Subdued reference styling (same vocabulary as quadrant cross-hairs &
+    // spread zero line): thin dashed slate at reduced alpha — a background
+    // dimension, not a data-bright line (the old amber solid clashed with the
+    // amber 服务 series and out-shouted the data).
     series.forEach((s) => {
       s.markLine = {
         silent: true, symbol: ['none', 'none'],
-        lineStyle: { color: COLORS.warn, type: 'solid', width: 1.5 },
-        label: { formatter: '荣枯线 {c}', color: COLORS.warn, fontSize: 10, position: 'insideEndTop' },
+        lineStyle: { color: hexA(COLORS.text3, 0.8), type: 'dashed', width: 1 },
+        label: { formatter: `${markLineName} {c}`, color: hexA(COLORS.text3, 0.9), fontSize: 10, position: 'insideEndTop' },
         data: [{ yAxis: markLineAt }],
       }
     })

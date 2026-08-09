@@ -469,21 +469,22 @@ print(df.head())
 pip install akshare
 ```
 
-### 货币供应量（M2）
+### 货币供应量（M0/M1/M2）
 
 ```python
 import akshare as ak
 
-# M2 货币供应年率（年度数据）
-df = ak.macro_china_m2_yearly()
-print(df.head())
+# 月度货币供应量统计表（项目生产 fetch_money_supply 使用）
+df = ak.macro_china_supply_of_money()
 
-# 字段：日期, M2 货币和准货币（亿元）, M2 同比（%）
+# 字段：统计时间（如 "2026.6"）、货币和准货币（广义货币M2）、
+#       货币和准货币（广义货币M2）同比增长、货币(狭义货币M1)、
+#       货币(狭义货币M1)同比增长、流通中现金(M0) 等
+# 1978 起约 580+ 行（akshare 1.18.83 实测）
 ```
 
-> 注：AKShare 当前版本未提供独立的 M0/M1 月度供应函数。如需 M0/M1 数据，可通过
-> `ak.macro_china_money_supply()` 获取完整货币供应量统计表（含 M0、M1、M2 月度数据），
-> 或参考东方财富宏观数据页面手动导出。
+> 注：`ak.macro_china_supply_of_money()` 月度 M0/M1/M2 一体，项目生产直接使用。
+> 仅需 M2 年率时可用 `ak.macro_china_m2_yearly()`。
 
 ### GDP
 
@@ -696,10 +697,14 @@ A: AKShare 依赖上游数据源，上游接口可能变动。检查 AKShare 版
 pip install --upgrade akshare
 ```
 
-### Q: AKShare 找不到 `macro_china_supply_of_money`？
+### Q: AKShare 的 `macro_china_supply_of_money`？
 
-A: 该函数已被移除或从未存在。M2 年度数据请使用 `macro_china_m2_yearly()`，
-完整货币供应量统计表（含 M0/M1/M2 月度）请使用 `macro_china_money_supply()`。
+A: 该函数在当前 akshare 版本**可用**（1.18.83 实测正常，返回 1978 至今的月度
+M0/M1/M2 统计表），项目 `fetch_money_supply` 即使用它。本文档旧版曾记录其缺失
+（akshare 部分中间版本移除了该接口），升级 akshare 即可：
+```bash
+pip install --upgrade akshare
+```
 
 ### Q: Tushare 接口无权限？
 
@@ -745,37 +750,56 @@ A: 部分接口需要积分，详见：https://tushare.pro/document/1?doc_id=108
 
 ## 十一、已知数据源问题
 
-### NBS 国家统计局（data.stats.gov.cn）— 2026-03 起失效
+### NBS 国家统计局（data.stats.gov.cn）— 2026-03 改版失效 → 2026-08 已恢复
 
-**状态**：旧 API 已废弃，新 API 数据层未部署，当前不可用。
+**状态**：✅ 已恢复（2026-08-09 实测）。旧 API 仍被 WAF 封禁，但 akshare 1.18.x 已将
+`macro_china_nbs_nation()` 切换到新站 API，可正常取数。
 
 **时间线**：
 - 2026-03-25：NBS 发布[新版数据发布库上线公告](https://www.stats.gov.cn/xw/tjxw/tzgg/202603/t20260325_1962844.html)
-- 2026-03-27：新版正式上线
+- 2026-03-27：新版正式上线。旧 API（`easyquery.htm`）被 WAF UrlACL 规则精确拦截返回 403，
+  当时版本的 `macro_china_nbs_nation()` 硬编码旧路径，彻底失效
+- 2026-07-21：确认新站数据查询层（`getEsDataByCidAndDt`）尚未部署（404），文档记录为不可用
+- 2026-08-09：实测 akshare 1.18.83 重写后的 `macro_china_nbs_nation()`（走新站
+  `queryIndexTreeAsync` / `queryIndicatorsByCid` 等接口）**恢复可用**；同时发现**指标目录已重构**
 
-**旧 API（`easyquery.htm`）**：被 WAF UrlACL 规则精确拦截，返回 403。与 IP/频率无关，任何客户端均无法访问。AKShare 的 `macro_china_nbs_nation()` 硬编码此路径，彻底失效。
+**目录重构后的路径变化（重点）**：
+- 旧路径 `人民生活 > 居民人均可支配收入` 失效——原二级指标节点已不存在
+- 新路径：`人民生活 > 全国居民人均收入情况`——一次返回 12 个指标行
+  （绝对值/增速/中位数 × 总量/工资性/经营净/财产净/转移净）
+- 取数需筛行定位绝对值行：排除「中位数/增长/累计」变体（项目 `fetch_household_income` 已于 2026-08-09 修复）
+- `人口 > 总人口` 路径不变，仍可用
 
-**新 API（`/dg/website/publicrelease/web/external`）**：
-- 元数据层正常：`/new/queryIndexTreeAsync`（目录树）、`/new/queryIndicatorsByCid`（指标列表）均可用
-- 数据查询层未部署：`getEsDataByCidAndDt` 所有路径变体返回 404
-- 搜索端点 `/query` 返回"服务异常"HTML 页面
-- 前端静态资源（JS/CSS）全部 404
+**受影响的采集函数**：`fetch_household_income`（✅ 2026-08-09 已修复，换新路径）、
+`fetch_demographics`（保留 World Bank 替代方案，生产代码未变）
 
-**结论**：新平台仅完成了元数据迁移，实际数据查询的后端服务（Elasticsearch 层）尚未上线。
-
-**受影响的采集函数**：`fetch_demographics`、`fetch_household_income`
-
-**替代方案**：
+**替代方案**（失效期间建立，demographics 沿用至今）：
 - `demographics` → World Bank API（`SP.POP.TOTL` / `SP.URB.TOTL.IN.ZS` / `SP.DYN.CBRT.IN` / `SP.DYN.CDRT.IN`），覆盖 1960-2025
-- `household_income` → 前端未使用此表，暂不替代；如后续需要可考虑 NBS 统计年鉴 CSV 或 World Bank `NY.GDP.PCAP.PP.KD`
+- ⚠️ `api.worldbank.org` 首个请求响应很慢（timeout 15s 必然超时），生产已将超时 15s → 60s
 
-**新 API 参数备忘**（待数据层上线后适配）：
+**新 API 参数备忘**（akshare 内部已使用，备查）：
 - Base URL：`https://data.stats.gov.cn/dg/website/publicrelease/web/external`
 - 目录树：GET `/new/queryIndexTreeAsync?pid=&code=1`（code: 1=月度, 2=季度, 3=年度）
 - 指标列表：GET `/new/queryIndicatorsByCid?cid=<dataset_uuid>`
-- 数据查询：POST `/getEsDataByCidAndDt`，body: `{cid, indicatorIds[], das["000000000000"], dts["YYYYMMDD-YYYYMMDD"], showType:"1", rootId}`
 - 无需鉴权
+
+### 全量连通性实测（2026-08-09）— 22/22 可达
+
+按 `scripts/01_fetch_data.py` 的生产调用方式逐项测试 14 个 fetcher（akshare 1.18.83 / Python 3.14.6），全部可达：
+
+| 类别 | 项数 | 结果 |
+|---|---|---|
+| 货币供应/GDP/工业/LPR/社融/新增信贷/杠杆率（akshare） | 8 | ✅ |
+| PMI × 4 口径（akshare） | 4 | ✅ |
+| CPI/PPI（东方财富 datacenter API 直连） | 2 | ✅ |
+| 房价指数 × 5 城市对（akshare） | 5 | ✅ |
+| NBS 人均可支配收入/总人口（akshare 新接口） | 2 | ✅（前者需新路径） |
+| 10 年国债收益率（中债信息网直连） | 1 | ✅ |
+| 人口/城镇化（World Bank） | 1 | ✅（需 timeout ≥ 60s） |
+
+前提：项目 venv 需按 requirements.txt 装好 akshare/requests（曾缺失，2026-08-09 已补装）。
+注意：`household_income` / `demographics` 两张表在 NBS 失效期间未生成，修复后下次运行采集管道会自动重建。
 
 ---
 
-*文档版本：1.3 | 更新时间：2026-07-21*
+*文档版本：1.4 | 更新时间：2026-08-09*

@@ -71,7 +71,8 @@ def compute_derived(conn):
     if not ppi.empty:
         ppi_m = ppi.copy()
         ppi_m["date"] = pd.to_datetime(ppi_m["date"])
-        monthly = monthly.merge(ppi_m[["date", "ppi_yoy"]], on="date", how="left")
+        ppi_cols = ["date", "ppi_yoy"] + (["ppi_mom"] if "ppi_mom" in ppi_m.columns else [])
+        monthly = monthly.merge(ppi_m[ppi_cols], on="date", how="left")
 
     # 合并 PMI
     if not pmi.empty:
