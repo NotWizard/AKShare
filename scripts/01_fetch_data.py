@@ -201,6 +201,32 @@ def fetch_cpi(conn):
 # ─────────────────────────────────────────────
 # 4. PPI 年率 (东方财富)
 # ─────────────────────────────────────────────
+def _derive_ppi_mom(df: pd.DataFrame) -> pd.DataFrame:
+    """由 PPI 同比重建定基指数、再求环比(%)。
+
+    东财/akshare 均无免费 PPI 环比源（东财只有同比 BASE_SAME），
+    此为行业标准的同比→定基→环比推导（P_t = P_{t-12}×(1+同比)），
+    用户确认接受推导；前端图注标明"推导值"。
+    """
+    level, rows = {}, []
+    prev_dt = None
+    for _, r in df.sort_values("date").iterrows():
+        dt = pd.to_datetime(r["date"]); yoy = r["ppi_yoy"]
+        y12 = dt - pd.DateOffset(months=12)
+        if pd.notna(yoy) and y12 in level:
+            lv = level[y12] * (1 + yoy / 100)
+        elif pd.notna(yoy):
+            lv = 100.0                      # 种子月
+        else:
+            lv = level.get(prev_dt)         # 同比缺失→沿用上期水平
+        if lv is not None:
+            level[dt] = lv
+            if prev_dt is not None and prev_dt in level and level[prev_dt]:
+                rows.append((r["date"], (lv / level[prev_dt] - 1) * 100))
+        prev_dt = dt
+    return pd.DataFrame(rows, columns=["date", "ppi_mom"])
+
+
 def fetch_ppi(conn):
     log("采集: PPI 年率 ...")
     em = _fetch_eastmoney("RPT_ECONOMY_PPI", {
@@ -223,6 +249,8 @@ def fetch_ppi(conn):
     result = pd.concat([old, em], ignore_index=True)
     result = result.drop_duplicates(subset=["date"], keep="last")
     result = result.sort_values("date").reset_index(drop=True)
+    # PPI 环比(推导值): 无免费直接源, 由同比重建定基指数再求环比, 图注标明推导值
+    result = result.merge(_derive_ppi_mom(result), on="date", how="left")
     save_to_db(result, "ppi", conn)
     return result
 

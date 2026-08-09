@@ -729,6 +729,30 @@
 
 ---
 
+### 美林页两图合一为「CPI vs PPI 环比」+ PPI 环比推导
+
+### 重构
+
+1. **[重构] `frontend/src/pages/MerrillClock.vue`**：删冗余「单独 PPI 同比」（ppi_yoy 已在「CPI vs PPI 同比」）与「CPI 同比 vs 环比」，合并为一张「CPI vs PPI 环比」双轴图，与同比图呼应（一张同比、一张环比）。行业调研：美林时钟轴用 CPI 同比；环比作领先/动能指标被行业广泛使用，故保留环比视图。
+2. **[新功能] `scripts/01_fetch_data.py`**：新增 `_derive_ppi_mom`——东财/akshare 均无免费 PPI 环比源（东财仅同比 BASE_SAME），由同比重建定基指数再求环比（行业标准推导，图注标明"推导值"）；ppi 表加 `ppi_mom` 列。
+3. **[新功能] `scripts/02_compute_derived.py`**：derived_monthly 合并 `ppi_mom`（列存在才并，兼容旧表）。
+
+### 验证
+
+- 推导值符号/量级随同比趋势一致（2026-03 +0.69 / 04 +2.36 / 06 −0.75）；刷新后 derived_monthly 含 ppi_mom；`vue-tsc` 0 + `vite build` 成功。
+
+### Refactor (English)
+
+1. **[refactor] `frontend/src/pages/MerrillClock.vue`**: removed redundant "PPI YoY" (ppi_yoy already in "CPI vs PPI YoY") and "CPI YoY vs MoM", combined into one "CPI vs PPI MoM" dual-axis chart echoing the YoY chart (one YoY, one MoM). Industry research: the Merrill clock axis uses CPI YoY; MoM is widely watched as a leading/momentum indicator, so the MoM view is kept.
+2. **[feat] `scripts/01_fetch_data.py`**: added `_derive_ppi_mom` — no free PPI-MoM source exists (eastmoney only has YoY BASE_SAME), so derive MoM from YoY via base-index reconstruction (industry-standard, labeled "derived"); ppi table gains `ppi_mom`.
+3. **[feat] `scripts/02_compute_derived.py`**: derived_monthly merges `ppi_mom` (only if the column exists, backward-compatible).
+
+### Verification (English)
+
+- Derived MoM sign/magnitude track the YoY trend (2026-03 +0.69 / 04 +2.36 / 06 −0.75); after refresh derived_monthly contains ppi_mom; `vue-tsc` 0 + `vite build` success.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
