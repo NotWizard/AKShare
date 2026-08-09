@@ -72,7 +72,7 @@ function latest(col: string): number | null {
     </GraphCard>
 
     <GraphCard title="出生率与自然增长率" tip="出生率（‰）与自然增长率（‰，= 出生率 − 死亡率）。0 线为人口零增长。" :loading="loading" :error="error">
-      <EChart :option="buildMultiLine(dm, [{ col: 'birth_rate', name: '出生率' }, { col: 'natural_growth_rate', name: '自然增长率' }], '‰', 0)" height="300px" />
+      <EChart :option="buildMultiLine(dm, [{ col: 'birth_rate', name: '出生率' }, { col: 'natural_growth_rate', name: '自然增长率' }], '‰', 0, '零线')" height="300px" />
     </GraphCard>
   </div>
 </template>

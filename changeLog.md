@@ -2,6 +2,20 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### 修复
+
+1. **[修复] `frontend/src/components/charts/options.ts`**：PMI 荣枯线 50 由琥珀实线 1.5px 改为隐晦灰色细虚线（`text3` #64748b @80%、1px、dashed）+ 同灰小字标注——退为背景维度参考，不再与「服务」序列（琥珀）撞色争焦；与四象限十字线、剪刀差零线统一参考线语汇。`markLineName` 参数化，顺带修正人口页 0 线误标「荣枯线 0」→「零线」
+2. **[文档] `README.md`**：PMI 荣枯线样式描述与设计系统 warn 用途同步实际实现
+
+### Fix (English)
+
+1. **[fix] `frontend/src/components/charts/options.ts`**: PMI 50 threshold restyled from bright amber solid 1.5px to a subdued thin dashed slate line (`text3` @80%, 1px, dashed) with a small same-gray label — recedes to a background dimension, no longer clashes with the amber 服务 series; matches the quadrant cross-hair / spread zero-line reference vocabulary. `markLineName` parameterized; also fixes the demographics zero line mislabeled "荣枯线 0" → "零线"
+2. **[docs] `README.md`**: PMI threshold style description + warn token usage synced with the implementation
+
+### 验证
+
+- 浏览器截图对比（库存周期「PMI 多维」图）：改前琥珀实线醒目撞色 → 改后灰色细虚线隐晦可寻；人口页 0 线标签改「零线」
+
 ### 首页重构与 AI 评论功能
 
 ### 重构
