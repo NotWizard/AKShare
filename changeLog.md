@@ -2,6 +2,134 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### M3：信号历史表 + Overview 相位翻转高亮
+
+### 新功能
+
+1. **[新功能] `scripts/signal_history.py`**：signal_history 表（ts/data_as_of/composite/merrill/credit/inventory/debt，append-only，无主键不去重）；`01_fetch_data.py` main() 成功提交写 manifest 后追加一行 composite+四相位快照（ts 复用本次 manifest、data_as_of=derived_monthly MAX(date) 取 YYYY-MM，口径同 commentary），空计划提前返回不写、写入失败仅 ⚠️ 告警不影响已提交数据；不进 TABLE_SPECS 闸门（提交后派生快照），/table 白名单放行浏览；日志行用 📈 不含 ✅（refresh.py 进度计数依赖 ✅ 行数）
+2. **[新功能] `GET /api/v1/signals/history`**：倒序（rowid DESC）limit（默认 60，1–500），多取 1 行保证窗口内最旧一行也能对到前值；行附 flips 翻转标注（任一框架相位相对相邻更早一行变化，framework/prev/curr，None 参与比较）；表缺失 → `{"items": []}` 不 500（fresh install）；Pydantic 三新 schema（PhaseFlip/SignalHistoryRow/SignalHistory），`schemas/__init__` 导出 SignalHistory，shared/openapi.json 重导
+3. **[新功能] Overview「信号与相位历史」卡片**：load() Promise.all 增第三路 `getSignalHistory()`，随 `refresh.lastRefreshedAt` 自动重载；每行日期+composite（符号着色 up/down）+四相位 chip（复用 phaseLabel/phaseColor）；翻转行 warn 细环高亮（ring-warn/40 bg-warn/5）、变化 chip 边框加深（border-warn/60）、「仅看翻转」原生 checkbox 过滤；role=list、翻转行 tabindex=0 + aria-label 播报 from→to（中文相位）、非翻转行不设假焦点；`phases.ts` PHASE_LABELS 补 4 个 debt 相位中文（leveraging_boom/stable_growth/leveraging_bust/stable_contraction）；零新依赖
+4. **[新功能] `backend/tests/test_signal_history.py`**：翻转检测构造序列单测（无翻转/单框架方向/同帧多框架/None↔值/窗口最旧行 flips=[]）、live 副本临时库两次写入落两行（ts 有序、composite/四相位与 compute_signals 一致、data_as_of YYYY-MM）、端点 shape（倒序/7 存储字段+flips/flips 与相邻差分一致）+ limit（1 生效/0→422）+ 临时空库 read_history → []
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过；`backend/tests` pytest 54 passed（新增 test_signal_history 7 例：翻转检测 3 + 两写两行 1 + 端点 shape/limit/缺表 3）
+- ✅ worktree 内增量实跑：7 表 updated / 0 kept_previous，signal_history +1 行（ts=2026-08-09T22:35:05 == manifest.ts；data_as_of=2026-06；composite 0 + recession/tightening/active_restocking/beautiful_deleveraging 与 `GET /api/v1/signals` 逐项一致）；临时库单测连写两次 → 恰 2 行不去重
+- ✅ `GET /api/v1/signals/history` 200 倒序、flips 标注与相邻差分一致、`?limit=1` ≤1 行、`?limit=0` 422、临时空库 read_history → []；`GET /api/v1/table/signal_history` 200 可浏览；TABLE_SPECS/validate() 零改动
+- ✅ `vue-tsc --noEmit` 0 error；requirements.txt / package.json / tokens.css 零变化；analysis/、commentary、HealthLight.vue、release_calendar、vintage/双源逻辑零触碰；新增日志行不含 ✅
+
+### M3: Signal History Table + Phase-Flip Highlights (English)
+
+### New Features
+
+1. **[feat] `scripts/signal_history.py`**: append-only signal_history table (ts/data_as_of/composite + four phases, no PK, no dedup); `01_fetch_data.py` main() appends one composite+four-phase snapshot row after a successful commit + manifest write (reuses manifest ts; data_as_of = derived_monthly MAX(date) as YYYY-MM, same convention as commentary); skipped on empty incremental plan, failure only warns (⚠️) without affecting committed data; outside TABLE_SPECS gating (post-commit derived snapshot), browsable via /table whitelist; log line uses 📈, never ✅ (refresh.py progress counts ✅ lines)
+2. **[feat] `GET /api/v1/signals/history`**: newest-first (rowid DESC) with limit (default 60, 1–500), fetches limit+1 rows so even the oldest in-window row has a predecessor to diff against; rows annotated with flips (any framework phase changed vs the adjacent older row: framework/prev/curr, None participates); missing table → `{"items": []}` not 500 (fresh install); three new Pydantic schemas (PhaseFlip/SignalHistoryRow/SignalHistory), SignalHistory exported from `schemas/__init__`, shared/openapi.json re-exported
+3. **[feat] Overview "信号与相位历史" card**: load()'s Promise.all gains a third leg `getSignalHistory()`, auto-reloads with `refresh.lastRefreshedAt`; each row = date + composite (sign-colored up/down) + four phase chips (reuses phaseLabel/phaseColor); flip rows get a warn ring (ring-warn/40 bg-warn/5), changed chips a deeper border (border-warn/60), native "仅看翻转" checkbox filter; role=list, flip rows tabindex=0 + aria-label announcing from→to (Chinese phase names), no fake focus on non-flip rows; `phases.ts` PHASE_LABELS gains the 4 debt phases (leveraging_boom/stable_growth/leveraging_bust/stable_contraction); zero new deps
+4. **[feat] `backend/tests/test_signal_history.py`**: constructed-sequence flip-detection unit tests (no-flip / single-framework direction / multi-framework same frame / None↔value / oldest-in-window flips=[]), two-writes-two-rows on a temp copy of the live DB (ts order, composite+phases match compute_signals, data_as_of YYYY-MM), endpoint shape (newest-first / 7 stored fields + flips / flips consistent with adjacent diffs) + limit (1 honored / 0→422) + read_history on an empty temp DB → []
+
+### Verification
+
+- ✅ `scripts/_pipeline_test.py` all pass; `backend/tests` pytest 54 passed (new: 7 test_signal_history cases — 3 flip detection + 1 two-writes-two-rows + 3 endpoint shape/limit/missing-table)
+- ✅ in-worktree incremental live run: 7 tables updated / 0 kept_previous, signal_history +1 row (ts=2026-08-09T22:35:05 == manifest.ts; data_as_of=2026-06; composite 0 + recession/tightening/active_restocking/beautiful_deleveraging field-for-field equal to `GET /api/v1/signals`); unit test writing twice to a temp DB → exactly 2 rows, no dedup
+- ✅ `GET /api/v1/signals/history` 200 newest-first, flips consistent with adjacent diffs, `?limit=1` ≤1 row, `?limit=0` 422, read_history on empty temp DB → []; `GET /api/v1/table/signal_history` 200 browsable; TABLE_SPECS/validate() untouched
+- ✅ `vue-tsc --noEmit` 0 errors; requirements.txt / package.json / tokens.css unchanged; analysis/, commentary, HealthLight.vue, release_calendar, vintage/dual-source logic untouched; new log lines contain no ✅
+
+### M2：vintage 快照+diff、核心序列双源比对、财政/外需指标层、值域断言与 golden 扩层
+
+### 新功能
+
+1. **[新功能] `scripts/_pipeline.py`**：`snapshot_vintage()` + `commit_staging()` 在原子提升前把 live 复制进 `data/vintages/`（12 份轮转，返回快照 Path），`01_fetch_data.py` 把相对路径记入 manifest.vintage；`TABLE_SPECS` 增 `ranges` 值域（money_supply/cpi/ppi/pmi/gdp/social_finance/bond_yield 按 live 实测 min–max 校准）与 fiscal/external_demand 两条新 spec；`validate()` 非空值越界 >10% 拒收（整表量纲错必拦、个别修订吸收）
+2. **[新功能] `scripts/diff_vintage.py`**：live vs 最近 vintage（可 `--vintage` 指定基线）逐表行数差 + 10 条核心序列最新值差；JSON/人类可读双输出；无差异 exit 0、有差异 exit 1；无 vintage 友好提示 exit 0
+3. **[新功能] `scripts/dual_sources.py`**：m2_yoy/cpi_yoy/ppi_yoy/gdp_yoy/pmi_official/y_10y 六序列 primary vs 独立次源比对（rate：绝对差≤0.3pp 或相对≤2%；level：相对≤2%；含浮点边界 ε），只对本次抓取成功的表跑、只读 staging 永不覆盖 primary；结果写 `sources[table].dual`（series/source/date/primary/secondary/diff/divergent/error），次源失败只记 error 不红不黄；`refresh.py sources_health` 新增一支 warning：dual divergence→黄灯；social_finance 次源（东财 SHRZGM 及 4 变体）实测全 EMPTY 不纳入
+4. **[新功能] 财政+外需层**：`fetch_fiscal`（NBS 月度预算收入/支出，2015- 起，指标行→长表按月外连接）、`fetch_external_demand`（NBS 货物进出口千美元→亿美元 ÷1e5 round(2) + 美国 ISM 制造业 PMI），fetchers 14→16；`release_calendar.py` 新增两表发布窗口；`/table` 白名单放行；`EXPECTED_FETCH_STEPS` 16→18；前端新页「财政与外需」（`/fiscal-external`，router+sidebar 可达，复用 buildMultiLine/buildSpreadChart，零新 builder，COL_ZH +8 词）
+5. **[新功能] `backend/tests/test_derived_golden.py`**：derived_monthly 抽样列（m2_m1_spread/real_rate/pmi_ma6）在 live DB 副本上用 02 的 compute_derived 重算，与存储值逐行相等（eps 1e-6，DB 缺失自动 skip）
+
+### 调整
+
+1. **[调整] ISM 日期归一**：实测 jin10 ISM 日期**恒为发布日**（月初首个工作日，含 1 日），设计 §2.2 的 day==1 保留规则会把「8 月 1 日发布」留在 8 月并与「9 月 2 日发布→8 月」撞出 120 个重复日期；改用独立 `_norm_ism_date`（数据月恒为上月），重建后 0 重复、2025-08 数据月=48.7 与冻结现状一致
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过（新增 ranges 5% 通过/15% 拒收/×1000 拒收 + vintage 快照/12 份轮转/commit 返回快照）；`scripts/dual_sources_test.py` 全过（容差三支路、jin10/ISM 归一含跨年、GDP 只匹配第1季度）；`scripts/release_calendar_test.py` 全过（键集 14→16 + 新窗口用例）
+- ✅ `backend/tests` pytest 29 passed（新增 test_derived_golden 1 例、test_sources_health dual divergence→yellow / match+error 仍 green 2 例）
+- ✅ worktree 内 `--full` 实跑 ×2：16 表 updated / 0 kept_previous；vintage 每次恰增 1 份；manifest.sources 6 表含 dual 且全 convergent（m2_yoy 8.0=8.0、gdp_yoy 5.0=5.0、cpi_yoy 0.0=0.0@2025-07-01、ppi_yoy −3.6=−3.6@2025-07-01、pmi_official 49.4=49.4@2025-08-01、y_10y 1.7114=1.7114@2026-08-01），social_finance 无 dual 键；`GET /api/v1/sources/health` green
+- ✅ `fiscal` 127 行至 2026-04、`external_demand` 678 行（贸易块 137 月至 2026-05，ISM 冻结 2025-08 数据月后为 NaN）；`GET /api/v1/table/fiscal`、`/table/external_demand` 200
+- ✅ `diff_vintage.py`：首跑正确报新表/新增行（exit 1）、二跑准确捕获 external_demand 713→678（−35，ISM 修复）、自比对 identical exit 0、`--json` 形状符合设计
+- ✅ 前端 `vue-tsc --noEmit` 0 error；requirements.txt / package.json / tokens.css 零变化；signals.py、02_compute_derived.py、commentary、HealthLight.vue 零触碰
+
+### M2: Vintage Snapshots + Diff, Dual-Source Checks, Fiscal/External-Demand Layers, Range Assertions & Golden Derived Tests (English)
+
+### New Features
+
+1. **[feat] `scripts/_pipeline.py`**: `snapshot_vintage()` + `commit_staging()` copy the live DB into `data/vintages/` before the atomic promotion (rotate 12, returns the snapshot Path); the relative path is recorded as manifest.vintage; `TABLE_SPECS` gains `ranges` value domains (calibrated on live DB min–max) plus fiscal/external_demand specs; `validate()` rejects when >10% of non-null values fall outside range (whole-table unit errors blocked, isolated revisions absorbed)
+2. **[feat] `scripts/diff_vintage.py`**: live vs latest vintage (or `--vintage` baseline) — per-table row deltas + latest-value deltas of 10 core series; JSON + human-readable; exit 0 when identical, 1 when changed; friendly exit 0 when no vintage exists
+3. **[feat] `scripts/dual_sources.py`**: six series (m2_yoy/cpi_yoy/ppi_yoy/gdp_yoy/pmi_official/y_10y) cross-checked against independent secondaries (rate: ≤0.3pp abs or ≤2% rel; level: ≤2% rel; float-boundary ε), only for tables fetched OK, read-only on staging, primary never overwritten; results in `sources[table].dual`, secondary failures only logged; `sources_health` gains dual-divergence → yellow; social_finance excluded (all EM SHRZGM probes EMPTY)
+4. **[feat] fiscal + external-demand layers**: `fetch_fiscal` (NBS monthly budget revenue/expenditure since 2015) and `fetch_external_demand` (NBS USD trade, thousand→hundred-million ÷1e5, + US ISM PMI); fetchers 14→16, calendar windows, `/table` whitelist, `EXPECTED_FETCH_STEPS` 16→18; new frontend page 财政与外需 (`/fiscal-external`, router+sidebar, reuses existing builders, zero new builder, COL_ZH +8)
+5. **[feat] `backend/tests/test_derived_golden.py`**: sampled derived_monthly columns (m2_m1_spread/real_rate/pmi_ma6) recomputed via 02's compute_derived on a copy of the live DB must equal stored values row-by-row (eps 1e-6, skips when DB absent)
+
+### Adjustments
+
+1. **[adjust] ISM date normalization**: jin10 ISM dates are ALWAYS release dates (first business day, including the 1st); the design's day==1-keep rule produced 120 duplicate dates; dedicated `_norm_ism_date` (data month is always the previous month) — 0 duplicates after rebuild, 2025-08 data month = 48.7 matching the frozen source
+
+### Verification
+
+- ✅ `scripts/_pipeline_test.py` all pass (new: ranges 5% pass / 15% reject / ×1000 reject + vintage snapshot/rotation/commit-return); `scripts/dual_sources_test.py` all pass; `scripts/release_calendar_test.py` all pass (16-table key set + new windows)
+- ✅ `backend/tests` pytest 29 passed (new: test_derived_golden + 2 dual-divergence health cases)
+- ✅ two real `--full` runs in the worktree: 16 tables updated / 0 kept_previous; exactly one new vintage per run; six dual records all convergent (e.g. m2_yoy 8.0=8.0, y_10y 1.7114=1.7114@2026-08-01); social_finance has no dual key; health green
+- ✅ `fiscal` 127 rows to 2026-04, `external_demand` 678 rows (trade to 2026-05, ISM NaN after frozen 2025-08); both `/table` endpoints 200
+- ✅ `diff_vintage.py` reported first-run additions (exit 1), then exactly the ISM rebuild (external_demand 713→678), self-compare identical exit 0, JSON shape per design
+- ✅ `vue-tsc --noEmit` 0 errors; requirements.txt / package.json / tokens.css untouched; signals.py, 02_compute_derived.py, commentary, HealthLight.vue untouched
+
+### M1：数据源健康探针 + 发布日历增量抓取 + 可选 launchd 调度
+
+### 新功能
+
+1. **[新功能] `scripts/release_calendar.py`**：发布日历字典 `TABLE_CALENDAR`（14 表 kind/months/days 窗口/channel 及依据注释）+ 纯函数 `should_fetch(table, today, force)`——release 型表只在发布窗口内抓（宁宽勿窄），market 型（bond_yield）恒抓，未知表 fail-open
+2. **[新功能] `scripts/01_fetch_data.py`**：`--full` 参数绕过日历；计划行 `📋 计划抓取 K/N 表（全量|增量）`；窗口内零表时提前返回（不 backup、不开 staging、不写 manifest）；`_MANIFEST` 新增 `sources` 键（14 fetcher 有序列表：table/channel/ok/elapsed_s/error/consecutive_failures/last_success），连败计数读上次 last_run.json 递增/清零，窗口外跳过的表整条沿用
+3. **[新功能] `backend/app/core/refresh.py`**：纯函数 `sources_health(manifest)`（任一源 2 连败→red；1 连败或 kept_previous warning→yellow；其余→green；无 sources→green+updated_at=null）+ `read_sources_health()`（永不抛异常）；`run_refresh(full=False)` 子进程追加 `--full`；进度解析 `计划抓取 (\d+)/` 自适应 expected=K+2；`EXPECTED_FETCH_STEPS` 修正 15→16（14 fetcher + 2 衍生）
+4. **[新功能] `backend/app/api/v1/sources.py` + `schemas/sources.py`**：`GET /api/v1/sources/health` 恒 200，形状 = SourcesHealth（SourceHealth 列表），只读 manifest 请求时推导、无缓存无新存储
+5. **[新功能] `backend/app/api/v1/refresh.py`**：`POST /refresh` 与 `GET /refresh/stream` 新增查询参数 `full: bool`，透传 run_refresh
+6. **[新功能] `frontend/src/components/layout/HealthLight.vue`**：RefreshBar 健康灯——绿/黄/红取 up/warn/down 令牌（红加细环）、无运行记录灰点；popover 列 14 源（表名/通道/最后成功/✓/warning/error）+「全量刷新」次按钮 + 增量提示；role=status aria-label 随状态播报，dialog Esc 关闭焦点归还，@vueuse/core onClickOutside 点击外部关闭（零新依赖）
+7. **[新功能] `frontend/src/stores/refresh.ts`**：`health`/`loadHealth()`（失败静默→灰点），`stream(full)` 追加 `?full=1`、done 后刷新健康；`client.ts` 增 `getSourcesHealth()`/`triggerRefresh(full?)`；`types.ts` 增 SourceHealth/SourcesHealth 接口
+8. **[新功能] `scripts/schedule/`**：launchd 三件套（com.macro.refresh.plist 模板 + install/uninstall 脚本），每日 10:07 触发，默认不安装，日志落 `data/refresh_schedule.log`
+
+### 调整
+
+1. **[调整] `scripts/_pipeline.py`**：cpi/ppi `min_rows` 300/250 → 200/200——东财当前全国 CPI/PPI 序列约 223/246 行（较早期覆盖缩短），旧下限导致新库永远拒收；对已有表的缩水防护仍由 distinct-date 反缩水县闸承担
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过；`scripts/release_calendar_test.py` 全过（2026-08-09 复跑确认）
+- ✅ `backend/tests` pytest 26 passed（含新增 test_sources_health.py 红/黄/绿/沿用/无 manifest + TestClient 端点形状）
+- ✅ worktree 内 `01_fetch_data.py` 增量/`--full` 实跑：manifest.sources 14 条、窗口 skip、空计划提前返回
+- ✅ 前端 `vue-tsc --noEmit` 0 error（2026-08-09 复跑确认）；健康灯键盘可达（Tab/Enter/Esc/焦点归还）
+- ✅ shared/openapi.json 与 live app 一致（`app.openapi()` 与盘上文件逐字段比对相等）；requirements.txt / package.json 零变化
+
+### M1: Source Health Probe + Calendar-Driven Incremental Fetch + Optional launchd Schedule (English)
+
+### New Features (English)
+
+1. **[feat] `scripts/release_calendar.py`**: `TABLE_CALENDAR` dict (14 tables: kind/months/day-windows/channel with rationale) + pure `should_fetch(table, today, force)` — release tables only fetched inside their release window (wide over narrow), market table (bond_yield) always fetched, unknown tables fail-open
+2. **[feat] `scripts/01_fetch_data.py`**: `--full` bypasses the calendar; plan line `📋 计划抓取 K/N 表（全量|增量）`; zero tables in window → early return (no backup/staging/manifest); `_MANIFEST` gains `sources` (ordered 14-fetcher list: table/channel/ok/elapsed_s/error/consecutive_failures/last_success), failure counters incremented/reset from previous last_run.json, window-skipped tables carried over verbatim
+3. **[feat] `backend/app/core/refresh.py`**: pure `sources_health(manifest)` (any source ≥2 consecutive failures → red; 1 failure or kept_previous warning → yellow; else green; no sources → green + updated_at=null) + never-raising `read_sources_health()`; `run_refresh(full=False)` appends `--full`; progress parses `计划抓取 (\d+)/` to adapt expected=K+2; `EXPECTED_FETCH_STEPS` corrected 15→16 (14 fetchers + 2 derived)
+4. **[feat] `backend/app/api/v1/sources.py` + `schemas/sources.py`**: `GET /api/v1/sources/health` always 200, shape = SourcesHealth; reads manifest on request, no cache, no new storage
+5. **[feat] `backend/app/api/v1/refresh.py`**: `POST /refresh` and `GET /refresh/stream` gain `full: bool` query param, passed through to run_refresh
+6. **[feat] `frontend/src/components/layout/HealthLight.vue`**: RefreshBar health light — green/yellow/red from up/warn/down tokens (red gets a thin ring), grey dot when no run record; popover lists 14 sources (table/channel/last-success/✓/warning/error) + secondary "全量刷新" button + incremental hint; role=status aria-label announces state changes, dialog Esc closes with focus return, @vueuse/core onClickOutside (zero new deps)
+7. **[feat] `frontend/src/stores/refresh.ts`**: `health`/`loadHealth()` (silent failure → grey dot), `stream(full)` appends `?full=1` and reloads health on done; `client.ts` adds `getSourcesHealth()`/`triggerRefresh(full?)`; `types.ts` adds SourceHealth/SourcesHealth
+8. **[feat] `scripts/schedule/`**: launchd trio (com.macro.refresh.plist template + install/uninstall scripts), daily 10:07, NOT installed by default, logs to `data/refresh_schedule.log`
+
+### Adjustments (English)
+
+1. **[adjust] `scripts/_pipeline.py`**: cpi/ppi `min_rows` 300/250 → 200/200 — eastmoney's current national CPI/PPI series is ~223/246 rows (shorter than the historical coverage the old floors were calibrated on), which permanently rejected them on a fresh DB; erosion protection for existing tables remains the distinct-date shrink guard
+
+### Verification (English)
+
+- ✅ `scripts/_pipeline_test.py` all pass; `scripts/release_calendar_test.py` all pass (re-run 2026-08-09)
+- ✅ `backend/tests` pytest 26 passed (incl. new test_sources_health.py red/yellow/green/carry-over/no-manifest + TestClient endpoint shape)
+- ✅ in-worktree `01_fetch_data.py` incremental/`--full` live runs: manifest.sources 14 entries, window skips, empty-plan early return
+- ✅ frontend `vue-tsc --noEmit` 0 errors (re-run 2026-08-09); health light keyboard-accessible (Tab/Enter/Esc/focus return)
+- ✅ shared/openapi.json matches the live app (`app.openapi()` vs on-disk file, field-by-field equal); requirements.txt / package.json unchanged
+
 ### 修复
 
 1. **[修复] `scripts/01_fetch_data.py`**：NBS「居民人均可支配收入」采集路径适配国家统计局目录树改版——`人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况`（原二级指标节点已被收进三级分类，新路径一次返回 12 个指标行），行筛选同步排除「中位数/增长/累计」变体，确保取到绝对值行；22 项数据源连通性测试全部通过

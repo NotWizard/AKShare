@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import MetricTile from '@/components/layout/MetricTile.vue'
 import CommentaryCard from '@/components/layout/CommentaryCard.vue'
-import type { SignalSummary } from '@/api/types'
+import ChartTip from '@/components/controls/ChartTip.vue'
+import { phaseColor, phaseLabel } from '@/design/phases'
+import type { SignalHistoryRow, SignalSummary } from '@/api/types'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
@@ -15,6 +17,8 @@ const error = ref<string | null>(null)
 
 const kpiDm = ref<Rec[]>([])        // latest-first for KPI latest(); no align
 const signals = ref<SignalSummary | null>(null)
+const history = ref<SignalHistoryRow[]>([])   // newest first
+const onlyFlips = ref(false)
 let reqId = 0
 
 function latest(col: string): number | null {
@@ -32,17 +36,33 @@ async function load() {
   error.value = null
   const st = filters.start ?? undefined, en = filters.end ?? undefined
   try {
-    const [kpi, s] = await Promise.all([
+    const [kpi, s, h] = await Promise.all([
       api.getDerivedMonthly(st, en, 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'),
       api.getSignals(),
+      api.getSignalHistory(),
     ])
     if (mine !== reqId) return
     kpiDm.value = kpi.records.slice().reverse()  // latest first
     signals.value = s
+    history.value = h.items
   } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
 void A
+
+const FRAMEWORKS = ['merrill', 'credit', 'inventory', 'debt'] as const
+type Fw = typeof FRAMEWORKS[number]
+const FW: Record<Fw, string> = { merrill: '美林', credit: '信用', inventory: '库存', debt: '债务' }
+const historyRows = computed(() => onlyFlips.value ? history.value.filter(r => r.flips.length) : history.value)
+const isFlipped = (r: SignalHistoryRow, f: Fw) => r.flips.some(fl => fl.framework === f)
+const rowAria = (r: SignalHistoryRow) =>
+  `${r.ts.slice(0, 10)} 综合信号 ${r.composite}` +
+  (r.flips.length ? '；' + r.flips.map(fl =>
+    `${FW[fl.framework as Fw]}相位 ${phaseLabel(fl.prev)} → ${phaseLabel(fl.curr)}`).join('；') : '')
+
+const historyTip = `每次成功刷新记录一行：综合信号 [-4,+4] 与四框架最新相位；任一框架相位相对上一条变化即翻转，翻转行以 warn 细环高亮。
+
+取数：/api/v1/signals/history → signal_history 表（01_fetch 成功提交后由 scripts/signal_history.py 追加，ts 与 manifest 同源）。`
 
 const tiles = [
   { label: 'M2 同比', col: 'm2_yoy', suffix: '%', tip: `广义货币供应量 M2 同比增速，反映市场整体流动性，增速上行通常对应宽货币。
@@ -97,5 +117,38 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
       <div>M1 → PPI 领先约 <b class="text-text">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('m1_ppi_max_corr') }}）</div>
       <div>剪刀差 → CPI 领先约 <b class="text-text">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('spread_cpi_max_corr') }}）</div>
     </div>
+
+    <section class="bg-card border border-border rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-text">信号与相位历史<ChartTip :text="historyTip" /></h3>
+        <label class="flex items-center gap-1.5 text-xs text-text-2 cursor-pointer">
+          <input v-model="onlyFlips" type="checkbox" class="accent-warn"> 仅看翻转
+        </label>
+      </div>
+      <ol role="list" class="space-y-1">
+        <li v-for="r in historyRows" :key="r.ts"
+            class="grid grid-cols-[5.5rem_2.5rem_1fr] items-center gap-3 px-2 py-1.5 rounded-lg"
+            :class="r.flips.length ? 'ring-1 ring-warn/40 bg-warn/5' : ''"
+            :tabindex="r.flips.length ? 0 : undefined"
+            :aria-label="rowAria(r)">
+          <span class="text-xs text-text-3">{{ r.ts.slice(0, 10) }}</span>
+          <span class="text-xs font-bold text-center"
+                :class="r.composite > 0 ? 'text-up' : r.composite < 0 ? 'text-down' : 'text-text-2'">
+            {{ r.composite > 0 ? '+' : '' }}{{ r.composite }}
+          </span>
+          <span class="flex flex-wrap gap-1">
+            <span v-for="f in FRAMEWORKS" :key="f"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-surface text-[11px] text-text-2"
+                  :class="isFlipped(r, f) ? 'border-warn/60 text-text' : 'border-border'">
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ background: phaseColor(r[f]) }" />
+              {{ FW[f] }}·{{ phaseLabel(r[f]) }}
+            </span>
+          </span>
+        </li>
+      </ol>
+      <p v-if="!loading && !historyRows.length" class="text-xs text-text-3">
+        {{ history.length ? '暂无翻转行——取消「仅看翻转」可查看全部快照。' : '暂无历史——每次成功刷新后记录一条快照。' }}
+      </p>
+    </section>
   </div>
 </template>

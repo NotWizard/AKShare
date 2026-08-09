@@ -33,6 +33,23 @@ export interface RefreshResult {
   detail?: string | null
 }
 
+export interface SourceHealth {
+  table: string
+  channel: string
+  ok: boolean
+  elapsed_s: number | null
+  error: string | null
+  consecutive_failures: number
+  last_success: string | null
+  warning: string | null
+}
+
+export interface SourcesHealth {
+  status: 'green' | 'yellow' | 'red'
+  updated_at: string | null
+  sources: SourceHealth[]
+}
+
 export interface RealEstateAssessment {
   leverage_space_score?: number
   price_momentum_score?: number
@@ -55,4 +72,25 @@ export interface Commentary {
   stale: boolean
   status: 'ok' | 'generating' | 'empty' | 'error'
   msg: string | null
+}
+
+export interface PhaseFlip {
+  framework: string            // merrill | credit | inventory | debt
+  prev: string | null
+  curr: string | null
+}
+
+export interface SignalHistoryRow {
+  ts: string
+  data_as_of: string | null
+  composite: number
+  merrill: string | null
+  credit: string | null
+  inventory: string | null
+  debt: string | null
+  flips: PhaseFlip[]
+}
+
+export interface SignalHistory {
+  items: SignalHistoryRow[]
 }

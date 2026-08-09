@@ -24,14 +24,17 @@ def status():
 
 
 @router.post("", response_model=RefreshResult)
-def trigger():
-    """Run the fetch pipeline (blocks ~30s; cleared caches on success)."""
-    result = refresh.run_refresh()
+def trigger(full: bool = False):
+    """Run the fetch pipeline (blocks ~30s; cleared caches on success).
+
+    ``full=true`` bypasses the release calendar (fetch all tables).
+    """
+    result = refresh.run_refresh(full=full)
     return RefreshResult(**result)
 
 
 @router.get("/stream")
-def stream():
+def stream(full: bool = False):
     """SSE: real-time progress (0.0 → 1.0) then the final result.
 
     Runs the blocking refresh on a worker thread and polls a queue from the
@@ -52,7 +55,7 @@ def stream():
         q.put(frac)
 
     def worker():
-        result_box["r"] = refresh.run_refresh(progress_cb=cb, stop_event=stop_event)
+        result_box["r"] = refresh.run_refresh(progress_cb=cb, stop_event=stop_event, full=full)
         q.put(None)  # sentinel: refresh finished
 
     threading.Thread(target=worker, daemon=True).start()

@@ -63,6 +63,18 @@
               "title": "Cols"
             },
             "description": "comma-separated column subset"
+          },
+          {
+            "name": "align_start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "if true, start from the earliest date where ALL requested value cols are non-null in the SAME row (so charts don't begin with a long empty run). Respects an explicit `start` (takes the later of the two). If any requested col is all-NaN, the filter is skipped (graceful degradation: returns full table from the user-provided start or 1978).",
+              "default": false,
+              "title": "Align Start"
+            },
+            "description": "if true, start from the earliest date where ALL requested value cols are non-null in the SAME row (so charts don't begin with a long empty run). Respects an explicit `start` (takes the later of the two). If any requested col is all-NaN, the filter is skipped (graceful degradation: returns full table from the user-provided start or 1978)."
           }
         ],
         "responses": {
@@ -97,6 +109,81 @@
         "summary": "Derived Quarterly",
         "operationId": "derived_quarterly_api_v1_derived_quarterly_get",
         "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DerivedFrame"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/table/{name}": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Raw Table",
+        "description": "Generic slice of any table (e.g. house_price, leverage).",
+        "operationId": "raw_table_api_v1_table__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
           {
             "name": "start",
             "in": "query",
@@ -250,6 +337,52 @@
         }
       }
     },
+    "/api/v1/signals/history": {
+      "get": {
+        "tags": [
+          "signals"
+        ],
+        "summary": "History",
+        "description": "信号快照历史（倒序；每次成功刷新一行，附相位翻转标注 flips）。",
+        "operationId": "history_api_v1_signals_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 60,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/refresh/status": {
       "get": {
         "tags": [
@@ -278,8 +411,20 @@
           "refresh"
         ],
         "summary": "Trigger",
-        "description": "Run the fetch pipeline (blocks ~30s; cleared caches on success).",
+        "description": "Run the fetch pipeline (blocks ~30s; cleared caches on success).\n\n``full=true`` bypasses the release calendar (fetch all tables).",
         "operationId": "trigger_api_v1_refresh_post",
+        "parameters": [
+          {
+            "name": "full",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Full"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -287,6 +432,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -300,14 +455,153 @@
           "refresh"
         ],
         "summary": "Stream",
-        "description": "SSE: real-time progress (0.0 → 1.0) then the final result.\n\nRuns the blocking refresh on a worker thread and polls a queue from the\ngenerator so progress lines stream as the fetcher emits them (not buffered\nuntil completion).",
+        "description": "SSE: real-time progress (0.0 → 1.0) then the final result.\n\nRuns the blocking refresh on a worker thread and polls a queue from the\ngenerator so progress lines stream as the fetcher emits them (not buffered\nuntil completion). Supports cancellation: if the client disconnects, the\nworker is signaled to stop early (kills subprocess + releases lockfile).",
         "operationId": "stream_api_v1_refresh_stream_get",
+        "parameters": [
+          {
+            "name": "full",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Full"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-estate": {
+      "get": {
+        "tags": [
+          "real-estate"
+        ],
+        "summary": "Real Estate",
+        "description": "3D real-estate assessment (leverage space / rate / price momentum).\n\nAccepts repeated ``?cities=A&cities=B`` params (robust vs proxies that\ndon't decode commas); defaults to the 10 default cities when omitted.",
+        "operationId": "real_estate_api_v1_real_estate_get",
+        "parameters": [
+          {
+            "name": "cities",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cities"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commentary": {
+      "get": {
+        "tags": [
+          "commentary"
+        ],
+        "summary": "Get Commentary",
+        "description": "Latest AI commentary (or status=generating/empty).",
+        "operationId": "get_commentary_api_v1_commentary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Commentary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commentary/regenerate": {
+      "post": {
+        "tags": [
+          "commentary"
+        ],
+        "summary": "Regenerate",
+        "description": "Re-run the model on current data (sync). Returns the new commentary.",
+        "operationId": "regenerate_api_v1_commentary_regenerate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Commentary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources/health": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Health",
+        "description": "数据源健康（红/黄/绿）— 读 manifest 纯函数推导，无新存储、无缓存。",
+        "operationId": "health_api_v1_sources_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesHealth"
+                }
               }
             }
           }
@@ -333,6 +627,84 @@
   },
   "components": {
     "schemas": {
+      "Commentary": {
+        "properties": {
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "composite_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composite Score"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "default": false
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          },
+          "msg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Msg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Commentary"
+      },
       "CycleFrame": {
         "properties": {
           "series": {
@@ -428,6 +800,41 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "PhaseFlip": {
+        "properties": {
+          "framework": {
+            "type": "string",
+            "title": "Framework"
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev"
+          },
+          "curr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "framework"
+        ],
+        "title": "PhaseFlip"
+      },
       "RefreshResult": {
         "properties": {
           "status": {
@@ -436,7 +843,8 @@
               "ok",
               "busy",
               "error",
-              "unknown"
+              "unknown",
+              "cancelled"
             ],
             "title": "Status"
           },
@@ -490,6 +898,103 @@
         ],
         "title": "RefreshResult"
       },
+      "SignalHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignalHistoryRow"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SignalHistory"
+      },
+      "SignalHistoryRow": {
+        "properties": {
+          "ts": {
+            "type": "string",
+            "title": "Ts"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "composite": {
+            "type": "integer",
+            "title": "Composite"
+          },
+          "merrill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merrill"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit"
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory"
+          },
+          "debt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt"
+          },
+          "flips": {
+            "items": {
+              "$ref": "#/components/schemas/PhaseFlip"
+            },
+            "type": "array",
+            "title": "Flips",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "composite"
+        ],
+        "title": "SignalHistoryRow"
+      },
       "SignalSummary": {
         "properties": {
           "merrill": {
@@ -537,6 +1042,115 @@
           "interpretation"
         ],
         "title": "SignalSummary"
+      },
+      "SourceHealth": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "elapsed_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed S"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "consecutive_failures": {
+            "type": "integer",
+            "title": "Consecutive Failures",
+            "default": 0
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "channel",
+          "ok"
+        ],
+        "title": "SourceHealth"
+      },
+      "SourcesHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "green",
+              "yellow",
+              "red"
+            ],
+            "title": "Status"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceHealth"
+            },
+            "type": "array",
+            "title": "Sources",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SourcesHealth"
       },
       "ValidationError": {
         "properties": {

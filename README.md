@@ -92,7 +92,7 @@
 │  scripts/_pipeline.py + 01_fetch_data.py + 02_compute_derived│
 └─────────────────────────────────────────────────────────────┘
                       │
-              data/macro_data.db (SQLite, 14 原始 + 2 衍生 + commentary)
+              data/macro_data.db (SQLite, 16 原始 + 2 衍生 + commentary + signal_history)
 ```
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
@@ -143,12 +143,13 @@ AKShare/
 ├── scripts/                     # 采集与衍生计算（后端复用）
 │   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
 │   ├── _pipeline_test.py        # 管道离线测试（15/15）
-│   ├── 01_fetch_data.py         # 宏观数据采集（14 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
+│   ├── 01_fetch_data.py         # 宏观数据采集（16 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
 ├── data/                        # SQLite 数据库（gitignored）
-│   ├── macro_data.db            # 14 张原始表 + derived_monthly/derived_quarterly + commentary
+│   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary + signal_history
 │   ├── backups/                 # 采集前自动备份（留 10 份）
+│   ├── vintages/                # 提交前审计快照（留 12 份，供 scripts/diff_vintage.py 比对）
 │   └── last_run.json            # 上次采集审计 manifest
 │
 ├── shared/openapi.json          # OpenAPI 契约（供前端 codegen）
@@ -193,7 +194,8 @@ cd frontend && npm run dev
 ### 手动采集 / 重算衍生
 
 ```bash
-.venv312/bin/python scripts/01_fetch_data.py     # 采集（走闸门管道：暂存→校验→原子切换→备份→manifest）
+.venv312/bin/python scripts/01_fetch_data.py     # 采集（默认按发布日历增量；走闸门管道：暂存→校验→原子切换→备份→manifest）
+.venv312/bin/python scripts/01_fetch_data.py --full  # 全量采集（绕过发布日历）
 .venv312/bin/python scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarterly
 ```
 
@@ -205,7 +207,7 @@ cd frontend && npm run dev
 
 ### 原始数据采集
 
-`scripts/01_fetch_data.py` 采集 14 类宏观指标（AKShare 为主，CPI/PPI 走东方财富数据中心、国债收益率直连中债信息网、人口数据走世界银行），清洗后经**闸门管道**落 SQLite：
+`scripts/01_fetch_data.py` 采集 16 类宏观指标（AKShare 为主，CPI/PPI 走东方财富数据中心、国债收益率直连中债信息网、人口数据走世界银行、财政/外需走 NBS 月度），清洗后经**闸门管道**落 SQLite：
 
 | # | 表 | 指标 | 频率 |
 |---|---|---|---|
@@ -223,6 +225,10 @@ cd frontend && npm run dev
 | 12 | `household_income` | 居民可支配收入（NBS；2026-03 改版曾失效，2026-08-09 已修复为 akshare 1.18 新路径）| 年 |
 | 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样）| 月 |
 | 14 | `demographics` | 总人口/城镇化率/出生率/自然增长率（世界银行）| 年 |
+| 15 | `fiscal` | 国家财政预算收入/支出累计值 + 累计增长（NBS 月度，2015- 起）| 月 |
+| 16 | `external_demand` | 货物进出口美元口径（NBS 月度）+ 美国 ISM 制造业 PMI | 月 |
+
+> 注：`fiscal` / `external_demand` 不进衍生计算，经 `/table/{name}` 直通前端「财政与外需」页。
 
 > 注：`household_income` / `demographics` 两张表在 NBS 失效期间未生成，修复后（2026-08-09）下次采集自动重建。数据源现状与实测记录详见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md)。
 
@@ -248,6 +254,18 @@ cd frontend && npm run dev
 
 > 注：`derived_quarterly` 以 leverage 季频为锚、GDP 年频经 `merge_asof` + ffill 填充到各季，各部门杠杆率及季度变化列已填充（旧实现因 GDP 年频 `YYYY-01-01` 与 leverage 季末 `YYYY-{03,06,09,12}` 等值 merge 日期不重叠而全 NULL，已修复）。债务图表仍直读 `leverage` 原始表（见 DebtCycle.vue），`cycle_debt` 也直读 leverage。
 
+### 定时刷新（可选，launchd）
+
+默认**不安装**。需要每日自动采集时手动安装（macOS launchd，每日 10:07 触发，晚于 NBS 09:30 晨间发布）：
+
+```bash
+scripts/schedule/schedule_install.sh    # 安装（幂等，重装自动先卸载旧任务）
+scripts/schedule/schedule_uninstall.sh  # 卸载
+```
+
+- 按发布日历过滤：窗口外的表自动跳过，窗口外日期近乎空转，成本可忽略
+- 运行日志：`data/refresh_schedule.log`
+
 ---
 
 ## 后端 API
@@ -261,6 +279,7 @@ FastAPI（`:8000`），OpenAPI 文档 `http://localhost:8000/docs`，契约导�
 | `GET /api/v1/table/{name}` | 任意原始表切片（house_price/leverage…）|
 | `GET /api/v1/cycles/{merrill\|credit\|inventory\|debt}` | 周期分类 + 最新阶段 |
 | `GET /api/v1/signals` | 综合信号 `[-4,+4]` + 各框架阶段 |
+| `GET /api/v1/signals/history` | 信号快照历史（倒序 + 相位翻转标注 flips）|
 | `GET /api/v1/real-estate?cities=…` | 房地产三维评估（雷达数据）|
 | `GET /api/v1/refresh/status` | 上次刷新 manifest |
 | `POST /api/v1/refresh` | 触发闸门管道（阻塞）|

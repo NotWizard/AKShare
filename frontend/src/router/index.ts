@@ -20,6 +20,7 @@ export const router = createRouter({
     { path: '/debt-cycle', component: lazy('DebtCycle'), meta: { title: '债务周期', icon: '◆' } },
     { path: '/real-estate', component: lazy('RealEstate'), meta: { title: '房地产市场', icon: '▧' } },
     { path: '/demographics', component: lazy('Demographics'), meta: { title: '人口与城镇化', icon: '◎' } },
+    { path: '/fiscal-external', component: lazy('FiscalExternal'), meta: { title: '财政与外需', icon: '◫' } },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
 })
