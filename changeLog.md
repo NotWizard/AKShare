@@ -709,6 +709,26 @@
 
 ---
 
+### PMI 切东财保留 2008 前历史（修复审查发现的历史丢失）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_pmi` 改为 akshare 全历史（2005+）为底 + 东财（2008+ 更当前）`combine_first` 覆盖近期——修复上一提交切源时丢掉 2005-02..2007-12 共 35 个月历史的回归（东财序列自 2008-01 起；缩水闸门 0.8 地板未拦住 14% 侵蚀，独立审查发现）。
+
+### 验证
+
+- 临时库 331 行、min 2005-02、max 2026-07、2005-07 官方 35 期恢复；真实刷新后生产库 pmi min=2005-02 / max=2026-07。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_pmi` now uses akshare full-history (2005+) as base + eastmoney (2008+, more current) overlaid via `combine_first` — fixes the prior commit's regression that dropped 35 months (2005-02..2007-12) because eastmoney's series starts 2008-01 and the 0.8 shrink floor didn't catch the 14% erosion (found by independent review).
+
+### Verification (English)
+
+- Temp-copy 331 rows, min 2005-02, max 2026-07, 35 official 2005-07 rows restored; after real refresh live pmi min=2005-02 / max=2026-07.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

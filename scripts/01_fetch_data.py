@@ -239,29 +239,39 @@ def fetch_pmi(conn):
     })
     df_cx = ak.macro_china_cx_pmi_yearly()
 
+    # akshare 官方/非制造业 = 全历史(2005+)底；东财(2008+ 更当前) 覆盖近期，
+    # 合并避免切源丢掉 2008 前历史（审查发现的回归）。
+    df_off = ak.macro_china_pmi_yearly()
+    off_ak = pd.DataFrame({
+        "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
+        "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
+    }).dropna(subset=["pmi_official"])
+    try:
+        df_non = ak.macro_china_non_man_pmi()
+        non_ak = pd.DataFrame({
+            "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
+            "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
+        }).dropna(subset=["pmi_non_mfg"])
+    except Exception:
+        non_ak = pd.DataFrame(columns=["date", "pmi_non_mfg"])
+
     if em.empty:
-        log("  ⚠️ 东财 PMI 无数据，官方/非制造业回退 akshare")
-        df_off = ak.macro_china_pmi_yearly()
-        off = pd.DataFrame({
-            "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
-            "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
-        }).dropna(subset=["pmi_official"])
-        try:
-            df_non = ak.macro_china_non_man_pmi()
-            non = pd.DataFrame({
-                "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
-                "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
-            }).dropna(subset=["pmi_non_mfg"])
-        except Exception:
-            non = pd.DataFrame(columns=["date", "pmi_non_mfg"])
+        log("  ⚠️ 东财 PMI 无数据，官方/非制造业仅用 akshare")
+        off, non = off_ak, non_ak
     else:
         em2 = pd.DataFrame({
             "date": pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01"),
             "pmi_official": pd.to_numeric(em["pmi_official"], errors="coerce"),
             "pmi_non_mfg": pd.to_numeric(em["pmi_non_mfg"], errors="coerce"),
         }).dropna(subset=["pmi_official"])
-        off = em2[["date", "pmi_official"]]
-        non = em2[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"])
+        # 东财优先(更当前), akshare 补东财没有的早期月份
+        off = em2[["date", "pmi_official"]].merge(off_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        off["pmi_official"] = off["pmi_official_em"].combine_first(off["pmi_official_ak"])
+        off = off[["date", "pmi_official"]].dropna(subset=["pmi_official"])
+        non = em2[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"]).merge(
+            non_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        non["pmi_non_mfg"] = non["pmi_non_mfg_em"].combine_first(non["pmi_non_mfg_ak"])
+        non = non[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"])
 
     cx = pd.DataFrame({
         "date": pd.to_datetime(df_cx["日期"]).dt.strftime("%Y-%m-01"),
