@@ -44,6 +44,31 @@ def test_yellow_kept_previous_warning():
     assert h["sources"][0]["warning"] == "kept previous — empty result"
 
 
+def test_yellow_dual_divergence_warning():
+    src = _src("cpi")
+    src["dual"] = {"series": "cpi_yoy", "source": "ak.macro_china_cpi_yearly",
+                   "date": "2025-07-01", "primary": 1.5, "secondary": 0.0,
+                   "diff": 1.5, "divergent": True, "error": None}
+    h = sources_health({"ts": "t", "tables": {"cpi": {"status": "updated"}},
+                        "sources": [src]})
+    assert h["status"] == "yellow"
+    assert "dual-source divergence" in h["sources"][0]["warning"]
+
+
+def test_green_dual_match_or_error_only():
+    # divergent=False（含次源失败只记 error）→ 不触发 warning
+    for dual in ({"series": "cpi_yoy", "divergent": False, "primary": 0.0,
+                  "secondary": 0.0, "date": "2025-07-01", "error": None},
+                 {"series": "cpi_yoy", "divergent": False, "primary": None,
+                  "secondary": None, "date": None, "error": "Timeout: x"}):
+        src = _src("cpi")
+        src["dual"] = dual
+        h = sources_health({"ts": "t", "tables": {"cpi": {"status": "updated"}},
+                            "sources": [src]})
+        assert h["status"] == "green"
+        assert h["sources"][0]["warning"] is None
+
+
 def test_red_two_consecutive_failures():
     h = sources_health({"ts": "t", "tables": {},
                         "sources": [_src("ppi", cf=2, ok=False, error="Timeout: x")]})

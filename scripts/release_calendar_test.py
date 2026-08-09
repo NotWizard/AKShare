@@ -21,15 +21,15 @@ def check(name, cond, detail=""):
         _failures.append(name)
 
 
-# 14 表全集 = 01_fetch_data.py main() fetchers 列表
+# 16 表全集 = 01_fetch_data.py main() fetchers 列表
 TABLES = [
     "money_supply", "gdp", "cpi", "ppi", "pmi", "leverage", "social_finance",
     "lpr", "industrial", "house_price", "household_income", "new_credit",
-    "bond_yield", "demographics",
+    "bond_yield", "demographics", "fiscal", "external_demand",
 ]
 
 print("\n=== 1. calendar coverage ===")
-check("TABLE_CALENDAR covers all 14 tables", set(TABLE_CALENDAR) >= set(TABLES))
+check("TABLE_CALENDAR covers all 16 tables", set(TABLE_CALENDAR) >= set(TABLES))
 
 print("\n=== 2. window logic ===")
 check("lpr on 20th True", should_fetch("lpr", datetime.date(2026, 8, 20)))
@@ -42,6 +42,10 @@ check("gdp in Jan window True", should_fetch("gdp", datetime.date(2026, 1, 16)))
 check("industrial on Mar 15 True", should_fetch("industrial", datetime.date(2026, 3, 15)))
 check("demographics in Aug False", not should_fetch("demographics", datetime.date(2026, 8, 9)))
 check("demographics in Sep True", should_fetch("demographics", datetime.date(2026, 9, 9)))
+check("fiscal mid-month True", should_fetch("fiscal", datetime.date(2026, 8, 15)))
+check("fiscal before window False", not should_fetch("fiscal", datetime.date(2026, 8, 8)))
+check("external_demand in window True", should_fetch("external_demand", datetime.date(2026, 8, 10)))
+check("external_demand after window False", not should_fetch("external_demand", datetime.date(2026, 8, 20)))
 
 print("\n=== 3. fail-open rules ===")
 check("bond_yield always True (market)", should_fetch("bond_yield", datetime.date(2026, 8, 9)))

@@ -51,6 +51,19 @@ _lpr = pd.DataFrame({"date": pd.date_range("2013-10-01", periods=152, freq="MS")
 check("lpr no false-reject at equal distinct dates", P.validate(_lpr, "lpr", prev_distinct_dates=152)[0])
 check("household_income small annual ok", P.validate(good_money(10).rename(columns={"m2_yoy": "income_abs"})[["date", "income_abs"]], "household_income")[0])
 
+# value-range gate: >10% of non-null values outside the calibrated domain → reject
+def _cpi_with_outliers(n_bad, n=200):
+    return pd.DataFrame({"date": pd.date_range("2010-01-01", periods=n, freq="MS").strftime("%Y-%m-%d"),
+                         "cpi_yoy": [99.0] * n_bad + [2.0] * (n - n_bad)})
+
+ok, _ = P.validate(_cpi_with_outliers(10), "cpi")          # 5% outside → pass
+check("ranges: 5% outliers pass", ok)
+ok, reason = P.validate(_cpi_with_outliers(30), "cpi")     # 15% outside → reject
+check("ranges: 15% outliers rejected", not ok)
+check("ranges: reason names col + bounds", "cpi_yoy" in reason and "[-5, 10]" in reason)
+ok, reason = P.validate(_cpi_with_outliers(0).assign(cpi_yoy=2000.0), "cpi")
+check("ranges: whole-table ×1000 unit error rejected", not ok)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2) Full staged flow: good + bad + partial fetchers, atomic commit
@@ -100,11 +113,41 @@ with tempfile.TemporaryDirectory() as d:
     live_hash_mid = pd.io.sql.read_sql("SELECT * FROM money_supply", sqlite3.connect(live)).to_csv()
     check("live UNTOUCHED before commit (crash-safe)", live_hash_mid == live_hash_before)
 
-    # ④ commit (atomic) → live now reflects staging
-    P.commit_staging(staging, live)
+    # ④ commit (atomic) → live now reflects staging; pre-commit live lands in vintage
+    vintage_dir = os.path.join(d, "vintages")
+    vintage = P.commit_staging(staging, live, vintage_dir)
     check("staging removed after commit", not os.path.exists(staging))
     check("live updated to good data after commit",
           P.table_distinct_dates(sqlite3.connect(live), "money_supply") == 581)
+    check("commit returns vintage snapshot of pre-commit live",
+          vintage is not None and os.path.exists(vintage)
+          and pd.io.sql.read_sql("SELECT * FROM money_supply", sqlite3.connect(vintage)).shape[0] == 581)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) Vintage snapshot rotation + edge cases
+# ──────────────────────────────────────────────────────────────────────────────
+print("\n=== 3. vintage snapshot / rotation ===")
+with tempfile.TemporaryDirectory() as d:
+    live = os.path.join(d, "macro_data.db")
+    vintage_dir = os.path.join(d, "vintages")
+    check("snapshot None when live absent", P.snapshot_vintage(live, vintage_dir) is None)
+
+    c0 = sqlite3.connect(live)
+    good_money(500).to_sql("money_supply", c0, if_exists="replace", index=False)
+    c0.commit(); c0.close()
+
+    # pre-seed 12 older vintages; the next snapshot is #13 → oldest must be pruned
+    os.makedirs(vintage_dir)
+    for i in range(12):
+        open(os.path.join(vintage_dir, f"macro_data_202001{i:02d}_000000.db"), "w").close()
+    oldest = os.path.join(vintage_dir, "macro_data_20200100_000000.db")
+    v = P.snapshot_vintage(live, vintage_dir)
+    check("snapshot created", v is not None and os.path.exists(v))
+    remaining = sorted(os.listdir(vintage_dir))
+    check("rotation keeps exactly MAX_VINTAGES", len(remaining) == P.MAX_VINTAGES)
+    check("oldest pruned", not os.path.exists(oldest))
+    check("newest kept", os.path.basename(str(v)) == remaining[-1])
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 print("\n=== RESULT ===")

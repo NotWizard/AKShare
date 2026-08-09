@@ -37,6 +37,7 @@ from _pipeline import (  # noqa: E402
     validate,
 )
 from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
+import dual_sources  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
@@ -739,6 +740,122 @@ def fetch_demographics(conn):
 
 
 # ─────────────────────────────────────────────
+# 15. 财政收支（NBS 月度预算收入/支出，2015- 起）
+# ─────────────────────────────────────────────
+def _parse_nbs_month(s):
+    import re
+    m = re.match(r"(\d{4})年(\d{1,2})月", str(s))
+    return f"{m.group(1)}-{int(m.group(2)):02d}-01" if m else None
+
+
+def _nbs_long(df):
+    """NBS 指标×月份宽表（指标为行、月份为列）→ (date, indicator, value) 长表。"""
+    records = []
+    for ind in df.index:
+        for col, val in df.loc[ind].items():
+            d = _parse_nbs_month(col)
+            if d:
+                records.append({"date": d, "indicator": str(ind),
+                                "value": pd.to_numeric(val, errors="coerce")})
+    return pd.DataFrame(records)
+
+
+def _nbs_cum_yoy(df, cum_col, yoy_col):
+    """NBS 两指标行（…累计值 / …累计增长）→ date×两列。指标名按子串匹配（容忍单位后缀）。"""
+    long = _nbs_long(df)
+    out = pd.DataFrame({"date": sorted(set(long["date"]))})
+    for kw, col in [("累计值", cum_col), ("增长", yoy_col)]:
+        sub = long[long["indicator"].str.contains(kw)].groupby("date")["value"].last().reset_index()
+        if not sub.empty:
+            out = out.merge(sub.rename(columns={"value": col}), on="date", how="left")
+    return out
+
+
+def fetch_fiscal(conn):
+    """国家财政预算收入/支出（NBS 月度）。两路径各自长表化后按月外连接。
+    NBS 不可达 → 空 df → 闸门记 kept_previous（与 household_income 同款降级）。"""
+    log("采集: 财政收支（NBS 月度） ...")
+    wides = []
+    for path, cum_col, yoy_col in [
+        ("财政 > 国家财政预算收入", "revenue_cum", "revenue_cum_yoy"),
+        ("财政 > 国家财政预算支出", "expenditure_cum", "expenditure_cum_yoy"),
+    ]:
+        try:
+            df = ak.macro_china_nbs_nation(kind="月度数据", path=path, period="2015-")
+            wides.append(_nbs_cum_yoy(df, cum_col, yoy_col))
+        except Exception as e:
+            log(f"  ⚠️ {path} 采集失败: {e}")
+
+    if not wides:
+        save_to_db(pd.DataFrame(), "fiscal", conn)
+        return pd.DataFrame()
+    result = wides[0]
+    for w in wides[1:]:
+        result = result.merge(w, on="date", how="outer")
+    result = result.sort_values("date").reset_index(drop=True)
+    save_to_db(result, "fiscal", conn)
+    return result
+
+
+# ─────────────────────────────────────────────
+# 16. 外需（NBS 货物进出口美元口径 + 美国 ISM 制造业 PMI）
+# ─────────────────────────────────────────────
+def fetch_external_demand(conn):
+    """NBS「对外经济 > 货物进出口总额」（千美元 → fetcher 内 ÷1e5 亿美元）+
+    ISM PMI（外需景气代理，Jin10 源冻结于 2025-08 数据月，近期自然为 NaN）。"""
+    log("采集: 外需（NBS 货物进出口 + 美国 ISM PMI） ...")
+    # NBS 指标名带单位后缀（千美元)/(%)）→ 按前缀匹配
+    trade_map = {
+        "出口总值_当期值": ("exports", 1e5),
+        "出口总值_同比增长": ("exports_yoy", 1),
+        "进口总值_当期值": ("imports", 1e5),
+        "进口总值_同比增长": ("imports_yoy", 1),
+        "进出口总值_同比增长": ("trade_total_yoy", 1),
+        "进出口差额_当期值": ("trade_balance", 1e5),
+    }
+    try:
+        df = ak.macro_china_nbs_nation(kind="月度数据", path="对外经济 > 货物进出口总额", period="2015-")
+        long = _nbs_long(df)
+    except Exception as e:
+        log(f"  ⚠️ NBS 货物进出口采集失败: {e}")
+        long = pd.DataFrame()
+
+    if long.empty:
+        save_to_db(pd.DataFrame(), "external_demand", conn)
+        return pd.DataFrame()
+
+    result = pd.DataFrame({"date": sorted(set(long["date"]))})
+    for kw, (col, scale) in trade_map.items():
+        sub = long[long["indicator"].str.startswith(kw)].groupby("date")["value"].last().reset_index()
+        if not sub.empty:
+            sub["value"] = (sub["value"] / scale).round(2)
+            result = result.merge(sub.rename(columns={"value": col}), on="date", how="left")
+
+    trade_start = result["date"].iloc[0]  # 贸易块日期域下界（裁 ISM 全史用）
+
+    # ISM 失败仅丢该列，不影响贸易块。ISM 日期恒为发布日（含 1 日）→ 数据月
+    # 永远是上月（_norm_ism_date）；若误用 day==1 保留规则会把「8月1日发布」
+    # 留在 8 月并与「9月2日发布→8月」撞成重复日期
+    try:
+        df_ism = ak.macro_usa_ism_pmi()
+        ism = pd.DataFrame({
+            "date": [dual_sources._norm_ism_date(x) for x in df_ism["日期"]],
+            "us_ism_pmi": pd.to_numeric(df_ism["今值"], errors="coerce"),
+        }).dropna(subset=["us_ism_pmi"])
+        ism = ism.drop_duplicates(subset=["date"], keep="last")
+        result = result.merge(ism, on="date", how="outer")
+    except Exception as e:
+        log(f"  ⚠️ 美国 ISM PMI 采集失败: {e}")
+
+    result = result.sort_values("date").reset_index(drop=True)
+    # ISM 外连接带入 1970 起全史（~540 行冗余）→ 裁到贸易日期域，
+    # ISM 保留与贸易重叠段（2015+），外需页语境足够
+    result = result[result["date"] >= trade_start].reset_index(drop=True)
+    save_to_db(result, "external_demand", conn)
+    return result
+
+
+# ─────────────────────────────────────────────
 # 主流程
 # ─────────────────────────────────────────────
 def main():
@@ -768,6 +885,8 @@ def main():
         fetch_new_credit,
         fetch_bond_yield,
         fetch_demographics,
+        fetch_fiscal,
+        fetch_external_demand,
     ]
 
     # 抓取计划：release 型表只在发布窗口内抓，market/未知表恒抓（见 release_calendar）
@@ -824,6 +943,17 @@ def main():
             ordered.append(entry)
     _MANIFEST["sources"] = ordered
 
+    # 双源比对：只对本次抓取成功（primary 有更新）的表跑；只读 staging，
+    # 永不覆盖 primary；结果并入 sources[].dual（divergence 由后端转黄灯）
+    try:
+        fetched_ok = {t for t, s in fetched.items() if s.get("ok")}
+        duals = dual_sources.run_checks(conn, fetched_ok)
+        for s in _MANIFEST["sources"]:
+            if s["table"] in duals:
+                s["dual"] = duals[s["table"]]
+    except Exception as e:
+        log(f"  ⚠️ 双源比对失败（不影响数据）: {e}")
+
     # ③ recompute derived tables ON staging (raw + derived atomic together)
     try:
         run_derived(conn)
@@ -835,8 +965,11 @@ def main():
     conn.commit()
     conn.close()
 
-    # ④ atomic promote staging → live (production DB touched exactly once)
-    commit_staging()
+    # ④ atomic promote staging → live (production DB touched exactly once);
+    # commit 前把旧 live 复制为 vintage（审计快照，供 diff_vintage 比对）
+    vintage = commit_staging()
+    if vintage:
+        _MANIFEST["vintage"] = f"data/vintages/{vintage.name}"
     # ⑤ audit trail
     write_manifest(_MANIFEST)
 

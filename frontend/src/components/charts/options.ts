@@ -26,6 +26,10 @@ const COL_ZH: Record<string, string> = {
   urbanization_rate: '城镇化率', population: '年末总人口',
   birth_rate: '出生率', natural_growth_rate: '自然增长率',
   credit_impulse: '信贷脉冲',
+  revenue_cum: '财政收入(累计)', revenue_cum_yoy: '财政收入累计同比',
+  expenditure_cum: '财政支出(累计)', expenditure_cum_yoy: '财政支出累计同比',
+  exports_yoy: '出口同比(美元)', imports_yoy: '进口同比(美元)',
+  trade_balance: '贸易差额', us_ism_pmi: '美国ISM制造业PMI',
 }
 const zh = (col: string): string => COL_ZH[col] ?? col
 

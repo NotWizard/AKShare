@@ -25,14 +25,15 @@ LOCK_PATH = PROJECT_ROOT / "data" / ".refresh.lock"
 VENV_PY = PROJECT_ROOT / ".venv312" / "bin" / "python"
 
 # Expected number of ✅ lines from 01_fetch_data.py stdout:
-# 14 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
-# industrial, house_price, household_income, new_credit, bond_yield, demographics)
-# + 2 derived tables (derived_monthly, derived_quarterly) = 16 total.
+# 16 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
+# industrial, house_price, household_income, new_credit, bond_yield, demographics,
+# fiscal, external_demand) + 2 derived tables (derived_monthly, derived_quarterly)
+# = 18 total.
 # Lower bound only: a full run emits more ✅ lines (per-indicator sub-steps,
 # extra derived tables); min(done, expected) clamps so progress just reaches
 # 100% early. Initial fallback only: the 📋 计划抓取 K/N line refines expected
 # per run (incremental mode skips tables outside their release window).
-EXPECTED_FETCH_STEPS = 16
+EXPECTED_FETCH_STEPS = 18
 
 
 def is_running() -> bool:
@@ -87,8 +88,9 @@ def sources_health(manifest: dict) -> dict:
     """Derive per-source red/yellow/green from the manifest (pure function, no
     new storage — last_run.json is the only source of truth).
 
-    规则：任一源 consecutive_failures ≥ 2 → red；否则任一源 1 连败或
-    kept_previous warning（验证闸门拒收）→ yellow；其余 → green。
+    规则：任一源 consecutive_failures ≥ 2 → red；否则任一源 1 连败、
+    kept_previous warning（验证闸门拒收）或 dual divergence warning（双源比对
+    分歧）→ yellow；其余 → green。
     sources 为空 → green + updated_at=None（前端画灰点 = 尚无运行记录）。
     """
     sources = manifest.get("sources") or []
@@ -102,6 +104,10 @@ def sources_health(manifest: dict) -> dict:
         tab = tables.get(s.get("table"))
         if tab and tab.get("status") == "kept_previous":
             warning = f"kept previous — {tab.get('reason', '')}"
+        elif s.get("dual", {}).get("divergent"):
+            d = s["dual"]
+            warning = (f"dual-source divergence — {d.get('series')} "
+                       f"{d.get('primary')} vs {d.get('secondary')} @ {d.get('date')}")
         cf = s.get("consecutive_failures", 0) or 0
         out.append({**s, "warning": warning})
         if cf >= 2:

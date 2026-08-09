@@ -92,7 +92,7 @@
 │  scripts/_pipeline.py + 01_fetch_data.py + 02_compute_derived│
 └─────────────────────────────────────────────────────────────┘
                       │
-              data/macro_data.db (SQLite, 14 原始 + 2 衍生 + commentary)
+              data/macro_data.db (SQLite, 16 原始 + 2 衍生 + commentary)
 ```
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
@@ -143,12 +143,13 @@ AKShare/
 ├── scripts/                     # 采集与衍生计算（后端复用）
 │   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
 │   ├── _pipeline_test.py        # 管道离线测试（15/15）
-│   ├── 01_fetch_data.py         # 宏观数据采集（14 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
+│   ├── 01_fetch_data.py         # 宏观数据采集（16 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
 ├── data/                        # SQLite 数据库（gitignored）
-│   ├── macro_data.db            # 14 张原始表 + derived_monthly/derived_quarterly + commentary
+│   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary
 │   ├── backups/                 # 采集前自动备份（留 10 份）
+│   ├── vintages/                # 提交前审计快照（留 12 份，供 scripts/diff_vintage.py 比对）
 │   └── last_run.json            # 上次采集审计 manifest
 │
 ├── shared/openapi.json          # OpenAPI 契约（供前端 codegen）
@@ -206,7 +207,7 @@ cd frontend && npm run dev
 
 ### 原始数据采集
 
-`scripts/01_fetch_data.py` 采集 14 类宏观指标（AKShare 为主，CPI/PPI 走东方财富数据中心、国债收益率直连中债信息网、人口数据走世界银行），清洗后经**闸门管道**落 SQLite：
+`scripts/01_fetch_data.py` 采集 16 类宏观指标（AKShare 为主，CPI/PPI 走东方财富数据中心、国债收益率直连中债信息网、人口数据走世界银行、财政/外需走 NBS 月度），清洗后经**闸门管道**落 SQLite：
 
 | # | 表 | 指标 | 频率 |
 |---|---|---|---|
@@ -224,6 +225,10 @@ cd frontend && npm run dev
 | 12 | `household_income` | 居民可支配收入（NBS；2026-03 改版曾失效，2026-08-09 已修复为 akshare 1.18 新路径）| 年 |
 | 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样）| 月 |
 | 14 | `demographics` | 总人口/城镇化率/出生率/自然增长率（世界银行）| 年 |
+| 15 | `fiscal` | 国家财政预算收入/支出累计值 + 累计增长（NBS 月度，2015- 起）| 月 |
+| 16 | `external_demand` | 货物进出口美元口径（NBS 月度）+ 美国 ISM 制造业 PMI | 月 |
+
+> 注：`fiscal` / `external_demand` 不进衍生计算，经 `/table/{name}` 直通前端「财政与外需」页。
 
 > 注：`household_income` / `demographics` 两张表在 NBS 失效期间未生成，修复后（2026-08-09）下次采集自动重建。数据源现状与实测记录详见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md)。
 

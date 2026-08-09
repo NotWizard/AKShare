@@ -39,6 +39,10 @@ TABLE_CALENDAR = {
     "bond_yield": dict(kind="market", months=(), days=[], channel="chinabond"),
     # World Bank WDI 年度指标约每年 9–10 月更新一次
     "demographics": dict(kind="release", months=(9, 10), days=[(1, 31)], channel="worldbank"),
+    # 财政部约每月中旬发布上月财政收支数据（与 NBS 同步）
+    "fiscal": dict(kind="release", months=tuple(range(1, 13)), days=[(10, 25)], channel="nbs-akshare"),
+    # 海关总署约每月 7–14 日发布上月进出口（美元口径）
+    "external_demand": dict(kind="release", months=tuple(range(1, 13)), days=[(7, 18)], channel="nbs-akshare"),
 }
 
 

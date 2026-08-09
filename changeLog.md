@@ -2,6 +2,52 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### M2：vintage 快照+diff、核心序列双源比对、财政/外需指标层、值域断言与 golden 扩层
+
+### 新功能
+
+1. **[新功能] `scripts/_pipeline.py`**：`snapshot_vintage()` + `commit_staging()` 在原子提升前把 live 复制进 `data/vintages/`（12 份轮转，返回快照 Path），`01_fetch_data.py` 把相对路径记入 manifest.vintage；`TABLE_SPECS` 增 `ranges` 值域（money_supply/cpi/ppi/pmi/gdp/social_finance/bond_yield 按 live 实测 min–max 校准）与 fiscal/external_demand 两条新 spec；`validate()` 非空值越界 >10% 拒收（整表量纲错必拦、个别修订吸收）
+2. **[新功能] `scripts/diff_vintage.py`**：live vs 最近 vintage（可 `--vintage` 指定基线）逐表行数差 + 10 条核心序列最新值差；JSON/人类可读双输出；无差异 exit 0、有差异 exit 1；无 vintage 友好提示 exit 0
+3. **[新功能] `scripts/dual_sources.py`**：m2_yoy/cpi_yoy/ppi_yoy/gdp_yoy/pmi_official/y_10y 六序列 primary vs 独立次源比对（rate：绝对差≤0.3pp 或相对≤2%；level：相对≤2%；含浮点边界 ε），只对本次抓取成功的表跑、只读 staging 永不覆盖 primary；结果写 `sources[table].dual`（series/source/date/primary/secondary/diff/divergent/error），次源失败只记 error 不红不黄；`refresh.py sources_health` 新增一支 warning：dual divergence→黄灯；social_finance 次源（东财 SHRZGM 及 4 变体）实测全 EMPTY 不纳入
+4. **[新功能] 财政+外需层**：`fetch_fiscal`（NBS 月度预算收入/支出，2015- 起，指标行→长表按月外连接）、`fetch_external_demand`（NBS 货物进出口千美元→亿美元 ÷1e5 round(2) + 美国 ISM 制造业 PMI），fetchers 14→16；`release_calendar.py` 新增两表发布窗口；`/table` 白名单放行；`EXPECTED_FETCH_STEPS` 16→18；前端新页「财政与外需」（`/fiscal-external`，router+sidebar 可达，复用 buildMultiLine/buildSpreadChart，零新 builder，COL_ZH +8 词）
+5. **[新功能] `backend/tests/test_derived_golden.py`**：derived_monthly 抽样列（m2_m1_spread/real_rate/pmi_ma6）在 live DB 副本上用 02 的 compute_derived 重算，与存储值逐行相等（eps 1e-6，DB 缺失自动 skip）
+
+### 调整
+
+1. **[调整] ISM 日期归一**：实测 jin10 ISM 日期**恒为发布日**（月初首个工作日，含 1 日），设计 §2.2 的 day==1 保留规则会把「8 月 1 日发布」留在 8 月并与「9 月 2 日发布→8 月」撞出 120 个重复日期；改用独立 `_norm_ism_date`（数据月恒为上月），重建后 0 重复、2025-08 数据月=48.7 与冻结现状一致
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过（新增 ranges 5% 通过/15% 拒收/×1000 拒收 + vintage 快照/12 份轮转/commit 返回快照）；`scripts/dual_sources_test.py` 全过（容差三支路、jin10/ISM 归一含跨年、GDP 只匹配第1季度）；`scripts/release_calendar_test.py` 全过（键集 14→16 + 新窗口用例）
+- ✅ `backend/tests` pytest 29 passed（新增 test_derived_golden 1 例、test_sources_health dual divergence→yellow / match+error 仍 green 2 例）
+- ✅ worktree 内 `--full` 实跑 ×2：16 表 updated / 0 kept_previous；vintage 每次恰增 1 份；manifest.sources 6 表含 dual 且全 convergent（m2_yoy 8.0=8.0、gdp_yoy 5.0=5.0、cpi_yoy 0.0=0.0@2025-07-01、ppi_yoy −3.6=−3.6@2025-07-01、pmi_official 49.4=49.4@2025-08-01、y_10y 1.7114=1.7114@2026-08-01），social_finance 无 dual 键；`GET /api/v1/sources/health` green
+- ✅ `fiscal` 127 行至 2026-04、`external_demand` 678 行（贸易块 137 月至 2026-05，ISM 冻结 2025-08 数据月后为 NaN）；`GET /api/v1/table/fiscal`、`/table/external_demand` 200
+- ✅ `diff_vintage.py`：首跑正确报新表/新增行（exit 1）、二跑准确捕获 external_demand 713→678（−35，ISM 修复）、自比对 identical exit 0、`--json` 形状符合设计
+- ✅ 前端 `vue-tsc --noEmit` 0 error；requirements.txt / package.json / tokens.css 零变化；signals.py、02_compute_derived.py、commentary、HealthLight.vue 零触碰
+
+### M2: Vintage Snapshots + Diff, Dual-Source Checks, Fiscal/External-Demand Layers, Range Assertions & Golden Derived Tests (English)
+
+### New Features
+
+1. **[feat] `scripts/_pipeline.py`**: `snapshot_vintage()` + `commit_staging()` copy the live DB into `data/vintages/` before the atomic promotion (rotate 12, returns the snapshot Path); the relative path is recorded as manifest.vintage; `TABLE_SPECS` gains `ranges` value domains (calibrated on live DB min–max) plus fiscal/external_demand specs; `validate()` rejects when >10% of non-null values fall outside range (whole-table unit errors blocked, isolated revisions absorbed)
+2. **[feat] `scripts/diff_vintage.py`**: live vs latest vintage (or `--vintage` baseline) — per-table row deltas + latest-value deltas of 10 core series; JSON + human-readable; exit 0 when identical, 1 when changed; friendly exit 0 when no vintage exists
+3. **[feat] `scripts/dual_sources.py`**: six series (m2_yoy/cpi_yoy/ppi_yoy/gdp_yoy/pmi_official/y_10y) cross-checked against independent secondaries (rate: ≤0.3pp abs or ≤2% rel; level: ≤2% rel; float-boundary ε), only for tables fetched OK, read-only on staging, primary never overwritten; results in `sources[table].dual`, secondary failures only logged; `sources_health` gains dual-divergence → yellow; social_finance excluded (all EM SHRZGM probes EMPTY)
+4. **[feat] fiscal + external-demand layers**: `fetch_fiscal` (NBS monthly budget revenue/expenditure since 2015) and `fetch_external_demand` (NBS USD trade, thousand→hundred-million ÷1e5, + US ISM PMI); fetchers 14→16, calendar windows, `/table` whitelist, `EXPECTED_FETCH_STEPS` 16→18; new frontend page 财政与外需 (`/fiscal-external`, router+sidebar, reuses existing builders, zero new builder, COL_ZH +8)
+5. **[feat] `backend/tests/test_derived_golden.py`**: sampled derived_monthly columns (m2_m1_spread/real_rate/pmi_ma6) recomputed via 02's compute_derived on a copy of the live DB must equal stored values row-by-row (eps 1e-6, skips when DB absent)
+
+### Adjustments
+
+1. **[adjust] ISM date normalization**: jin10 ISM dates are ALWAYS release dates (first business day, including the 1st); the design's day==1-keep rule produced 120 duplicate dates; dedicated `_norm_ism_date` (data month is always the previous month) — 0 duplicates after rebuild, 2025-08 data month = 48.7 matching the frozen source
+
+### Verification
+
+- ✅ `scripts/_pipeline_test.py` all pass (new: ranges 5% pass / 15% reject / ×1000 reject + vintage snapshot/rotation/commit-return); `scripts/dual_sources_test.py` all pass; `scripts/release_calendar_test.py` all pass (16-table key set + new windows)
+- ✅ `backend/tests` pytest 29 passed (new: test_derived_golden + 2 dual-divergence health cases)
+- ✅ two real `--full` runs in the worktree: 16 tables updated / 0 kept_previous; exactly one new vintage per run; six dual records all convergent (e.g. m2_yoy 8.0=8.0, y_10y 1.7114=1.7114@2026-08-01); social_finance has no dual key; health green
+- ✅ `fiscal` 127 rows to 2026-04, `external_demand` 678 rows (trade to 2026-05, ISM NaN after frozen 2025-08); both `/table` endpoints 200
+- ✅ `diff_vintage.py` reported first-run additions (exit 1), then exactly the ISM rebuild (external_demand 713→678), self-compare identical exit 0, JSON shape per design
+- ✅ `vue-tsc --noEmit` 0 errors; requirements.txt / package.json / tokens.css untouched; signals.py, 02_compute_derived.py, commentary, HealthLight.vue untouched
+
 ### M1：数据源健康探针 + 发布日历增量抓取 + 可选 launchd 调度
 
 ### 新功能
