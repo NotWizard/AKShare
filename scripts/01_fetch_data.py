@@ -833,6 +833,17 @@ def fetch_demographics(conn):
         merged["natural_growth_rate"] = merged["birth_rate"] - merged["death_rate"]
         merged = merged.drop(columns=["death_rate"])
 
+    # NBS 统计公报官方出生率/自然增长率（NBS API 被 WAF 封禁、akshare 无可用 path，手工补官方值）。
+    # 来源：《中华人民共和国2025年国民经济和社会发展统计公报》(2026-02-28)。
+    _NBS_BIRTH_NATURAL = {
+        "2025-01-01": (5.63, -2.41),
+    }
+    for d, (b, n) in _NBS_BIRTH_NATURAL.items():
+        m = merged["date"] == d
+        if m.any():
+            merged.loc[m, "birth_rate"] = b
+            merged.loc[m, "natural_growth_rate"] = n
+
     if merged.empty:
         log("  ⚠️ 人口数据全部不可用，跳过保存")
     save_to_db(merged, "demographics", conn)

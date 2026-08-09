@@ -1023,6 +1023,28 @@
 
 ---
 
+### 人口出生率/自然增长率补 2025 公报官方值 + 财政/外需数据恢复
+
+### 数据
+
+1. **[数据] `scripts/01_fetch_data.py`**：`fetch_demographics` 新增 `_NBS_BIRTH_NATURAL` 补充 2025 出生率 **5.63‰** / 自然增长率 **-2.41‰**（《2025年国民经济和社会发展统计公报》2026-02-28 发布；NBS API 被 WAF 封、akshare 无 birth path）。人口四指标 2025 全部对齐官方。
+2. **[数据] 财政/外需**：`fiscal`/`external_demand` 表此前因 NBS 瞬时不可达未建表导致页面 500；重跑 fetch 后建表（fiscal 127 行到 2026-04、external_demand 137 行），端点恢复 200。
+
+### 验证
+
+- demographics 2025 = 140489万 / 67.89% / 5.63‰ / -2.41‰；`/table/fiscal`、`/table/external_demand` 均 200。
+
+### Data (English)
+
+1. **[data] `scripts/01_fetch_data.py`**: `fetch_demographics` adds `_NBS_BIRTH_NATURAL` supplement for 2025 birth **5.63‰** / natural-growth **-2.41‰** (《2025 statistical communiqué》2026-02-28; NBS API WAF-blocked, akshare lacks a birth path). All four 2025 population indicators now match official.
+2. **[data] fiscal/external**: `fiscal`/`external_demand` tables were missing (NBS transiently unreachable) causing page 500; re-running fetchers created them (fiscal 127 rows to 2026-04, external_demand 137 rows), endpoints back to 200.
+
+### Verification (English)
+
+- demographics 2025 = 140489万 / 67.89% / 5.63‰ / -2.41‰; `/table/fiscal` and `/table/external_demand` both 200.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
