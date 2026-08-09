@@ -102,6 +102,32 @@
 
 ---
 
+## 7. 定期更新窗口与手动触发（供 Agent 手动触发，非定时任务）
+
+> 不做定时任务。到发布窗口后由 Agent 手动触发刷新即可。
+
+| 频率 | 指标 | 发布窗口（次月） | 触发动作 |
+|---|---|---|---|
+| 月 | M2/新增信贷 (PBoC) | ~10-15 日 | 跑 `01_fetch_data.py` |
+| 月 | 工业 / 70城房价 (NBS) | ~15 日 | 跑 `01_fetch_data.py` |
+| 月 | CPI / PPI / PMI | ~9-10 日 / PMI 月末 | 跑 `01_fetch_data.py` |
+| 月 | 社融 | ~15 日（主源滞后时自动走 PBoC XLSX 备用源） | 跑 `01_fetch_data.py` |
+| 月 | LPR | ~20 日 | 跑 `01_fetch_data.py` |
+| 季 | GDP（累计季度） | 季后 ~1 个月（Q3≈10 月） | 跑 `01_fetch_data.py`（解析器已支持累计季度） |
+| 季 | 杠杆率 NIFD | 季后 ~1 个月（Q3≈10 月） | 按 §1 由 Agent 补一期 `_NIFD_DATA` 后跑 `01_fetch_data.py` |
+| 年 | 居民收入 / 人口 | 次年 1 月 | 跑 `01_fetch_data.py` |
+
+**手动触发命令**（项目根目录）：
+```bash
+.venv312/bin/python scripts/01_fetch_data.py     # 采集（走闸门，自动追加 NIFD/PBoC 补充）
+.venv312/bin/python scripts/02_compute_derived.py  # 重算衍生表
+# 或一键（含后端缓存失效）: POST http://localhost:8000/api/v1/refresh
+```
+
+**触发后校验**：查各表 `MAX(date)` 是否前进到预期月份（见上表）；`derived_quarterly.hh_debt_to_income` 末行非空且量级 ~120-140。
+
+---
+
 ## 自动化边界说明
 
 - **AKShare `macro_cnbs`** 会在 CNBS 更新后自动带上（无需动作），但滞后大（现到 2024-12），不可依赖。
