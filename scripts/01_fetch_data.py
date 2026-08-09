@@ -276,6 +276,27 @@ def fetch_pmi(conn):
 # ─────────────────────────────────────────────
 # 6. 宏观杠杆率 (CNBS)
 # ─────────────────────────────────────────────
+# NIFD（国家金融与发展实验室）季度杠杆率报告提取值（官方发布，非自算）。
+# 出处见 scripts/03_supplement_leverage.py 头部报告链接；AKShare macro_cnbs 滞后时补齐。
+_NIFD_DATA = [
+    # date, household, non_fin_corp, gov_total,
+    #   gov_central, gov_local, real_economy, fin_asset, fin_liability
+    ("2025-03-01", 61.5, 173.7, 63.2, 26.4, 36.8, 298.4, 50.3, 69.4),
+    ("2025-06-01", 61.1, 174.0, 65.3, 27.6, 37.8, 300.4, 51.7, 71.8),
+    ("2025-09-01", 60.4, 174.4, 67.5, 28.8, 38.7, 302.3, 51.3, 73.4),
+    ("2025-12-01", 59.4, 174.6, 68.4, 29.4, 39.1, 302.4, 50.5, 73.5),
+    ("2026-03-01", 59.0, 180.0, 70.3, 29.9, 40.4, 309.3, None, None),
+]
+_NIFD_COLUMNS = [
+    "date", "household", "non_fin_corp", "gov_total",
+    "gov_central", "gov_local", "real_economy", "fin_asset", "fin_liability",
+]
+
+
+def _nifd_supplement_df() -> pd.DataFrame:
+    return pd.DataFrame(_NIFD_DATA, columns=_NIFD_COLUMNS)
+
+
 def fetch_leverage(conn):
     log("采集: 宏观杠杆率 ...")
     df = ak.macro_cnbs()
@@ -300,20 +321,17 @@ def fetch_leverage(conn):
     })
     result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
-    # Preserve manually-supplemented rows (e.g. NIFD quarterly reports) for
-    # dates newer than what ak.macro_cnbs() provides. When AKShare catches up,
-    # these rows are naturally superseded by fresher CNBS data.
+    # Fold NIFD official quarterly leverage (report-extracted, not self-computed)
+    # for dates newer than what ak.macro_cnbs() provides; goes through the same
+    # gated save_to_db. date>cnbs_max filter means once AKShare catches up, the
+    # NIFD rows for those dates drop out and fresher CNBS data supersedes them.
     cnbs_max = result["date"].max()
-    try:
-        existing = pd.read_sql(
-            "SELECT * FROM leverage WHERE date > ?", conn, params=[cnbs_max]
-        )
-        if not existing.empty:
-            result = pd.concat([result, existing], ignore_index=True)
-            result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-            log(f"  ℹ️  leverage: preserved {len(existing)} rows after CNBS max ({cnbs_max})")
-    except Exception:
-        pass  # leverage table may not exist yet (first run)
+    nifd_new = _nifd_supplement_df()
+    nifd_new = nifd_new[nifd_new["date"] > cnbs_max]
+    if not nifd_new.empty:
+        result = pd.concat([result, nifd_new], ignore_index=True)
+        log(f"  ℹ️  leverage: +{len(nifd_new)} NIFD rows after CNBS max ({cnbs_max})")
+    result = result.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
 
     save_to_db(result, "leverage", conn)
     return result
@@ -457,11 +475,12 @@ def fetch_household_income(conn):
     try:
         df = ak.macro_china_nbs_nation(
             kind="年度数据",
-            path="人民生活 > 居民人均可支配收入",
+            # NBS 目录树改版：收入指标收入「全国居民人均收入情况」三级分类下（原二级节点已不存在）
+            path="人民生活 > 全国居民人均收入情况",
             period="LAST30",
         )
-        # Find absolute-value per-capita row
-        idx = [i for i in df.index if "居民人均可支配收入" in str(i) and "累计" not in str(i)]
+        # Find absolute-value per-capita row（排除中位数/增速/累计变体，新路径一次返回 12 个指标行）
+        idx = [i for i in df.index if "居民人均可支配收入" in str(i) and "中位数" not in str(i) and "增长" not in str(i) and "累计" not in str(i)]
         if idx:
             row = df.loc[idx[0]]
             records = []
@@ -622,7 +641,7 @@ def fetch_demographics(conn):
     def _fetch_wb(indicator_code, col_name):
         try:
             url = f"https://api.worldbank.org/v2/country/CHN/indicator/{indicator_code}"
-            r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=15)
+            r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=60)
             r.raise_for_status()
             records = r.json()[1]
             rows = []

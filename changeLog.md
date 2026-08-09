@@ -657,6 +657,28 @@
 
 ---
 
+### 杠杆率折进 NIFD 补充走闸门（补到 2026-03）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_leverage` 折进 NIFD 季度杠杆率（官方报告提取值，非自算）——`ak.macro_cnbs()` 滞后到 2024-12，而 NIFD 已发布 2025Q1–2026Q1。用 `date > cnbs_max` 过滤补齐滞后季度，并保证 AKShare 追上后 CNBS 自动取代；经 `save_to_db` 闸门落库；替换原"读 DB 保留行"逻辑。
+   （本提交同时包含此前工作区未提交的：`household_income` NBS 目录路径修正、`demographics` WorldBank 超时 15→60s。）
+
+### 验证
+
+- 临时库副本：85 行（80 CNBS + 5 NIFD）、max 2026-03、闸门接受（85>80 非缩水）；真实刷新后生产库 `leverage` max=2026-03，2025+ 五期齐全。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_leverage` folds in NIFD quarterly leverage (official report values, not self-computed) — `ak.macro_cnbs()` lags at 2024-12 while NIFD has published 2025Q1–2026Q1. A `date > cnbs_max` filter backfills the lagging quarters and lets fresher CNBS data supersede once AKShare catches up; goes through the gated `save_to_db`; replaces the old "preserve DB rows" logic.
+   (This commit also includes previously-uncommitted: `household_income` NBS path fix, `demographics` WorldBank timeout 15→60s.)
+
+### Verification (English)
+
+- Temp-copy test: 85 rows (80 CNBS + 5 NIFD), max 2026-03, gate accepted (85>80, not a shrink); after a real refresh the live `leverage` max=2026-03 with all five 2025+ quarters.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
