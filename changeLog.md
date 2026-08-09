@@ -797,6 +797,26 @@
 
 ---
 
+### 债务收入比图与其他表日期对齐（derived_quarterly 保留季末月日期）
+
+### 修复
+
+1. **[修复] `scripts/02_compute_derived.py`**：derived_quarterly 原先把 leverage 季末月日期归一到季初（2026-03→2026-01），使「居民真实杠杆空间」图 x 轴末端比债务页其他图（leverage 原始表，季末月）早一个刻度、看似"数据截止更早"。实为同一期数据（2026-03=2026-Q1）的日期约定差异。现保留 leverage 原生季末月日期与同页其他图对齐；GDP 仍 `merge_asof(backward)` 填充，收入改 `merge_asof` 回填。
+
+### 验证
+
+- derived_quarterly max=2026-03-01 == leverage max；hh_debt_to_income 2026-03=129.4；cycle_merrill 年去重仍正常（新增 2026 行合理）；API 两表对齐 2026-03。
+
+### Fix (English)
+
+1. **[fix] `scripts/02_compute_derived.py`**: derived_quarterly previously normalized leverage quarter-end dates to quarter-start (2026-03→2026-01), making the debt-income chart's x-axis end one tick earlier than the page's other charts (leverage raw, quarter-end) — it looked like "data cut off earlier", but it was the same data point (2026-03 = 2026-Q1) under a different date convention. Now keeps leverage's native quarter-end dates (aligned with the other charts); GDP still `merge_asof(backward)`, income via `merge_asof`.
+
+### Verification (English)
+
+- derived_quarterly max=2026-03-01 == leverage max; hh_debt_to_income 2026-03=129.4; cycle_merrill year-dedup still sane (2026 row added sensibly); API both aligned to 2026-03.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

@@ -170,14 +170,12 @@ def compute_derived(conn):
     log(f"  ✅ derived_monthly: {len(monthly)} rows, {len(monthly.columns)} columns")
 
     # ─── 构建季度衍生表 ───
-    # 以 leverage 季频为锚：季末日期(03/06/09/12-末)归一到季初(01/04/07/10-1)，
-    # 避免 GDP 年频(YYYY-01-01)与 leverage 季末等值 merge 落空（旧实现导致 leverage
-    # 列全 NULL——README 旧称"频率不匹配限制"实为月份约定不匹配，已修复）。
+    # 以 leverage 季频为锚, 保留其原生季末月日期(03/06/09/12-01), 与债务页其他图
+    # (leverage 原始表)日期对齐; GDP 年频经 merge_asof(backward) 填充, 无需归一季初。
     quarterly = pd.DataFrame()
     if not leverage.empty:
         lev = leverage.copy()
         lev["date"] = pd.to_datetime(lev["date"])
-        lev["date"] = lev["date"].dt.to_period("Q").dt.to_timestamp()  # 季末 → 季初
         lev = lev.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
         quarterly = lev[["date", "household", "non_fin_corp", "gov_total",
                          "gov_central", "gov_local", "real_economy"]].copy()
@@ -210,8 +208,9 @@ def compute_derived(conn):
     if not hh_income.empty and not quarterly.empty and "gdp_abs" in quarterly.columns:
         hi = hh_income.copy()
         hi["date"] = pd.to_datetime(hi["date"])
-        quarterly = quarterly.merge(hi[["date", "income_abs"]], on="date", how="left")
-        quarterly["income_abs"] = quarterly["income_abs"].ffill()
+        hi = hi.sort_values("date")
+        quarterly = pd.merge_asof(quarterly.sort_values("date"), hi[["date", "income_abs"]],
+                                  on="date", direction="backward")
         if "household" in quarterly.columns:
             gdp_annual = quarterly["gdp_abs"] * 4.0   # Q1 累计年化≈全年 GDP
             quarterly["hh_debt_abs"] = quarterly["household"] / 100.0 * gdp_annual
