@@ -19,6 +19,7 @@ const error = ref<string | null>(null)
 // directness and to avoid the ffill step-shape in GDP-derived series.
 const dq = ref<Record<string, string | number | null>[]>([])
 const rateDm = ref<Record<string, string | number | null>[]>([])  // lpr_1y,lpr_5y,real_rate,bond_10y
+const dqi = ref<Record<string, string | number | null>[]>([])     // derived_quarterly: household,hh_debt_to_income
 const cycle = ref<CycleFrame | null>(null)
 let reqId = 0
 async function load() {
@@ -26,13 +27,14 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const [q, rt, c] = await Promise.all([
+    const [q, rt, c, dqy] = await Promise.all([
       api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined),
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true),
       api.getCycle('debt', filters.start ?? undefined, filters.end ?? undefined),
+      api.getDerivedQuarterly(filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    dq.value = q.records; rateDm.value = rt.records; cycle.value = c
+    dq.value = q.records; rateDm.value = rt.records; cycle.value = c; dqi.value = dqy.records
   } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
@@ -55,6 +57,9 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
     </GraphCard>
     <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。债务周期标准框架里 社融↔债券利率↔期限利差 为判定链路。" :loading="loading" :error="error">
       <EChart :option="buildMultiLine(rateDm, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10年期国债' }], '%')" height="300px" />
+    </GraphCard>
+    <GraphCard title="居民真实杠杆空间：杠杆率 vs 债务收入比" tip="居民部门杠杆率（占GDP%）vs 居民债务/可支配收入（%）。杠杆率看似仅~60%，但债务收入比已>120%，更真实反映居民加杠杆空间。债务=居民杠杆率×年化GDP（Q1×4近似）。" :loading="loading" :error="error">
+      <EChart :option="buildMultiLine(dqi, [{ col: 'household', name: '居民部门杠杆率' }, { col: 'hh_debt_to_income', name: '居民债务收入比' }], '%')" height="300px" />
     </GraphCard>
   </div>
 </template>

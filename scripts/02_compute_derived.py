@@ -205,16 +205,17 @@ def compute_derived(conn):
             quarterly["gdp_yoy_smooth"] = quarterly["gdp_yoy"].rolling(16, min_periods=4).mean()
 
     # ─── 居民真实杠杆率（债务 / 可支配收入）───
+    # 居民杠杆率相对"年度 GDP"; gdp 表每年仅 01-01 一行且 gdp_abs 为 Q1 累计(单季),
+    # 故 ×4 年化近似全年 GDP 作债务基数(标准年化, 注明)。用单季 GDP 会低估约 4 倍。
     if not hh_income.empty and not quarterly.empty and "gdp_abs" in quarterly.columns:
         hi = hh_income.copy()
         hi["date"] = pd.to_datetime(hi["date"])
-        # 年度 income_abs 前向填充到季度
         quarterly = quarterly.merge(hi[["date", "income_abs"]], on="date", how="left")
         quarterly["income_abs"] = quarterly["income_abs"].ffill()
         if "household" in quarterly.columns:
-            # household leverage is % of GDP; debt_abs = household/100 * gdp_abs
-            quarterly["hh_debt_abs"] = quarterly["household"] / 100.0 * quarterly["gdp_abs"]
-            quarterly["hh_income_share"] = quarterly["income_abs"] / quarterly["gdp_abs"] * 100.0
+            gdp_annual = quarterly["gdp_abs"] * 4.0   # Q1 累计年化≈全年 GDP
+            quarterly["hh_debt_abs"] = quarterly["household"] / 100.0 * gdp_annual
+            quarterly["hh_income_share"] = quarterly["income_abs"] / gdp_annual * 100.0
             quarterly["hh_debt_to_income"] = quarterly["hh_debt_abs"] / quarterly["income_abs"] * 100.0
             log(f"  ✅ hh_debt_to_income: {quarterly['hh_debt_to_income'].notna().sum()} / {len(quarterly)} quarters")
 

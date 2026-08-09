@@ -775,6 +775,28 @@
 
 ---
 
+### 债务周期新增「居民真实杠杆空间」图 + 修正债务收入比口径
+
+### 新功能
+
+1. **[新功能] `frontend/src/pages/DebtCycle.vue`**：新增「居民真实杠杆空间：杠杆率 vs 债务收入比」图（`buildMultiLine`：居民部门杠杆率 vs 居民债务收入比，取自 `derived_quarterly`）。体现真实加杠杆空间——杠杆率看似仅 ~60%，但债务收入比已 >120%。
+2. **[修复] `scripts/02_compute_derived.py`**：修正 `hh_debt_to_income` 口径——居民杠杆率相对**年度** GDP，原实现误用单季累计 GDP 作债务基数、低估债务约 4 倍（算出 ~32%）；改以 Q1 累计×4 年化近似全年 GDP 作基数，修正后 ~124-129%。
+
+### 验证
+
+- 修正后 `derived_quarterly.hh_debt_to_income` 2025-2026 ≈ 124-129%（符合"债务收入比已很高"的判断）；API `/derived/quarterly` 返回一致；`vue-tsc` 0 + `vite build` 成功；图表经 `buildMultiLine` 渲染（与其余图一致）。
+
+### New Feature (English)
+
+1. **[feat] `frontend/src/pages/DebtCycle.vue`**: added "居民真实杠杆空间：杠杆率 vs 债务收入比" chart (`buildMultiLine`: household leverage vs household debt-to-income, from `derived_quarterly`). Shows true leverage headroom — leverage looks ~60% but debt/income already >120%.
+2. **[fix] `scripts/02_compute_derived.py`**: corrected `hh_debt_to_income` — household leverage is relative to ANNUAL GDP; the old code used single-quarter cumulative GDP as the debt base, understating debt ~4x (~32%); now annualizes Q1×4 as the base, corrected to ~124-129%.
+
+### Verification (English)
+
+- Corrected `derived_quarterly.hh_debt_to_income` ≈ 124-129% for 2025-2026 (matches the "debt/income already high" expectation); API `/derived/quarterly` returns the same; `vue-tsc` 0 + `vite build` success; chart renders via `buildMultiLine` like the others.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
