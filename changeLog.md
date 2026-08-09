@@ -2,6 +2,24 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：NBS「居民人均可支配收入」采集路径适配国家统计局目录树改版——`人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况`（原二级指标节点已被收进三级分类，新路径一次返回 12 个指标行），行筛选同步排除「中位数/增长/累计」变体，确保取到绝对值行；22 项数据源连通性测试全部通过
+2. **[修复] `scripts/01_fetch_data.py`**：世界银行 API 超时 15s → 60s——该端点首个请求响应慢，15s 必然超时；60s 实测稳定（CHN 人口指标 66 年数据，至 2025）
+
+### 说明
+
+- **环境修复（非代码）**：本机 `.venv312` 缺失 requirements.txt 声明的 akshare/requests，已按 requirements 补装（akshare 1.18.83 / requests 2.34.2，Python 3.14.6 下 import 与运行正常）——这是管道此前无法运行的直接原因
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: adapt NBS household-income path to the NBS catalog restructure — `人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况` (the indicator moved into a 3rd-level catalog that now returns 12 indicator rows); row filter additionally excludes median/growth/cumulative variants to keep the absolute-value row; all 22 datasource connectivity tests pass
+2. **[fix] `scripts/01_fetch_data.py`**: World Bank API timeout 15s → 60s — first request to the endpoint is slow, 15s always timed out; 60s verified stable (66 years of CHN population data, through 2025)
+
+### Notes (English)
+
+- **Env fix (non-code)**: local `.venv312` was missing akshare/requests declared in requirements.txt; installed per requirements (akshare 1.18.83 / requests 2.34.2, imports & runs fine on Python 3.14.6) — this was the direct cause of the pipeline being unrunnable
+
 ### 首页重构与 AI 评论功能
 
 ### 重构
@@ -590,6 +608,26 @@
 ### Verification (English)
 
 - `vue-tsc --noEmit` 0 errors + `vite build` success; vendor-echarts +1.18KB gzip (AriaComponent expected); `aria` registered in both import + `use([...])`; `base.aria` propagates to all charts via `{...base, ...option}` (no chart overrides `aria`). Non-blocking notes: scatter/radar label text slightly off (still WCAG-compliant), `aria` not deep-merged (latent, no chart overrides so not triggered).
+
+---
+
+### run_app.sh 启动自检补 akshare（防刷新 exit 1 复发）
+
+### 修复
+
+1. **[修复] `run_app.sh`**：后端依赖自检之后新增采集依赖自检——`import akshare` 失败时 `pip install -q -r requirements.txt`。后端本身不 import akshare，但「刷新数据」的采集子进程（`scripts/01_fetch_data.py`）必须 import；缺它导致刷新 exit 1（`ModuleNotFoundError: akshare`）。重建 venv 后启动脚本自动补齐，防复发。
+
+### 验证
+
+- `bash -n run_app.sh` 语法 OK；akshare 已装时检查返回 0 跳过安装分支；未装时触发 `pip install -r requirements.txt`。
+
+### Fix (English)
+
+1. **[fix] `run_app.sh`**: after the backend-dependency self-check, add a collection-dependency self-check — on `import akshare` failure run `pip install -q -r requirements.txt`. The FastAPI backend does not import akshare, but the refresh collection subprocess (`scripts/01_fetch_data.py`) must; missing it made refresh exit 1 (`ModuleNotFoundError: akshare`). After a venv rebuild the startup script auto-installs it, preventing recurrence.
+
+### Verification (English)
+
+- `bash -n run_app.sh` OK; with akshare installed the check returns 0 (skips install); when missing it triggers `pip install -r requirements.txt`.
 
 ---
 
