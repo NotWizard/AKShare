@@ -6,6 +6,9 @@
 
 1. **[修复] `scripts/01_fetch_data.py`**：NBS「居民人均可支配收入」采集路径适配国家统计局目录树改版——`人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况`（原二级指标节点已被收进三级分类，新路径一次返回 12 个指标行），行筛选同步排除「中位数/增长/累计」变体，确保取到绝对值行；22 项数据源连通性测试全部通过
 2. **[修复] `scripts/01_fetch_data.py`**：世界银行 API 超时 15s → 60s——该端点首个请求响应慢，15s 必然超时；60s 实测稳定（CHN 人口指标 66 年数据，至 2025）
+3. **[文档] `docs/data-sources-guide.md`**（v1.3→v1.4）：NBS 节由"失效"更新为"已恢复"（akshare 1.18.x 切换新站 API，2026-08-09 实测可用；指标目录重构，人均可支配收入路径改为 `人民生活 > 全国居民人均收入情况`）；修正货币供应量接口描述（`macro_china_supply_of_money` 现存在且生产在用）；新增世界银行超时注意与 22/22 全量连通性实测记录
+4. **[文档] `README.md`**：数据流水线 12→14 fetcher（补 `bond_yield`/`demographics` 两表及数据源说明）、`household_income` 状态更新、Python 版本 3.12→3.12+（实测 3.14.6）、手动采集命令改用 venv 解释器、数据库表数与徽章同步
+5. **[文档] `docs/architecture-upgrade.md`**：顶部加"迁移已完成、历史存档"状态横幅（迁移早已落地，避免误读为进行中方案）
 
 ### 说明
 
@@ -15,6 +18,9 @@
 
 1. **[fix] `scripts/01_fetch_data.py`**: adapt NBS household-income path to the NBS catalog restructure — `人民生活 > 居民人均可支配收入` → `人民生活 > 全国居民人均收入情况` (the indicator moved into a 3rd-level catalog that now returns 12 indicator rows); row filter additionally excludes median/growth/cumulative variants to keep the absolute-value row; all 22 datasource connectivity tests pass
 2. **[fix] `scripts/01_fetch_data.py`**: World Bank API timeout 15s → 60s — first request to the endpoint is slow, 15s always timed out; 60s verified stable (66 years of CHN population data, through 2025)
+3. **[docs] `docs/data-sources-guide.md`** (v1.3→v1.4): NBS section updated from "unavailable" to "recovered" (akshare 1.18.x switched to the new-site API, verified working 2026-08-09; catalog restructured, household-income path now `人民生活 > 全国居民人均收入情况`); corrected money-supply interface description (`macro_china_supply_of_money` now exists and is used in production); added World Bank timeout note and the 22/22 full connectivity test record
+4. **[docs] `README.md`**: data pipeline 12→14 fetchers (added `bond_yield`/`demographics` tables + source notes), `household_income` status updated, Python version 3.12→3.12+ (verified on 3.14.6), manual fetch commands now use the venv interpreter, DB table counts & badge synced
+5. **[docs] `docs/architecture-upgrade.md`**: added "migration completed, historical archive" status banner at top (the migration landed long ago; avoids misreading it as an in-flight plan)
 
 ### Notes (English)
 
@@ -628,6 +634,26 @@
 ### Verification (English)
 
 - `bash -n run_app.sh` OK; with akshare installed the check returns 0 (skips install); when missing it triggers `pip install -r requirements.txt`.
+
+---
+
+### 美林时钟新增「PPI 同比」图（源数据，无自加工）
+
+### 新功能
+
+1. **[新功能] `frontend/src/pages/MerrillClock.vue`**：新增「PPI 同比」GraphCard，`buildMultiLine(cpiPpi, [{ col: 'ppi_yoy', name: 'PPI同比' }], '%', 0)` 带 0 荣枯线（正=出厂价上行、负=下行）；复用现有 `cpiPpi` 取数（`derived_monthly.ppi_yoy` 为东财 `BASE_SAME` 源数据）。**零数据加工、零采集/衍生改动**（应需求不自行推导环比，只放源数据同比），样式与现有图一致。
+
+### 验证
+
+- `vue-tsc --noEmit` 0 error + `vite build` 成功；DOM 确认新卡渲染（ECharts canvas + aria 标签）；浏览器截图核对样式与现有多线/双轴图一致。
+
+### New Feature (English)
+
+1. **[feat] `frontend/src/pages/MerrillClock.vue`**: added a "PPI 同比" (PPI YoY) GraphCard via `buildMultiLine(cpiPpi, [{ col: 'ppi_yoy', name: 'PPI同比' }], '%', 0)` with a 0 boom/bust line; reuses the existing `cpiPpi` fetch (`derived_monthly.ppi_yoy` = eastmoney `BASE_SAME` source data). **Zero self-computation, zero fetch/derived changes** (per requirement, no self-derived MoM — source-provided YoY only); style consistent with existing charts.
+
+### Verification (English)
+
+- `vue-tsc --noEmit` 0 errors + `vite build` success; DOM confirms the new card renders (ECharts canvas + aria label); browser screenshot verifies style matches existing multi/dual-line charts.
 
 ---
 

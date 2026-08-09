@@ -3,7 +3,7 @@ import { ref, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
-import { buildScatterQuadrant, buildDualAxisLine } from '@/components/charts/options'
+import { buildScatterQuadrant, buildDualAxisLine, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
@@ -55,6 +55,9 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
     </GraphCard>
     <GraphCard title="CPI 同比 vs 环比" tip="同比（年度通胀主轴）vs 环比（月度高频先行，0 上下波动）。" :loading="loading" :error="error">
       <EChart :option="buildDualAxisLine(cpiMom, 'cpi_yoy', 'cpi_mom')" height="260px" />
+    </GraphCard>
+    <GraphCard title="PPI 同比" tip="工业生产者出厂价格同比（东财 BASE_SAME 源数据，无自加工）；0 线为荣枯分界（正=出厂价上行，负=下行）。" :loading="loading" :error="error">
+      <EChart :option="buildMultiLine(cpiPpi, [{ col: 'ppi_yoy', name: 'PPI同比' }], '%', 0)" height="260px" />
     </GraphCard>
   </div>
 </template>
