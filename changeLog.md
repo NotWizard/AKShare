@@ -875,6 +875,26 @@
 
 ---
 
+### 人口与城镇化改用 NBS 官方值（WB 长历史回退）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_demographics` 人口/城镇化率改 **NBS 官方优先**（"人口>总人口" 取「年末总人口/城镇人口」行，城镇化率=城镇/总×100），World Bank 补长历史（`combine_first`，年份数不缩水、过校验闸门）；出生率/自然增长率仍用 WB（NBS 经 akshare 无可用 path，留在 2024）。修正此前 WB 值与统计局公报的差异（2025 总人口 140489万 / 城镇化率 67.89%）。
+
+### 验证
+
+- demographics 66 年、2025 总人口 140489万 / 城镇化率 67.89%（NBS 官方）；校验闸门通过（kept_previous 0）；API 对齐。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_demographics` population/urbanization now **NBS-official-first** ("人口>总人口" rows 年末总人口/城镇人口, urbanization=urban/total×100); World Bank supplies the long history via `combine_first` (year count not shrunk, so the gate passes); birth/natural-growth stay WB (NBS not obtainable via akshare, stays 2024). Corrects the prior WB-vs-NBS discrepancy (2025 total 140489万 / urbanization 67.89%).
+
+### Verification (English)
+
+- demographics 66 years; 2025 total 140489万 / urbanization 67.89% (NBS official); gate passed (kept_previous 0); API aligned.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复

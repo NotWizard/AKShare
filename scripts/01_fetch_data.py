@@ -749,35 +749,45 @@ def fetch_bond_yield(conn):
 # ─────────────────────────────────────────────
 # 14. 人口与城镇化（NBS 年度数据）
 # ─────────────────────────────────────────────
+def _nbs_population() -> "pd.DataFrame | None":
+    """NBS 官方总人口/城镇化率。返回表以指标名为行(年末总人口/城镇人口/…)、年份为列。失败返回 None。"""
+    try:
+        d = ak.macro_china_nbs_nation(kind="年度数据", path="人口 > 总人口", period="LAST30")
+        def row_of(key):
+            for idx in d.index:
+                if key in str(idx):
+                    return d.loc[idx]
+            return None
+        total_r, urban_r = row_of("年末总人口"), row_of("城镇人口")
+        if total_r is None or urban_r is None:
+            return None
+        years = [c for c in d.columns if "年" in str(c)]
+        rows = []
+        for y in years:
+            t, u = float(total_r[y]), float(urban_r[y])
+            rows.append({"date": f"{str(y).replace('年', '')}-01-01",
+                         "population": t, "urbanization_rate": u / t * 100})
+        return pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+    except Exception as e:
+        log(f"  ⚠️ NBS 人口失败, 回退 World Bank: {type(e).__name__}")
+        return None
+
+
 def fetch_demographics(conn):
     """年度人口指标：城镇化率 / 总人口 / 出生率 / 自然增长率。
 
-    数据源：World Bank API（NBS data.stats.gov.cn 被 WAF 封禁 403）。
-    指标映射：
-        SP.POP.TOTL        → population（人 → 万人）
-        SP.URB.TOTL.IN.ZS  → urbanization_rate（%）
-        SP.DYN.CBRT.IN     → birth_rate（‰）
-        SP.DYN.CDRT.IN     → death_rate（‰，用于计算 natural_growth_rate）
+    人口/城镇化率优先 NBS 官方（与统计局公报一致），World Bank 回退；
+    出生率/自然增长率用 World Bank（NBS 经 akshare 无可用 path）。
     """
-    log("采集: 人口与城镇化（World Bank） ...")
-
-    _WB_INDICATORS = {
-        "SP.POP.TOTL":       "population",
-        "SP.URB.TOTL.IN.ZS": "urbanization_rate",
-        "SP.DYN.CBRT.IN":    "birth_rate",
-        "SP.DYN.CDRT.IN":    "death_rate",
-    }
+    log("采集: 人口与城镇化（NBS 优先, World Bank 回退） ...")
 
     def _fetch_wb(indicator_code, col_name):
         try:
             url = f"https://api.worldbank.org/v2/country/CHN/indicator/{indicator_code}"
             r = requests.get(url, params={"format": "json", "per_page": 100}, timeout=60)
             r.raise_for_status()
-            records = r.json()[1]
-            rows = []
-            for rec in records:
-                if rec["value"] is not None:
-                    rows.append({"date": f"{rec['date']}-01-01", col_name: float(rec["value"])})
+            rows = [{"date": f"{rec['date']}-01-01", col_name: float(rec["value"])}
+                    for rec in r.json()[1] if rec["value"] is not None]
             out = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
             log(f"  ✅ {col_name}: {len(out)} 年")
             return out
@@ -785,15 +795,25 @@ def fetch_demographics(conn):
             log(f"  ⚠️ {col_name} 采集失败: {e}")
             return pd.DataFrame()
 
-    dfs = [_fetch_wb(code, col) for code, col in _WB_INDICATORS.items()]
-    merged = pd.DataFrame({"date": sorted(set().union(*[d["date"].tolist() for d in dfs if not d.empty]))}) \
-        if any(not d.empty for d in dfs) else pd.DataFrame()
-    for d in dfs:
+    wp = _fetch_wb("SP.POP.TOTL", "population")
+    wu = _fetch_wb("SP.URB.TOTL.IN.ZS", "urbanization_rate")
+    base = wp.merge(wu, on="date", how="outer")
+    base["population"] = base["population"] / 10000  # 人 → 万人
+    nbs = _nbs_population()
+    if nbs is not None:
+        # NBS 官方值覆盖近年, WB 补长历史 → 年份数不缩水(过闸门)且近年值准确
+        pop_urb = nbs.set_index("date").combine_first(base.set_index("date")).reset_index()
+        log(f"  ✅ population/urbanization: NBS 覆盖近年 + WB 长历史, {len(pop_urb)} 年")
+    else:
+        pop_urb = base
+
+    birth = _fetch_wb("SP.DYN.CBRT.IN", "birth_rate")
+    death = _fetch_wb("SP.DYN.CDRT.IN", "death_rate")
+    merged = pop_urb
+    for d in (birth, death):
         if not d.empty:
             merged = merged.merge(d, on="date", how="left")
-
-    if not merged.empty:
-        merged["population"] = merged["population"] / 10000  # 人 → 万人
+    if "birth_rate" in merged.columns and "death_rate" in merged.columns:
         merged["natural_growth_rate"] = merged["birth_rate"] - merged["death_rate"]
         merged = merged.drop(columns=["death_rate"])
 
