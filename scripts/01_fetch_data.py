@@ -231,31 +231,44 @@ def fetch_ppi(conn):
 # 5. PMI (官方 + 财新 + 非制造业)
 # ─────────────────────────────────────────────
 def fetch_pmi(conn):
-    log("采集: PMI (官方 + 财新) ...")
-    df_off = ak.macro_china_pmi_yearly()
+    log("采集: PMI (官方/非制造业=东财, 财新/财新服务=akshare) ...")
+    # 官方 + 非制造业 PMI: 东财 RPT_ECONOMY_PMI（当前；akshare macro_china_pmi_yearly
+    # 滞后约一年，同杠杆率同款"源滞后"）。东财无数据时回退 akshare。
+    em = _fetch_eastmoney("RPT_ECONOMY_PMI", {
+        "REPORT_DATE": "date", "MAKE_INDEX": "pmi_official", "NMAKE_INDEX": "pmi_non_mfg",
+    })
     df_cx = ak.macro_china_cx_pmi_yearly()
 
-    off = pd.DataFrame({
-        "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
-        "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
-    }).dropna(subset=["pmi_official"])
+    if em.empty:
+        log("  ⚠️ 东财 PMI 无数据，官方/非制造业回退 akshare")
+        df_off = ak.macro_china_pmi_yearly()
+        off = pd.DataFrame({
+            "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
+            "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
+        }).dropna(subset=["pmi_official"])
+        try:
+            df_non = ak.macro_china_non_man_pmi()
+            non = pd.DataFrame({
+                "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
+                "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
+            }).dropna(subset=["pmi_non_mfg"])
+        except Exception:
+            non = pd.DataFrame(columns=["date", "pmi_non_mfg"])
+    else:
+        em2 = pd.DataFrame({
+            "date": pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01"),
+            "pmi_official": pd.to_numeric(em["pmi_official"], errors="coerce"),
+            "pmi_non_mfg": pd.to_numeric(em["pmi_non_mfg"], errors="coerce"),
+        }).dropna(subset=["pmi_official"])
+        off = em2[["date", "pmi_official"]]
+        non = em2[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"])
 
     cx = pd.DataFrame({
         "date": pd.to_datetime(df_cx["日期"]).dt.strftime("%Y-%m-01"),
         "pmi_caixin": pd.to_numeric(df_cx["今值"], errors="coerce"),
     }).dropna(subset=["pmi_caixin"])
 
-    # 非制造业 PMI
-    try:
-        df_non = ak.macro_china_non_man_pmi()
-        non = pd.DataFrame({
-            "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
-            "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
-        }).dropna(subset=["pmi_non_mfg"])
-    except Exception:
-        non = pd.DataFrame(columns=["date", "pmi_non_mfg"])
-
-    # 财新服务业 PMI
+    # 财新服务业 PMI（东财无财新口径，仍用 akshare）
     try:
         df_svc = ak.macro_china_cx_services_pmi_yearly()
         svc = pd.DataFrame({

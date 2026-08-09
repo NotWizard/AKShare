@@ -687,6 +687,28 @@
 
 ---
 
+### PMI 切东财补到 2026-07（源滞后修复）
+
+### 修复
+
+1. **[修复] `scripts/01_fetch_data.py`**：`fetch_pmi` 官方/非制造业改东财 `RPT_ECONOMY_PMI`（`MAKE_INDEX`→pmi_official、`NMAKE_INDEX`→pmi_non_mfg，实测到 2026-07；akshare 官方滞后约一年，与杠杆率同款"源滞后"），复用 `_fetch_eastmoney`，东财无数据回退 akshare；财新/财新服务东财无口径仍用 akshare。
+2. **排查结论**：GDP 为年度序列（`2026-01-01` 即最新年度点，2026-Q2 是年内季度非新年度点）不滞后、不切换；社融无免费当前源（东财无对应 reportName），滞后 2-3 月属正常发布滞后，接受。
+
+### 验证
+
+- 临时库 281 行、max 2026-07、列齐全、闸门接受（281>248 非缩水）；真实刷新后生产库 pmi max=2026-07，2026 全年 7 期官方值齐全。
+
+### Fix (English)
+
+1. **[fix] `scripts/01_fetch_data.py`**: `fetch_pmi` official/non-mfg switched to eastmoney `RPT_ECONOMY_PMI` (`MAKE_INDEX`→pmi_official, `NMAKE_INDEX`→pmi_non_mfg, current to 2026-07; akshare official lagged ~1yr, same "source lag" as leverage), reusing `_fetch_eastmoney` with akshare fallback; caixin/caixin-svc stay on akshare (eastmoney has no caixin).
+2. **Audit conclusion**: GDP is an annual series (`2026-01-01` = latest annual point; 2026-Q2 is intra-year, not a new annual point) — not stale, not switched; social financing has no free current source (eastmoney lacks the reportName), 2-3 month lag is normal publication lag — accepted.
+
+### Verification (English)
+
+- Temp-copy 281 rows, max 2026-07, columns intact, gate accepted (281>248, not a shrink); after real refresh live pmi max=2026-07 with all 7 official 2026 months.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
