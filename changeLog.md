@@ -817,6 +817,20 @@
 
 ---
 
+### 新增《数据补充运行手册》（NIFD 杠杆率等手工/Agent 补充流程）
+
+### 文档
+
+1. **[文档] `docs/data-supplement-runbook.md`**：列清所有「靠手工/Agent 补充」的数据——NIFD 宏观杠杆率（季度，主要手工项，含已知报告期 URL 与 Agent 补充步骤+校验规则）、`household_income`（NBS，现已自动、监控）、GDP 季度（可选）、PPI 环比（推导、无需手工）。写明从哪取/怎么取/取什么。
+   原因：NIFD 无公开 API、自动发现最新期+解析数字不可靠，硬塞自动刷新易污染数据，故用 Agent 半自动补充。
+
+### Docs (English)
+
+1. **[docs] `docs/data-supplement-runbook.md`**: runbook listing all manually/Agent-supplemented data — NIFD macro leverage (quarterly, main manual item, with known report URLs + Agent steps + validation rules), `household_income` (NBS, now auto, monitor), quarterly GDP (optional), PPI MoM (derived, no manual). Documents where/how/what to fetch.
+   Rationale: NIFD has no public API; auto-discovery + parsing is unreliable and would risk polluting data if baked into auto-refresh, so use Agent semi-auto supplement.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
