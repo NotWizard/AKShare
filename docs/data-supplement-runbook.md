@@ -9,6 +9,20 @@
 
 ---
 
+## 0. 硬编码数据清单（Hardcoded Data Inventory）
+
+全仓排查（scripts/ analysis/ backend/ frontend/）后，**唯一硬编码的时序数据**是 NIFD 宏观杠杆率：
+
+| 指标 | 硬编码位置 | 内容 | 当前到 | 更新方式 |
+|---|---|---|---|---|
+| NIFD 宏观杠杆率（居民/非金/政府/中央/地方/实体） | `scripts/01_fetch_data.py` `_NIFD_DATA`；`scripts/03_supplement_leverage.py` `NIFD_DATA`（同内容） | 季度杠杆率(%) | 2026-06 (2026Q2) | §1 Agent 补充 |
+
+**非时序数据（配置/分类逻辑，无需定期更新）**：
+- 城市清单 `CITIES`（`frontend/src/pages/RealEstate.vue`）/ `_DEFAULT_CITIES`（`backend/app/api/v1/real_estate.py`）/ `01_fetch_data.py` 房价城市列表 —— 配置。
+- `analysis/cycle_*.py`、`real_estate.py` 的 `conditions`/`choices`/`scores` —— 周期分类阈值/逻辑配置。
+
+---
+
 ## 1. NIFD 宏观杠杆率（季度）—— 主要手工项
 
 | 项 | 内容 |
@@ -17,7 +31,7 @@
 | 代码位置 | `scripts/01_fetch_data.py` 的 `_NIFD_DATA` 列表 + `_nifd_supplement_df()` |
 | 当前补到 | **2026-03（2026Q1）** |
 | 数据源 | NIFD 季报 `http://www.nifd.cn/SeriesReport/Details/<id>`（实测可抓、含"杠杆率"） |
-| 已知报告期 URL | 2025Q1=4712、2025Q2=4728、2025Q3=4800、2025Q4=4851、2026Q1=4896；**2026Q2 及以后**需到 NIFD 网站「系列报告→宏观杠杆率」找最新 id（约季后 1 个月发布） |
+| 已知报告期 URL | 2025Q1=4712、2025Q2=4728、2025Q3=4800、2025Q4=4851、2026Q1=4896、2026Q2=4976；**2026Q3 及以后**需到 NIFD 网站「系列报告→宏观杠杆率」找最新 id（约季后 1 个月发布） |
 
 **取什么**（%）：居民部门、非金融企业部门、政府部门、中央政府、地方政府、实体经济部门（`fin_asset`/`fin_liability` 可缺，填 None）。
 

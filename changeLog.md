@@ -831,6 +831,28 @@
 
 ---
 
+### 补 NIFD 2026Q2 杠杆率 + 硬编码数据清单入册
+
+### 数据
+
+1. **[数据] `scripts/01_fetch_data.py` + `scripts/03_supplement_leverage.py`**：`_NIFD_DATA`/`NIFD_DATA` 追加 2026Q2（2026-06-01：居民 57.7 / 非金 179.5 / 政府 71.0 / 中央 30.5 / 地方 40.4 / 实体 308.2），经 Workflow 双源交叉验证（NIFD 报告 id 4976 + 同花顺/东财/新浪，57.7+179.5+71.0=308.2 校验通过）。杠杆率更新至 **2026-06**。
+2. **[文档] `docs/data-supplement-runbook.md`**：新增「硬编码数据清单」——全仓唯一硬编码时序数据为 NIFD 宏观杠杆率；其余（CITIES/周期分类阈值）为配置非数据。当前到 2026-06；§1 已知报告期 URL 加 2026Q2=4976。
+
+### 验证
+
+- 走闸门 01+02：leverage max=2026-06；derived_quarterly 86 行；hh_debt_to_income 2026-06=126.6；API 对齐 2026-06。
+
+### Data (English)
+
+1. **[data] `scripts/01_fetch_data.py` + `scripts/03_supplement_leverage.py`**: appended NIFD 2026Q2 (2026-06-01: household 57.7 / non-fin 179.5 / gov 71.0 / central 30.5 / local 40.4 / real-economy 308.2), Workflow cross-validated (NIFD report id 4976 + 10jqka/Eastmoney/Sina; sum check 57.7+179.5+71.0=308.2 ✓). Leverage updated to **2026-06**.
+2. **[docs] `docs/data-supplement-runbook.md`**: added "Hardcoded Data Inventory" — the only hardcoded time-series data is NIFD macro leverage; others (CITIES / classification thresholds) are config, not data. Now to 2026-06; §1 known report URLs add 2026Q2=4976.
+
+### Verification (English)
+
+- Gated 01+02: leverage max=2026-06; derived_quarterly 86 rows; hh_debt_to_income 2026-06=126.6; API aligned to 2026-06.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
