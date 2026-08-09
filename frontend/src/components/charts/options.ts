@@ -209,9 +209,10 @@ export function buildBarLineCombo(
 
 /** Multi-line — N series on one value axis (e.g. PMI 官方+财新+非制造业, LPR 1Y+5Y).
  *  Single-column input also renders a one-series line.
- *  markLineAt: draw an emphasized reference line (e.g. PMI 荣枯线 50). */
+ *  markLineAt: draw a subdued reference line (e.g. PMI 荣枯线 50);
+ *  markLineName overrides the label (e.g. 零线 for the demographics zero line). */
 export function buildMultiLine(
-  derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number,
+  derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number, markLineName = '荣枯线',
 ): Record<string, any> {
   const dates = derived.map((r) => r.date as string)
   const series: Record<string, any>[] = cols.map((c, i) => {
@@ -227,11 +228,15 @@ export function buildMultiLine(
     // Attach the reference line to EVERY series, not just [0], so toggling any
     // one off in the legend still leaves the line on the others. It only
     // disappears when all series are hidden — which is correct.
+    // Subdued reference styling (same vocabulary as quadrant cross-hairs &
+    // spread zero line): thin dashed slate at reduced alpha — a background
+    // dimension, not a data-bright line (the old amber solid clashed with the
+    // amber 服务 series and out-shouted the data).
     series.forEach((s) => {
       s.markLine = {
         silent: true, symbol: ['none', 'none'],
-        lineStyle: { color: COLORS.warn, type: 'solid', width: 1.5 },
-        label: { formatter: '荣枯线 {c}', color: COLORS.warn, fontSize: 10, position: 'insideEndTop' },
+        lineStyle: { color: hexA(COLORS.text3, 0.8), type: 'dashed', width: 1 },
+        label: { formatter: `${markLineName} {c}`, color: hexA(COLORS.text3, 0.9), fontSize: 10, position: 'insideEndTop' },
         data: [{ yAxis: markLineAt }],
       }
     })

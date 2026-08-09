@@ -9,10 +9,16 @@
 3. **[文档] `docs/data-sources-guide.md`**（v1.3→v1.4）：NBS 节由"失效"更新为"已恢复"（akshare 1.18.x 切换新站 API，2026-08-09 实测可用；指标目录重构，人均可支配收入路径改为 `人民生活 > 全国居民人均收入情况`）；修正货币供应量接口描述（`macro_china_supply_of_money` 现存在且生产在用）；新增世界银行超时注意与 22/22 全量连通性实测记录
 4. **[文档] `README.md`**：数据流水线 12→14 fetcher（补 `bond_yield`/`demographics` 两表及数据源说明）、`household_income` 状态更新、Python 版本 3.12→3.12+（实测 3.14.6）、手动采集命令改用 venv 解释器、数据库表数与徽章同步
 5. **[文档] `docs/architecture-upgrade.md`**：顶部加"迁移已完成、历史存档"状态横幅（迁移早已落地，避免误读为进行中方案）
+6. **[修复] `frontend/src/components/charts/options.ts`**：PMI 荣枯线 50 由琥珀实线 1.5px 改为隐晦灰色细虚线（`text3` #64748b @80%、1px、dashed）+ 同灰小字标注——退为背景维度参考，不再与「服务」序列（琥珀）撞色争焦；与四象限十字线、剪刀差零线统一参考线语汇。`markLineName` 参数化，顺带修正人口页 0 线误标「荣枯线 0」→「零线」
+7. **[文档] `README.md`**：PMI 荣枯线样式描述与设计系统 warn 用途同步实际实现
 
 ### 说明
 
 - **环境修复（非代码）**：本机 `.venv312` 缺失 requirements.txt 声明的 akshare/requests，已按 requirements 补装（akshare 1.18.83 / requests 2.34.2，Python 3.14.6 下 import 与运行正常）——这是管道此前无法运行的直接原因
+
+### 验证
+
+- 浏览器截图对比（库存周期「PMI 多维」图）：改前琥珀实线醒目撞色 → 改后灰色细虚线隐晦可寻；人口页 0 线标签改「零线」
 
 ### Fix (English)
 
@@ -21,6 +27,8 @@
 3. **[docs] `docs/data-sources-guide.md`** (v1.3→v1.4): NBS section updated from "unavailable" to "recovered" (akshare 1.18.x switched to the new-site API, verified working 2026-08-09; catalog restructured, household-income path now `人民生活 > 全国居民人均收入情况`); corrected money-supply interface description (`macro_china_supply_of_money` now exists and is used in production); added World Bank timeout note and the 22/22 full connectivity test record
 4. **[docs] `README.md`**: data pipeline 12→14 fetchers (added `bond_yield`/`demographics` tables + source notes), `household_income` status updated, Python version 3.12→3.12+ (verified on 3.14.6), manual fetch commands now use the venv interpreter, DB table counts & badge synced
 5. **[docs] `docs/architecture-upgrade.md`**: added "migration completed, historical archive" status banner at top (the migration landed long ago; avoids misreading it as an in-flight plan)
+6. **[fix] `frontend/src/components/charts/options.ts`**: PMI 50 threshold restyled from bright amber solid 1.5px to a subdued thin dashed slate line (`text3` @80%, 1px, dashed) with a small same-gray label — recedes to a background dimension, no longer clashes with the amber 服务 series; matches the quadrant cross-hair / spread zero-line reference vocabulary. `markLineName` parameterized; also fixes the demographics zero line mislabeled "荣枯线 0" → "零线"
+7. **[docs] `README.md`**: PMI threshold style description + warn token usage synced with the implementation
 
 ### Notes (English)
 
