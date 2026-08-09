@@ -2,6 +2,38 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### M3：信号历史表 + Overview 相位翻转高亮
+
+### 新功能
+
+1. **[新功能] `scripts/signal_history.py`**：signal_history 表（ts/data_as_of/composite/merrill/credit/inventory/debt，append-only，无主键不去重）；`01_fetch_data.py` main() 成功提交写 manifest 后追加一行 composite+四相位快照（ts 复用本次 manifest、data_as_of=derived_monthly MAX(date) 取 YYYY-MM，口径同 commentary），空计划提前返回不写、写入失败仅 ⚠️ 告警不影响已提交数据；不进 TABLE_SPECS 闸门（提交后派生快照），/table 白名单放行浏览；日志行用 📈 不含 ✅（refresh.py 进度计数依赖 ✅ 行数）
+2. **[新功能] `GET /api/v1/signals/history`**：倒序（rowid DESC）limit（默认 60，1–500），多取 1 行保证窗口内最旧一行也能对到前值；行附 flips 翻转标注（任一框架相位相对相邻更早一行变化，framework/prev/curr，None 参与比较）；表缺失 → `{"items": []}` 不 500（fresh install）；Pydantic 三新 schema（PhaseFlip/SignalHistoryRow/SignalHistory），`schemas/__init__` 导出 SignalHistory，shared/openapi.json 重导
+3. **[新功能] Overview「信号与相位历史」卡片**：load() Promise.all 增第三路 `getSignalHistory()`，随 `refresh.lastRefreshedAt` 自动重载；每行日期+composite（符号着色 up/down）+四相位 chip（复用 phaseLabel/phaseColor）；翻转行 warn 细环高亮（ring-warn/40 bg-warn/5）、变化 chip 边框加深（border-warn/60）、「仅看翻转」原生 checkbox 过滤；role=list、翻转行 tabindex=0 + aria-label 播报 from→to（中文相位）、非翻转行不设假焦点；`phases.ts` PHASE_LABELS 补 4 个 debt 相位中文（leveraging_boom/stable_growth/leveraging_bust/stable_contraction）；零新依赖
+4. **[新功能] `backend/tests/test_signal_history.py`**：翻转检测构造序列单测（无翻转/单框架方向/同帧多框架/None↔值/窗口最旧行 flips=[]）、live 副本临时库两次写入落两行（ts 有序、composite/四相位与 compute_signals 一致、data_as_of YYYY-MM）、端点 shape（倒序/7 存储字段+flips/flips 与相邻差分一致）+ limit（1 生效/0→422）+ 临时空库 read_history → []
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过；`backend/tests` pytest 54 passed（新增 test_signal_history 7 例：翻转检测 3 + 两写两行 1 + 端点 shape/limit/缺表 3）
+- ✅ worktree 内增量实跑：7 表 updated / 0 kept_previous，signal_history +1 行（ts=2026-08-09T22:35:05 == manifest.ts；data_as_of=2026-06；composite 0 + recession/tightening/active_restocking/beautiful_deleveraging 与 `GET /api/v1/signals` 逐项一致）；临时库单测连写两次 → 恰 2 行不去重
+- ✅ `GET /api/v1/signals/history` 200 倒序、flips 标注与相邻差分一致、`?limit=1` ≤1 行、`?limit=0` 422、临时空库 read_history → []；`GET /api/v1/table/signal_history` 200 可浏览；TABLE_SPECS/validate() 零改动
+- ✅ `vue-tsc --noEmit` 0 error；requirements.txt / package.json / tokens.css 零变化；analysis/、commentary、HealthLight.vue、release_calendar、vintage/双源逻辑零触碰；新增日志行不含 ✅
+
+### M3: Signal History Table + Phase-Flip Highlights (English)
+
+### New Features
+
+1. **[feat] `scripts/signal_history.py`**: append-only signal_history table (ts/data_as_of/composite + four phases, no PK, no dedup); `01_fetch_data.py` main() appends one composite+four-phase snapshot row after a successful commit + manifest write (reuses manifest ts; data_as_of = derived_monthly MAX(date) as YYYY-MM, same convention as commentary); skipped on empty incremental plan, failure only warns (⚠️) without affecting committed data; outside TABLE_SPECS gating (post-commit derived snapshot), browsable via /table whitelist; log line uses 📈, never ✅ (refresh.py progress counts ✅ lines)
+2. **[feat] `GET /api/v1/signals/history`**: newest-first (rowid DESC) with limit (default 60, 1–500), fetches limit+1 rows so even the oldest in-window row has a predecessor to diff against; rows annotated with flips (any framework phase changed vs the adjacent older row: framework/prev/curr, None participates); missing table → `{"items": []}` not 500 (fresh install); three new Pydantic schemas (PhaseFlip/SignalHistoryRow/SignalHistory), SignalHistory exported from `schemas/__init__`, shared/openapi.json re-exported
+3. **[feat] Overview "信号与相位历史" card**: load()'s Promise.all gains a third leg `getSignalHistory()`, auto-reloads with `refresh.lastRefreshedAt`; each row = date + composite (sign-colored up/down) + four phase chips (reuses phaseLabel/phaseColor); flip rows get a warn ring (ring-warn/40 bg-warn/5), changed chips a deeper border (border-warn/60), native "仅看翻转" checkbox filter; role=list, flip rows tabindex=0 + aria-label announcing from→to (Chinese phase names), no fake focus on non-flip rows; `phases.ts` PHASE_LABELS gains the 4 debt phases (leveraging_boom/stable_growth/leveraging_bust/stable_contraction); zero new deps
+4. **[feat] `backend/tests/test_signal_history.py`**: constructed-sequence flip-detection unit tests (no-flip / single-framework direction / multi-framework same frame / None↔value / oldest-in-window flips=[]), two-writes-two-rows on a temp copy of the live DB (ts order, composite+phases match compute_signals, data_as_of YYYY-MM), endpoint shape (newest-first / 7 stored fields + flips / flips consistent with adjacent diffs) + limit (1 honored / 0→422) + read_history on an empty temp DB → []
+
+### Verification
+
+- ✅ `scripts/_pipeline_test.py` all pass; `backend/tests` pytest 54 passed (new: 7 test_signal_history cases — 3 flip detection + 1 two-writes-two-rows + 3 endpoint shape/limit/missing-table)
+- ✅ in-worktree incremental live run: 7 tables updated / 0 kept_previous, signal_history +1 row (ts=2026-08-09T22:35:05 == manifest.ts; data_as_of=2026-06; composite 0 + recession/tightening/active_restocking/beautiful_deleveraging field-for-field equal to `GET /api/v1/signals`); unit test writing twice to a temp DB → exactly 2 rows, no dedup
+- ✅ `GET /api/v1/signals/history` 200 newest-first, flips consistent with adjacent diffs, `?limit=1` ≤1 row, `?limit=0` 422, read_history on empty temp DB → []; `GET /api/v1/table/signal_history` 200 browsable; TABLE_SPECS/validate() untouched
+- ✅ `vue-tsc --noEmit` 0 errors; requirements.txt / package.json / tokens.css unchanged; analysis/, commentary, HealthLight.vue, release_calendar, vintage/dual-source logic untouched; new log lines contain no ✅
+
 ### M2：vintage 快照+diff、核心序列双源比对、财政/外需指标层、值域断言与 golden 扩层
 
 ### 新功能

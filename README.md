@@ -92,7 +92,7 @@
 │  scripts/_pipeline.py + 01_fetch_data.py + 02_compute_derived│
 └─────────────────────────────────────────────────────────────┘
                       │
-              data/macro_data.db (SQLite, 16 原始 + 2 衍生 + commentary)
+              data/macro_data.db (SQLite, 16 原始 + 2 衍生 + commentary + signal_history)
 ```
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
@@ -147,7 +147,7 @@ AKShare/
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
 ├── data/                        # SQLite 数据库（gitignored）
-│   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary
+│   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary + signal_history
 │   ├── backups/                 # 采集前自动备份（留 10 份）
 │   ├── vintages/                # 提交前审计快照（留 12 份，供 scripts/diff_vintage.py 比对）
 │   └── last_run.json            # 上次采集审计 manifest
@@ -279,6 +279,7 @@ FastAPI（`:8000`），OpenAPI 文档 `http://localhost:8000/docs`，契约导�
 | `GET /api/v1/table/{name}` | 任意原始表切片（house_price/leverage…）|
 | `GET /api/v1/cycles/{merrill\|credit\|inventory\|debt}` | 周期分类 + 最新阶段 |
 | `GET /api/v1/signals` | 综合信号 `[-4,+4]` + 各框架阶段 |
+| `GET /api/v1/signals/history` | 信号快照历史（倒序 + 相位翻转标注 flips）|
 | `GET /api/v1/real-estate?cities=…` | 房地产三维评估（雷达数据）|
 | `GET /api/v1/refresh/status` | 上次刷新 manifest |
 | `POST /api/v1/refresh` | 触发闸门管道（阻塞）|

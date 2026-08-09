@@ -1,7 +1,7 @@
 // API client — typed wrappers over the FastAPI endpoints. Types mirror the
 // Pydantic schemas (single source of truth via shared/openapi.json codegen; P0
 // ships hand-written types, `npm run gen:api` regenerates from OpenAPI).
-import type { DerivedFrame, CycleFrame, SignalSummary, RefreshResult, RealEstateResponse, Commentary, SourcesHealth } from './types'
+import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth } from './types'
 
 export const BASE = '/api/v1'
 
@@ -63,6 +63,8 @@ export const api = {
   getCycle: (name: string, start?: string, end?: string) =>
     getJSON<CycleFrame>(`/cycles/${name}${qs([['start', start], ['end', end]])}`),
   getSignals: () => getJSON<SignalSummary>('/signals'),
+  getSignalHistory: (limit?: number) =>
+    getJSON<SignalHistory>(`/signals/history${qs([['limit', limit?.toString()]])}`),
   // cities as repeated query params (?cities=北京&cities=上海) — robust vs proxies.
   getRealEstate: (cities?: string[]) => {
     if (!cities?.length) return getJSON<RealEstateResponse>('/real-estate')

@@ -73,3 +73,24 @@ export interface Commentary {
   status: 'ok' | 'generating' | 'empty' | 'error'
   msg: string | null
 }
+
+export interface PhaseFlip {
+  framework: string            // merrill | credit | inventory | debt
+  prev: string | null
+  curr: string | null
+}
+
+export interface SignalHistoryRow {
+  ts: string
+  data_as_of: string | null
+  composite: number
+  merrill: string | null
+  credit: string | null
+  inventory: string | null
+  debt: string | null
+  flips: PhaseFlip[]
+}
+
+export interface SignalHistory {
+  items: SignalHistoryRow[]
+}

@@ -38,6 +38,7 @@ from _pipeline import (  # noqa: E402
 )
 from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
 import dual_sources  # noqa: E402
+from signal_history import append_signal_history  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
@@ -972,6 +973,14 @@ def main():
         _MANIFEST["vintage"] = f"data/vintages/{vintage.name}"
     # ⑤ audit trail
     write_manifest(_MANIFEST)
+
+    # ⑥ 信号历史快照：commit 后追加，失败仅告警不影响已提交数据
+    # （日志行不含 ✅——refresh.py 进度计数依赖 ✅ 行数）
+    try:
+        append_signal_history(DB_PATH, ts)
+        log("📈 signal_history: +1 行（composite+四相位）")
+    except Exception as e:
+        log(f"  ⚠️ signal_history 写入失败（不影响数据）: {e}")
 
     log("=" * 50)
     log("采集完成 (atomic commit): " + os.path.abspath(DB_PATH))

@@ -337,6 +337,52 @@
         }
       }
     },
+    "/api/v1/signals/history": {
+      "get": {
+        "tags": [
+          "signals"
+        ],
+        "summary": "History",
+        "description": "信号快照历史（倒序；每次成功刷新一行，附相位翻转标注 flips）。",
+        "operationId": "history_api_v1_signals_history_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 60,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/refresh/status": {
       "get": {
         "tags": [
@@ -754,6 +800,41 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "PhaseFlip": {
+        "properties": {
+          "framework": {
+            "type": "string",
+            "title": "Framework"
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev"
+          },
+          "curr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "framework"
+        ],
+        "title": "PhaseFlip"
+      },
       "RefreshResult": {
         "properties": {
           "status": {
@@ -816,6 +897,103 @@
           "msg"
         ],
         "title": "RefreshResult"
+      },
+      "SignalHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignalHistoryRow"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SignalHistory"
+      },
+      "SignalHistoryRow": {
+        "properties": {
+          "ts": {
+            "type": "string",
+            "title": "Ts"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "composite": {
+            "type": "integer",
+            "title": "Composite"
+          },
+          "merrill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merrill"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit"
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory"
+          },
+          "debt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt"
+          },
+          "flips": {
+            "items": {
+              "$ref": "#/components/schemas/PhaseFlip"
+            },
+            "type": "array",
+            "title": "Flips",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "composite"
+        ],
+        "title": "SignalHistoryRow"
       },
       "SignalSummary": {
         "properties": {

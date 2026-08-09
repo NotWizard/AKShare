@@ -22,6 +22,10 @@ export const PHASE_COLORS: Record<string, string> = {
   stable: '#f59e0b',
   beautiful_deleveraging: '#10b981',
   ugly_deleveraging: '#ef4444',
+  leveraging_boom: '#10b981',
+  leveraging_bust: '#ef4444',
+  stable_growth: '#f59e0b',
+  stable_contraction: '#3b82f6',
 }
 
 export const PHASE_LABELS: Record<string, string> = {
@@ -31,6 +35,8 @@ export const PHASE_LABELS: Record<string, string> = {
   active_destocking: '主动去库', passive_destocking: '被动去库',
   leveraging: '加杠杆', deleveraging: '去杠杆', stable: '稳定',
   beautiful_deleveraging: '美丽去杠杆', ugly_deleveraging: '丑陋去杠杆',
+  leveraging_boom: '加杠杆繁荣', stable_growth: '稳定增长',
+  leveraging_bust: '加杠杆衰退', stable_contraction: '稳定收缩',
 }
 
 export const phaseColor = (p: string | null | undefined): string =>
