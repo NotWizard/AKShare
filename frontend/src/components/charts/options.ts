@@ -7,6 +7,28 @@ import { hexA, mergePhaseSegments } from './utils'
 
 type Rec = Record<string, string | number | null>
 
+/** 列 key → 中文图例名（NBS / 央行 / NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等
+ *  特有名词保留英文缩语）。未收录的 key 原样回退。 */
+const COL_ZH: Record<string, string> = {
+  cpi_yoy: 'CPI同比', cpi_mom: 'CPI环比',
+  ppi_yoy: 'PPI同比', ppi_mom: 'PPI环比',
+  m2_yoy: 'M2同比', m1_yoy: 'M1同比', m0_yoy: 'M0同比',
+  m2_m1_spread: 'M2-M1剪刀差',
+  pmi_official: '官方PMI', pmi_caixin: '财新PMI',
+  pmi_non_mfg: '非制造业PMI', pmi_caixin_svc: '财新服务业PMI',
+  ip_yoy: '工业增加值同比', gdp_yoy: 'GDP同比',
+  household: '居民部门', non_fin_corp: '非金融企业部门',
+  gov_total: '政府部门', gov_central: '中央政府', gov_local: '地方政府',
+  real_economy: '实体经济部门',
+  lpr_1y: 'LPR 1年', lpr_5y: 'LPR 5年', real_rate: '实际利率', bond_10y: '10年期国债',
+  total: '社融增量', sf_stock_yoy: '社融存量增速',
+  new_rmb_loan: '新增人民币贷款', loan_yoy: '新增贷款同比',
+  urbanization_rate: '城镇化率', population: '年末总人口',
+  birth_rate: '出生率', natural_growth_rate: '自然增长率',
+  credit_impulse: '信贷脉冲',
+}
+const zh = (col: string): string => COL_ZH[col] ?? col
+
 /** Credit cycle flagship: M2 同比 line (connectNulls) + M2 趋势 dashed +
  *  phase-background markArea + the 1991–1996 source-gap markArea + caption. */
 export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string, any> {
@@ -68,14 +90,14 @@ export function buildDualAxisLine(
   return applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: [
-      { type: 'value', name: aName ?? a, scale: true, ...baseAxis() },
-      { type: 'value', name: bName ?? b, scale: true, ...baseAxis({ splitLine: { show: false } }) },
+      { type: 'value', name: aName ?? zh(a), scale: true, ...baseAxis() },
+      { type: 'value', name: bName ?? zh(b), scale: true, ...baseAxis({ splitLine: { show: false } }) },
     ],
     series: [
-      { name: a, type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
+      { name: aName ?? zh(a), type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[a]),
         itemStyle: { color: aColor }, lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
-      { name: b, type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
+      { name: bName ?? zh(b), type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[b]),
         itemStyle: { color: bColor }, lineStyle: { color: bColor, width: 2 } },
     ],
@@ -93,7 +115,7 @@ export function buildStackedArea(
     series: cols.map((c, i) => {
       const color = PALETTE[i % PALETTE.length]
       return {
-        name: c, type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
+        name: zh(c), type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
         itemStyle: { color },          // legend marker + area fill use the same color as the line
         areaStyle: { opacity: 0.12 }, // no explicit color → inherits itemStyle.color
         lineStyle: { width: 1.5, color },

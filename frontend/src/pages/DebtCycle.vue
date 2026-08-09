@@ -54,7 +54,7 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <EChart :option="buildStackedArea(dq, ['gov_central', 'gov_local'])" height="320px" />
     </GraphCard>
     <GraphCard title="利率环境" tip="LPR 1 年/5 年利率 + 实际利率（LPR 1Y − CPI 同比）+ 10 年期国债收益率（无风险利率锚）。债务周期标准框架里 社融↔债券利率↔期限利差 为判定链路。" :loading="loading" :error="error">
-      <EChart :option="buildMultiLine(rateDm, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10Y国债' }], '%')" height="300px" />
+      <EChart :option="buildMultiLine(rateDm, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10年期国债' }], '%')" height="300px" />
     </GraphCard>
   </div>
 </template>

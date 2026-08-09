@@ -753,6 +753,28 @@
 
 ---
 
+### 图表图例统一中文化
+
+### 优化
+
+1. **[优化] `frontend/src/components/charts/options.ts`**：新增集中「列 key→中文图例名」映射 `COL_ZH`（采用 NBS/央行/NIFD 官方术语；CPI/PPI/M2/M1/PMI/LPR/GDP 等特有名词保留英文缩语，未收录 key 原样回退）；`buildDualAxisLine` 与 `buildStackedArea` 的序列名/双轴名改经 `zh()` 翻译——此前这两类图图例直接显示列 key（`cpi_yoy`/`household`/`non_fin_corp` 等英文）。全部调用点无需改动。
+2. **[优化] `frontend/src/pages/DebtCycle.vue`**：利率环境图「10Y国债」统一为「10年期国债」。
+
+### 验证
+
+- 债务周期图例=居民部门/非金融企业部门/政府部门、中央政府/地方政府；美林双轴=CPI同比/PPI同比、CPI环比/PPI环比（截图确认，轴名同步中文化）；`vue-tsc` 0 + `vite build` 成功。
+
+### Optimization (English)
+
+1. **[opt] `frontend/src/components/charts/options.ts`**: added a central col-key→Chinese-legend map `COL_ZH` (official NBS/PBoC/NIFD terminology; CPI/PPI/M2/M1/PMI/LPR/GDP keep English abbreviations; unmapped keys fall back to the raw key); `buildDualAxisLine` + `buildStackedArea` series/axis names now go through `zh()` — previously these charts showed raw column keys (`cpi_yoy`/`household`/`non_fin_corp`) as English legends. No call-site changes needed.
+2. **[opt] `frontend/src/pages/DebtCycle.vue`**: rate-env chart "10Y国债" → "10年期国债".
+
+### Verification (English)
+
+- Debt-cycle legends = 居民部门/非金融企业部门/政府部门 and 中央政府/地方政府; Merrill dual-axis = CPI同比/PPI同比 and CPI环比/PPI环比 (screenshot-verified, axis names localized too); `vue-tsc` 0 + `vite build` success.
+
+---
+
 ## 2026-06-20 — 修复图例标记色与曲线颜色不一致
 
 ### Bug 修复
