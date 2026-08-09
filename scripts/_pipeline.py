@@ -48,8 +48,10 @@ SHRINK_FLOOR = 0.8
 TABLE_SPECS = {
     "money_supply":     dict(min_rows=400, required=["m2_yoy"]),
     "gdp":              dict(min_rows=15,  required=["gdp_yoy"]),
-    "cpi":              dict(min_rows=300, required=["cpi_yoy"]),
-    "ppi":              dict(min_rows=250, required=["ppi_yoy"]),
+    # 东财当前全国 CPI/PPI 序列约 220+/240+ 行（较早期覆盖缩短），绝对下限按
+    # 现状校准；对已有表的缩水防护由 distinct-date 反缩水县闸承担
+    "cpi":              dict(min_rows=200, required=["cpi_yoy"]),
+    "ppi":              dict(min_rows=200, required=["ppi_yoy"]),
     "pmi":              dict(min_rows=200, required=["pmi_official"]),
     "leverage":         dict(min_rows=40,  required=["household"]),
     "social_finance":   dict(min_rows=50,  required=["total"]),

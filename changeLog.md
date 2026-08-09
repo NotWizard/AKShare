@@ -2,6 +2,56 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### M1：数据源健康探针 + 发布日历增量抓取 + 可选 launchd 调度
+
+### 新功能
+
+1. **[新功能] `scripts/release_calendar.py`**：发布日历字典 `TABLE_CALENDAR`（14 表 kind/months/days 窗口/channel 及依据注释）+ 纯函数 `should_fetch(table, today, force)`——release 型表只在发布窗口内抓（宁宽勿窄），market 型（bond_yield）恒抓，未知表 fail-open
+2. **[新功能] `scripts/01_fetch_data.py`**：`--full` 参数绕过日历；计划行 `📋 计划抓取 K/N 表（全量|增量）`；窗口内零表时提前返回（不 backup、不开 staging、不写 manifest）；`_MANIFEST` 新增 `sources` 键（14 fetcher 有序列表：table/channel/ok/elapsed_s/error/consecutive_failures/last_success），连败计数读上次 last_run.json 递增/清零，窗口外跳过的表整条沿用
+3. **[新功能] `backend/app/core/refresh.py`**：纯函数 `sources_health(manifest)`（任一源 2 连败→red；1 连败或 kept_previous warning→yellow；其余→green；无 sources→green+updated_at=null）+ `read_sources_health()`（永不抛异常）；`run_refresh(full=False)` 子进程追加 `--full`；进度解析 `计划抓取 (\d+)/` 自适应 expected=K+2；`EXPECTED_FETCH_STEPS` 修正 15→16（14 fetcher + 2 衍生）
+4. **[新功能] `backend/app/api/v1/sources.py` + `schemas/sources.py`**：`GET /api/v1/sources/health` 恒 200，形状 = SourcesHealth（SourceHealth 列表），只读 manifest 请求时推导、无缓存无新存储
+5. **[新功能] `backend/app/api/v1/refresh.py`**：`POST /refresh` 与 `GET /refresh/stream` 新增查询参数 `full: bool`，透传 run_refresh
+6. **[新功能] `frontend/src/components/layout/HealthLight.vue`**：RefreshBar 健康灯——绿/黄/红取 up/warn/down 令牌（红加细环）、无运行记录灰点；popover 列 14 源（表名/通道/最后成功/✓/warning/error）+「全量刷新」次按钮 + 增量提示；role=status aria-label 随状态播报，dialog Esc 关闭焦点归还，@vueuse/core onClickOutside 点击外部关闭（零新依赖）
+7. **[新功能] `frontend/src/stores/refresh.ts`**：`health`/`loadHealth()`（失败静默→灰点），`stream(full)` 追加 `?full=1`、done 后刷新健康；`client.ts` 增 `getSourcesHealth()`/`triggerRefresh(full?)`；`types.ts` 增 SourceHealth/SourcesHealth 接口
+8. **[新功能] `scripts/schedule/`**：launchd 三件套（com.macro.refresh.plist 模板 + install/uninstall 脚本），每日 10:07 触发，默认不安装，日志落 `data/refresh_schedule.log`
+
+### 调整
+
+1. **[调整] `scripts/_pipeline.py`**：cpi/ppi `min_rows` 300/250 → 200/200——东财当前全国 CPI/PPI 序列约 223/246 行（较早期覆盖缩短），旧下限导致新库永远拒收；对已有表的缩水防护仍由 distinct-date 反缩水县闸承担
+
+### 验证
+
+- ✅ `scripts/_pipeline_test.py` 全过；`scripts/release_calendar_test.py` 全过（2026-08-09 复跑确认）
+- ✅ `backend/tests` pytest 26 passed（含新增 test_sources_health.py 红/黄/绿/沿用/无 manifest + TestClient 端点形状）
+- ✅ worktree 内 `01_fetch_data.py` 增量/`--full` 实跑：manifest.sources 14 条、窗口 skip、空计划提前返回
+- ✅ 前端 `vue-tsc --noEmit` 0 error（2026-08-09 复跑确认）；健康灯键盘可达（Tab/Enter/Esc/焦点归还）
+- ✅ shared/openapi.json 与 live app 一致（`app.openapi()` 与盘上文件逐字段比对相等）；requirements.txt / package.json 零变化
+
+### M1: Source Health Probe + Calendar-Driven Incremental Fetch + Optional launchd Schedule (English)
+
+### New Features (English)
+
+1. **[feat] `scripts/release_calendar.py`**: `TABLE_CALENDAR` dict (14 tables: kind/months/day-windows/channel with rationale) + pure `should_fetch(table, today, force)` — release tables only fetched inside their release window (wide over narrow), market table (bond_yield) always fetched, unknown tables fail-open
+2. **[feat] `scripts/01_fetch_data.py`**: `--full` bypasses the calendar; plan line `📋 计划抓取 K/N 表（全量|增量）`; zero tables in window → early return (no backup/staging/manifest); `_MANIFEST` gains `sources` (ordered 14-fetcher list: table/channel/ok/elapsed_s/error/consecutive_failures/last_success), failure counters incremented/reset from previous last_run.json, window-skipped tables carried over verbatim
+3. **[feat] `backend/app/core/refresh.py`**: pure `sources_health(manifest)` (any source ≥2 consecutive failures → red; 1 failure or kept_previous warning → yellow; else green; no sources → green + updated_at=null) + never-raising `read_sources_health()`; `run_refresh(full=False)` appends `--full`; progress parses `计划抓取 (\d+)/` to adapt expected=K+2; `EXPECTED_FETCH_STEPS` corrected 15→16 (14 fetchers + 2 derived)
+4. **[feat] `backend/app/api/v1/sources.py` + `schemas/sources.py`**: `GET /api/v1/sources/health` always 200, shape = SourcesHealth; reads manifest on request, no cache, no new storage
+5. **[feat] `backend/app/api/v1/refresh.py`**: `POST /refresh` and `GET /refresh/stream` gain `full: bool` query param, passed through to run_refresh
+6. **[feat] `frontend/src/components/layout/HealthLight.vue`**: RefreshBar health light — green/yellow/red from up/warn/down tokens (red gets a thin ring), grey dot when no run record; popover lists 14 sources (table/channel/last-success/✓/warning/error) + secondary "全量刷新" button + incremental hint; role=status aria-label announces state changes, dialog Esc closes with focus return, @vueuse/core onClickOutside (zero new deps)
+7. **[feat] `frontend/src/stores/refresh.ts`**: `health`/`loadHealth()` (silent failure → grey dot), `stream(full)` appends `?full=1` and reloads health on done; `client.ts` adds `getSourcesHealth()`/`triggerRefresh(full?)`; `types.ts` adds SourceHealth/SourcesHealth
+8. **[feat] `scripts/schedule/`**: launchd trio (com.macro.refresh.plist template + install/uninstall scripts), daily 10:07, NOT installed by default, logs to `data/refresh_schedule.log`
+
+### Adjustments (English)
+
+1. **[adjust] `scripts/_pipeline.py`**: cpi/ppi `min_rows` 300/250 → 200/200 — eastmoney's current national CPI/PPI series is ~223/246 rows (shorter than the historical coverage the old floors were calibrated on), which permanently rejected them on a fresh DB; erosion protection for existing tables remains the distinct-date shrink guard
+
+### Verification (English)
+
+- ✅ `scripts/_pipeline_test.py` all pass; `scripts/release_calendar_test.py` all pass (re-run 2026-08-09)
+- ✅ `backend/tests` pytest 26 passed (incl. new test_sources_health.py red/yellow/green/carry-over/no-manifest + TestClient endpoint shape)
+- ✅ in-worktree `01_fetch_data.py` incremental/`--full` live runs: manifest.sources 14 entries, window skips, empty-plan early return
+- ✅ frontend `vue-tsc --noEmit` 0 errors (re-run 2026-08-09); health light keyboard-accessible (Tab/Enter/Esc/focus return)
+- ✅ shared/openapi.json matches the live app (`app.openapi()` vs on-disk file, field-by-field equal); requirements.txt / package.json unchanged
+
 ### 首页重构与 AI 评论功能
 
 ### 重构

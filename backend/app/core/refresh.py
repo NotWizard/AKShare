@@ -9,6 +9,7 @@ The progress callback is exposed so the API layer can drive an SSE stream.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -24,10 +25,14 @@ LOCK_PATH = PROJECT_ROOT / "data" / ".refresh.lock"
 VENV_PY = PROJECT_ROOT / ".venv312" / "bin" / "python"
 
 # Expected number of ✅ lines from 01_fetch_data.py stdout:
-# 13 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
-# industrial, house_price, household_income, new_credit, bond_yield)
-# + 2 derived tables (derived_monthly, derived_quarterly) = 15 total.
-EXPECTED_FETCH_STEPS = 15
+# 14 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
+# industrial, house_price, household_income, new_credit, bond_yield, demographics)
+# + 2 derived tables (derived_monthly, derived_quarterly) = 16 total.
+# Lower bound only: a full run emits more ✅ lines (per-indicator sub-steps,
+# extra derived tables); min(done, expected) clamps so progress just reaches
+# 100% early. Initial fallback only: the 📋 计划抓取 K/N line refines expected
+# per run (incremental mode skips tables outside their release window).
+EXPECTED_FETCH_STEPS = 16
 
 
 def is_running() -> bool:
@@ -78,13 +83,55 @@ def read_manifest_summary() -> dict:
     }
 
 
-def run_refresh(progress_cb=None, stop_event=None) -> dict:
+def sources_health(manifest: dict) -> dict:
+    """Derive per-source red/yellow/green from the manifest (pure function, no
+    new storage — last_run.json is the only source of truth).
+
+    规则：任一源 consecutive_failures ≥ 2 → red；否则任一源 1 连败或
+    kept_previous warning（验证闸门拒收）→ yellow；其余 → green。
+    sources 为空 → green + updated_at=None（前端画灰点 = 尚无运行记录）。
+    """
+    sources = manifest.get("sources") or []
+    if not sources:
+        return {"status": "green", "updated_at": None, "sources": []}
+    tables = manifest.get("tables", {})
+    status = "green"
+    out = []
+    for s in sources:
+        warning = None
+        tab = tables.get(s.get("table"))
+        if tab and tab.get("status") == "kept_previous":
+            warning = f"kept previous — {tab.get('reason', '')}"
+        cf = s.get("consecutive_failures", 0) or 0
+        out.append({**s, "warning": warning})
+        if cf >= 2:
+            status = "red"
+        elif status != "red" and (cf == 1 or warning):
+            status = "yellow"
+    return {"status": status, "updated_at": manifest.get("ts"), "sources": out}
+
+
+def read_sources_health() -> dict:
+    """Read data/last_run.json and derive sources health. Never raises;
+    absent/corrupt manifest → green + updated_at=None. No caching (file is tiny)."""
+    try:
+        m = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        m = {}
+    try:
+        return sources_health(m if isinstance(m, dict) else {})
+    except Exception:
+        return {"status": "green", "updated_at": None, "sources": []}
+
+
+def run_refresh(progress_cb=None, stop_event=None, full=False) -> dict:
     """Run the fetch pipeline as a subprocess; clear caches on success.
 
     Streams stdout so ``progress_cb(fraction)`` is driven by per-table ✅ lines.
     Single-flight: a lockfile prevents two refreshes racing on the staging DB.
     Supports cancellation via ``stop_event`` (threading.Event): if set, the
     subprocess is killed early and the lockfile released.
+    ``full=True`` appends --full (bypass the release calendar, fetch all tables).
     Returns a UI-friendly result dict.
     """
     if is_running():
@@ -96,8 +143,9 @@ def run_refresh(progress_cb=None, stop_event=None) -> dict:
     proc = None
     try:
         py = str(VENV_PY) if VENV_PY.exists() else sys.executable
+        cmd = [py, str(FETCH_SCRIPT)] + (["--full"] if full else [])
         proc = subprocess.Popen(
-            [py, str(FETCH_SCRIPT)],
+            cmd,
             cwd=str(PROJECT_ROOT),
             env=_subprocess_env(),
             stdout=subprocess.PIPE,
@@ -118,6 +166,10 @@ def run_refresh(progress_cb=None, stop_event=None) -> dict:
                         "ts": None, "updated": [], "kept_previous": []}
             tail.append(line)
             tail = tail[-60:]
+            m = re.search(r"计划抓取 (\d+)/", line)
+            if m:
+                # 计划行口径本次实际抓取数 + derived_monthly/derived_quarterly 两条 ✅
+                expected = int(m.group(1)) + 2
             if "✅" in line:
                 done = min(done + 1, expected)
                 if progress_cb:

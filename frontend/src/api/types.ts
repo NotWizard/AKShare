@@ -33,6 +33,23 @@ export interface RefreshResult {
   detail?: string | null
 }
 
+export interface SourceHealth {
+  table: string
+  channel: string
+  ok: boolean
+  elapsed_s: number | null
+  error: string | null
+  consecutive_failures: number
+  last_success: string | null
+  warning: string | null
+}
+
+export interface SourcesHealth {
+  status: 'green' | 'yellow' | 'red'
+  updated_at: string | null
+  sources: SourceHealth[]
+}
+
 export interface RealEstateAssessment {
   leverage_space_score?: number
   price_momentum_score?: number

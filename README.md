@@ -193,7 +193,8 @@ cd frontend && npm run dev
 ### 手动采集 / 重算衍生
 
 ```bash
-python3 scripts/01_fetch_data.py     # 采集（走闸门管道：暂存→校验→原子切换→备份→manifest）
+python3 scripts/01_fetch_data.py     # 采集（默认按发布日历增量；走闸门管道：暂存→校验→原子切换→备份→manifest）
+python3 scripts/01_fetch_data.py --full  # 全量采集（绕过发布日历）
 python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarterly
 ```
 
@@ -243,6 +244,18 @@ python3 scripts/02_compute_derived.py  # 重算 derived_monthly / derived_quarte
 - GDP 同比 + 4 季平滑、各部门杠杆率及季度变化速度
 
 > 注：`derived_quarterly` 以 leverage 季频为锚、GDP 年频经 `merge_asof` + ffill 填充到各季，各部门杠杆率及季度变化列已填充（旧实现因 GDP 年频 `YYYY-01-01` 与 leverage 季末 `YYYY-{03,06,09,12}` 等值 merge 日期不重叠而全 NULL，已修复）。债务图表仍直读 `leverage` 原始表（见 DebtCycle.vue），`cycle_debt` 也直读 leverage。
+
+### 定时刷新（可选，launchd）
+
+默认**不安装**。需要每日自动采集时手动安装（macOS launchd，每日 10:07 触发，晚于 NBS 09:30 晨间发布）：
+
+```bash
+scripts/schedule/schedule_install.sh    # 安装（幂等，重装自动先卸载旧任务）
+scripts/schedule/schedule_uninstall.sh  # 卸载
+```
+
+- 按发布日历过滤：窗口外的表自动跳过，窗口外日期近乎空转，成本可忽略
+- 运行日志：`data/refresh_schedule.log`
 
 ---
 

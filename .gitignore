@@ -14,6 +14,7 @@ data/backups/
 data/last_run.json
 data/.dashcache/
 data/.refresh.lock
+data/refresh_schedule.log
 
 # IDE
 .idea/
@@ -34,6 +35,9 @@ env/
 venv/
 
 # Frontend build artifacts
+# ponytail: no-trailing-slash duplicate covers the worktree case where
+# node_modules is a symlink (git sees a file, so "dir/" patterns don't match)
+frontend/node_modules
 frontend/node_modules/
 frontend/dist/
 

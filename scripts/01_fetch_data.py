@@ -4,12 +4,14 @@
 从 AKShare 拉取所有宏观指标数据，清洗后存入 SQLite
 """
 
+import argparse
+import json
 import sqlite3
 import os
 import sys
 import time
 import warnings
-from datetime import datetime
+from datetime import date, datetime
 
 import akshare as ak
 import pandas as pd
@@ -23,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _pipeline import (  # noqa: E402
     DB_PATH as _LIVE_DB,
     STAGING_PATH as _STAGING,
+    MANIFEST_PATH,
     iso_ts,
     backup_db,
     open_staging,
@@ -33,6 +36,7 @@ from _pipeline import (  # noqa: E402
     table_distinct_dates,
     validate,
 )
+from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
@@ -42,7 +46,17 @@ def log(msg):
 
 
 # Per-run audit manifest, populated by save_to_db and flushed by main().
-_MANIFEST = {"ts": None, "akshare": None, "tables": {}}
+_MANIFEST = {"ts": None, "akshare": None, "tables": {}, "sources": []}
+
+
+def _read_prev_manifest():
+    """读上次 data/last_run.json（任何读取失败视为空），用于沿用 sources 的
+    consecutive_failures / last_success。模式同 core/refresh.read_manifest_summary。"""
+    try:
+        m = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        return m if isinstance(m, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def save_to_db(df, table_name, conn, if_exists="replace"):
@@ -658,20 +672,16 @@ def fetch_demographics(conn):
 # 主流程
 # ─────────────────────────────────────────────
 def main():
+    parser = argparse.ArgumentParser(description="中国宏观经济数据采集（默认按发布日历增量，--full 全量）")
+    parser.add_argument("--full", action="store_true", help="跳过发布日历，抓取全部表")
+    args = parser.parse_args()
+
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     global _MANIFEST
 
     log("=" * 50)
     log("中国宏观经济数据采集开始 (staged + atomic)")
     log("=" * 50)
-
-    # ① backup the live DB (recoverable)
-    backup_db()
-    # ② copy live → staging (old good data already present inside staging)
-    staging = open_staging()
-    conn = sqlite3.connect(staging)
-
-    _MANIFEST = {"ts": iso_ts(), "akshare": getattr(ak, "__version__", "?"), "tables": {}}
 
     fetchers = [
         fetch_money_supply,
@@ -690,15 +700,59 @@ def main():
         fetch_demographics,
     ]
 
-    for f in fetchers:
-        name = f.__name__.replace("fetch_", "")
+    # 抓取计划：release 型表只在发布窗口内抓，market/未知表恒抓（见 release_calendar）
+    today = date.today()
+    selected = [(f.__name__.replace("fetch_", ""), f) for f in fetchers
+                if should_fetch(f.__name__.replace("fetch_", ""), today, args.full)]
+    log(f"📋 计划抓取 {len(selected)}/{len(fetchers)} 表（{'全量' if args.full else '增量'}）")
+    if not selected:
+        log("窗口内无表，跳过")
+        return 0
+
+    # 上次运行的 sources（窗口外跳过的表整条沿用：不增不减，last_success 保持真实）
+    prev_sources = {s.get("table"): s for s in _read_prev_manifest().get("sources", [])
+                     if isinstance(s, dict)}
+
+    # ① backup the live DB (recoverable)
+    backup_db()
+    # ② copy live → staging (old good data already present inside staging)
+    staging = open_staging()
+    conn = sqlite3.connect(staging)
+
+    ts = iso_ts()
+    _MANIFEST = {"ts": ts, "akshare": getattr(ak, "__version__", "?"), "tables": {}, "sources": []}
+
+    for name, f in selected:
+        t0 = time.time()
+        ok, err = True, None
         try:
             f(conn)
         except Exception as e:
+            ok, err = False, f"{type(e).__name__}: {e}"
             log(f"  ❌ {f.__name__} 异常: {e}")
             _MANIFEST["tables"].setdefault(
                 name, {"status": "kept_previous", "reason": f"{type(e).__name__}: {e}"}
             )
+        # ok 仅表示 fetcher 是否抛异常；验证闸门拒收走 kept_previous warning（后端推导）
+        prev = prev_sources.get(name, {})
+        _MANIFEST["sources"].append({
+            "table": name,
+            "channel": TABLE_CALENDAR.get(name, {}).get("channel", ""),
+            "ok": ok,
+            "elapsed_s": round(time.time() - t0, 2),
+            "error": err[:200] if err else None,  # 截断防膨胀
+            "consecutive_failures": 0 if ok else prev.get("consecutive_failures", 0) + 1,
+            "last_success": ts if ok else prev.get("last_success"),
+        })
+
+    # sources 最终按 fetchers 顺序：本次抓取的 + 窗口外沿用上次整条的
+    fetched = {s["table"]: s for s in _MANIFEST["sources"]}
+    ordered = []
+    for f in fetchers:
+        entry = fetched.get(f.__name__.replace("fetch_", "")) or prev_sources.get(f.__name__.replace("fetch_", ""))
+        if entry:
+            ordered.append(entry)
+    _MANIFEST["sources"] = ordered
 
     # ③ recompute derived tables ON staging (raw + derived atomic together)
     try:

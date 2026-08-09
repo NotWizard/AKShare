@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useRefreshStore } from '@/stores/refresh'
 import { useFiltersStore, type Preset } from '@/stores/filters'
+import HealthLight from './HealthLight.vue'
 
 const refresh = useRefreshStore()
 const filters = useFiltersStore()
@@ -25,6 +26,8 @@ const presets: Preset[] = ['5Y', '10Y', '20Y', 'ALL']
     </div>
 
     <div class="w-px h-4 bg-border" />
+
+    <HealthLight />
 
     <button
       class="px-3 py-1 text-xs font-semibold rounded-lg border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"

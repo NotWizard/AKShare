@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 模板：占位符 __PROJECT_ROOT__ / __PYTHON__ 由 schedule_install.sh 用 sed 替换 -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.macro.refresh</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__PYTHON__</string>
+		<string>__PROJECT_ROOT__/scripts/01_fetch_data.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__PROJECT_ROOT__</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>10</integer>
+		<key>Minute</key>
+		<integer>7</integer>
+	</dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>DYLD_LIBRARY_PATH</key>
+		<string>/opt/homebrew/opt/expat/lib</string>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>__PROJECT_ROOT__/data/refresh_schedule.log</string>
+	<key>StandardErrorPath</key>
+	<string>__PROJECT_ROOT__/data/refresh_schedule.log</string>
+</dict>
+</plist>
