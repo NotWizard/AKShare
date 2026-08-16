@@ -958,6 +958,20 @@ def fetch_external_demand(conn):
     except Exception as e:
         log(f"  ⚠️ 美国 ISM PMI 采集失败: {e}")
 
+    # ISM 官方补充：akshare 的 Jin10 源冻结于 2025-08；以下为 ISM 官方
+    # （PR Newswire 月度发布）值，手工/Agent 按月维护（见 data-supplement-runbook）。
+    _ISM_SUPPLEMENT = {
+        "2026-06-01": 53.3,
+        "2026-07-01": 55.6,
+    }
+    have = set(result["date"])
+    for d, v in _ISM_SUPPLEMENT.items():
+        if d in have:
+            result.loc[result["date"] == d, "us_ism_pmi"] = v
+        else:
+            result = pd.concat([result, pd.DataFrame([{"date": d, "us_ism_pmi": v}])],
+                               ignore_index=True)
+
     result = result.sort_values("date").reset_index(drop=True)
     # ISM 外连接带入 1970 起全史（~540 行冗余）→ 裁到贸易日期域，
     # ISM 保留与贸易重叠段（2015+），外需页语境足够

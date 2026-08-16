@@ -113,6 +113,7 @@
 | 月 | CPI / PPI / PMI | ~9-10 日 / PMI 月末 | 跑 `01_fetch_data.py` |
 | 月 | 社融 | ~15 日（主源滞后时自动走 PBoC XLSX 备用源） | 跑 `01_fetch_data.py` |
 | 月 | LPR | ~20 日 | 跑 `01_fetch_data.py` |
+| 月 | 美国 ISM 制造业 PMI | ~次月 1 日（ISM 官方 / PR Newswire） | akshare Jin10 源冻结于 2025-08；按 `_ISM_SUPPLEMENT`（01_fetch_data.py）逐月补官方值后跑 `01_fetch_data.py`；2025-09~2026-05 缺口可逐月回补 |
 | 季 | GDP（累计季度） | 季后 ~1 个月（Q3≈10 月） | 跑 `01_fetch_data.py`（解析器已支持累计季度） |
 | 季 | 杠杆率 NIFD | 季后 ~1 个月（Q3≈10 月） | 按 §1 由 Agent 补一期 `_NIFD_DATA` 后跑 `01_fetch_data.py` |
 | 年 | 居民收入 / 人口 | 次年 1 月 | 跑 `01_fetch_data.py` |
