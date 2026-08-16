@@ -43,6 +43,10 @@
 - **一键刷新**：看板内按钮触发采集管道，SSE 流式真进度，完成后自动重载
 - **KPI 指标瓦 + tooltip**：概览页关键指标 count-up 动画 + ⓘ 说明浮窗（含义 + 取数逻辑）
 - **PMI 荣枯线**：50 线以隐晦灰色细虚线 + 同色小标注呈现（仅维度参考，不与数据序列争焦；与四象限十字线/剪刀差零线同一参考线语汇）
+- **图例中文化**：所有图表图例/轴名统一中文（NBS/央行/NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等特有名词保留英文缩语），见 `options.ts` `COL_ZH`
+- **居民真实杠杆空间**：债务周期页「杠杆率 vs 债务收入比」图——杠杆率看似 ~60%，债务收入比已 ~120-140%，更真实反映居民加杠杆空间
+- **通胀环比图**：美林页「CPI vs PPI 环比」+「PPI 同比」图，与同比图呼应
+- **AI 宏观评论**：OpenAI-compatible 模型对数据快照生成三段式评论（未配置模型时优雅降级）
 - **本地 SQLite**：采集一次后离线运行，无需重复联网
 
 ---
@@ -154,6 +158,8 @@ AKShare/
 │
 ├── shared/openapi.json          # OpenAPI 契约（供前端 codegen）
 ├── docs/architecture-upgrade.md # 架构升级方案文档
+├── docs/data-sources-guide.md   # 数据源现状与实测记录
+├── docs/data-supplement-runbook.md # 数据补充运行手册（发布窗口+手动触发+校验）
 ├── run_app.sh                   # 一键启动（FastAPI:8000 + Vue:5173）
 ├── 启动面板.command             # macOS 双击入口（委托 run_app.sh）
 ├── requirements.txt             # analysis/scripts 依赖（akshare/pandas/numpy/scipy/statsmodels）
@@ -212,19 +218,19 @@ cd frontend && npm run dev
 | # | 表 | 指标 | 频率 |
 |---|---|---|---|
 | 1 | `money_supply` | M0/M1/M2 | 月 |
-| 2 | `gdp` | GDP 绝对值 + 同比 | 季（实际为年度口径）|
+| 2 | `gdp` | GDP 绝对值 + 同比 | 季（累计季度解析：第1-2季度→Q2；年频用于美林/债务收入比）|
 | 3 | `cpi` | CPI 同比 + 环比 | 月 |
 | 4 | `ppi` | PPI 同比 | 月 |
 | 5 | `pmi` | 官方/财新/非制造业/服务业 | 月 |
 | 6 | `leverage` | 宏观杠杆率（CNBS 分部门）| 季 |
-| 7 | `social_finance` | 社融规模增量 + 分项 | 月 |
+| 7 | `social_finance` | 社融规模增量 + 分项（akshare 主源滞后时自动走 PBoC 调查统计司 XLSX 备用源）| 月 |
 | 8 | `lpr` | LPR 1Y/5Y | 月 |
 | 9 | `industrial` | 工业增加值同比 + 累计 | 月 |
 | 10 | `house_price` | 70 城房价指数（新建/二手 同比/环比/定基）| 月 |
 | 11 | `new_credit` | 新增人民币贷款 | 月 |
 | 12 | `household_income` | 居民可支配收入（NBS；2026-03 改版曾失效，2026-08-09 已修复为 akshare 1.18 新路径）| 年 |
 | 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样）| 月 |
-| 14 | `demographics` | 总人口/城镇化率/出生率/自然增长率（世界银行）| 年 |
+| 14 | `demographics` | 总人口/城镇化率（NBS 官方优先、WB 长历史回退）+ 出生率/自然增长率（WB + 2025 统计公报补充）| 年 |
 | 15 | `fiscal` | 国家财政预算收入/支出累计值 + 累计增长（NBS 月度，2015- 起）| 月 |
 | 16 | `external_demand` | 货物进出口美元口径（NBS 月度）+ 美国 ISM 制造业 PMI | 月 |
 
@@ -266,6 +272,10 @@ scripts/schedule/schedule_uninstall.sh  # 卸载
 - 按发布日历过滤：窗口外的表自动跳过，窗口外日期近乎空转，成本可忽略
 - 运行日志：`data/refresh_schedule.log`
 
+### 数据补充（NIFD / PBoC / 统计公报，手工或 Agent 触发）
+
+杠杆率（NIFD 季报）、社融（PBoC XLSX 备用源）、人口出生率/自然增长率（统计公报）等「自动源滞后/缺失」的数据，按 [`docs/data-supplement-runbook.md`](docs/data-supplement-runbook.md) 由 Agent 手动触发补充（含各指标发布窗口表、手动触发命令与校验规则），**不做定时任务**。数据源现状与实测记录见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md)。
+
 ---
 
 ## 后端 API
@@ -293,7 +303,7 @@ FastAPI（`:8000`），OpenAPI 文档 `http://localhost:8000/docs`，契约导�
 
 ## 前端架构
 
-- **6 页视图**（`pages/`）：Overview / MerrillClock / CreditCycle / InventoryCycle / DebtCycle / RealEstate
+- **8 页视图**（`pages/`）：Overview / MerrillClock / CreditCycle / InventoryCycle / DebtCycle / RealEstate / Demographics / FiscalExternal（财政与外需）
 - **Pinia stores**：`filters`（全局日期联动——改一处全图重取）、`refresh`（SSE 进度消费）
 - **图表层**（`components/charts/options.ts`）：纯函数 builder——`buildDualAxisLine` / `buildStackedArea` / `buildBarLineCombo` / `buildMultiLine` / `buildScatterQuadrant` / `buildCreditM2Chart` / `buildCreditImpulseChart` / `buildSpreadChart` / `buildRadar`
 - **EChart.vue**：vue-echarts 封装，按需注册（Line/Bar/Scatter/Radar + 组件）
