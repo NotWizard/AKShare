@@ -114,6 +114,28 @@
 | 月 | 社融 | ~15 日（主源滞后时自动走 PBoC XLSX 备用源） | 跑 `01_fetch_data.py` |
 | 月 | LPR | ~20 日 | 跑 `01_fetch_data.py` |
 | 月 | 美国 ISM 制造业 PMI | ~次月 1 日（ISM 官方 / PR Newswire） | akshare Jin10 源冻结于 2025-08；按 `_ISM_SUPPLEMENT`（01_fetch_data.py）逐月补官方值后跑 `01_fetch_data.py`；2025-09~2026-05 缺口可逐月回补 |
+
+---
+
+## 8. 数据获取方式区分（API 直连 vs Agent 网页获取）
+
+> 原则：能用结构化 API 的全部走 API；只有「无可用 API、仅网页/PDF/公报发布」的数据才由 Agent 读网页/搜索补全，且**只录官方发布值**，录入 `_NIFD_DATA` / `_ISM_SUPPLEMENT` 等显式补充表，与 API 数据分开记录、按月维护。
+
+| 数据 | 获取方式 | 来源 |
+|---|---|---|
+| M2/M1/M0、新增信贷 | **API** | akshare（新浪/东财） |
+| CPI / PPI / PMI | **API** | 东财数据中心 `RPT_ECONOMY_*` |
+| GDP（累计季度） | **API** | akshare `macro_china_gdp` |
+| 财政收支 | **API** | akshare `macro_china_nbs_nation`（NBS 月度） |
+| 外需 货物进出口 | **API** | akshare `macro_china_nbs_nation`（NBS 月度） |
+| 社融 | **API** 主源 + **文件下载** 备用 | akshare `shrzgm` + PBoC 调查统计司 XLSX（程序化解析 Excel，非读网页） |
+| 债券收益率 | **API** | 中债信息网直连 |
+| 人口 总人口/城镇化率 | **API** | akshare `macro_china_nbs_nation`（NBS） |
+| 人口 出生率/自然增长率（2025） | **Agent 网页获取** | 《2025年国民经济和社会发展统计公报》stats.gov.cn（Web 搜索读取官方值 5.63‰ / -2.41‰） |
+| 宏观杠杆率 NIFD | **Agent 网页获取** | NIFD 季报 nifd.cn / PDF（人工/Agent 读取录入 `_NIFD_DATA`） |
+| 美国 ISM 制造业 PMI | **Agent 网页获取** | ISM 官方 / PR Newswire 月度发布（Workflow 逐月读取录入 `_ISM_SUPPLEMENT`） |
+
+**Agent 网页获取的维护**：上述三项均为官方发布值，录入显式补充表；每发布周期由 Agent 按 §7 窗口读取官方网页/公报补一行，跑 `01_fetch_data.py` 入库。API 数据无需此步骤。
 | 季 | GDP（累计季度） | 季后 ~1 个月（Q3≈10 月） | 跑 `01_fetch_data.py`（解析器已支持累计季度） |
 | 季 | 杠杆率 NIFD | 季后 ~1 个月（Q3≈10 月） | 按 §1 由 Agent 补一期 `_NIFD_DATA` 后跑 `01_fetch_data.py` |
 | 年 | 居民收入 / 人口 | 次年 1 月 | 跑 `01_fetch_data.py` |
