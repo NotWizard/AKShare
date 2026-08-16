@@ -1,4 +1,0 @@
-[    -184ms] [WARNING] A preload for 'chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/lib/ui/authToken.js' is found, but is not used because it is a cross-world extension resource mismatch. @ chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/connect.html?mcpRelayUrl=ws%3A%2F%2F%5B%3A%3A1%5D%3A59949%2Fextension%2F95ac1941-3aed-4ce1-8d95-391b34ddf9a4&client=%7B%22name%22%3A%22claude-code%22%7D&protocolVersion=2&token=KEDYFCpyuXQ0cR9NriPn0X4BGalYgE1XPy9T7Ob1u78:23
-[    1157ms] [LOG] [QoderWork] Accessibility tree injected @ chrome-extension://gblapfbnbicdckfhkllcnfleiemhmgeb/content-scripts/accessibility-tree.js:3
-[    1158ms] [LOG] [QoderWork] Page bridge injected @ chrome-extension://gblapfbnbicdckfhkllcnfleiemhmgeb/content-scripts/page-bridge.js:0
-[    1158ms] [LOG] [QoderWork] Visual indicator injected with state management @ chrome-extension://gblapfbnbicdckfhkllcnfleiemhmgeb/content-scripts/visual-indicator.js:100
