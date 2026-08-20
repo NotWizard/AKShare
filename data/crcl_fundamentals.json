@@ -1,5 +1,5 @@
 {
-  "_说明": "CRCL 监控 — 季报拆解与人工维护标志位。每季度财报后手工更新 quarters/annual；flags 用于告警规则判定（fed_cutting=降息周期中；clarity_act_passed=Clarity Act 已通过）。数值单位见字段名后缀。",
+  "_说明": "CRCL 监控 — 季报拆解与人工维护标志位。每季度财报后手工更新 quarters/annual；flags 用于告警规则判定（fed_cutting=降息周期中；clarity_act_passed=Clarity Act 已通过）。数值单位见字段名后缀。 quarters 可选 delta 字段：total_revenue_yoy_pct / reserve_revenue_yoy_pct / nonreserve_share_pp_qoq / cpn_institutions_qoq / eurc_circ_qoq_pct；缺失时页面优先用相邻两季自动计算（比率类用 pp），仍缺则显示 —。",
   "updated_at": "2026-08-20",
   "flags": {
     "fed_cutting": true,
@@ -10,7 +10,7 @@
       "period": "2026Q2",
       "total_revenue_m": 701,
       "reserve_revenue_m": 668,
-      "reserve_revenue_yoy_pct": 5,
+      "reserve_revenue_yoy_pct": 5.0,
       "nonreserve_share_pct": 4.7,
       "eps_actual": 0.18,
       "eps_consensus": 0.26,
@@ -19,7 +19,8 @@
       "cpn_usdc_volume_yoy_pct": 151,
       "cpn_institutions": 175,
       "eurc_circ_m": 400,
-      "source": "Circle Q2 2026 财报 + 新闻稿 + 2026-08-19 AMA"
+      "source": "Circle Q2 2026 财报 + 新闻稿 + 2026-08-19 AMA",
+      "total_revenue_yoy_pct": 6.6
     }
   ],
   "annual": [

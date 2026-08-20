@@ -8,7 +8,7 @@ import MetricTile from '@/components/layout/MetricTile.vue'
 import ChartTip from '@/components/controls/ChartTip.vue'
 import { applyTheme, baseAxis, COLORS } from '@/design/echarts.theme'
 import { api, BASE } from '@/api/client'
-import type { CrclOverview, CrclMetric, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from '@/api/types'
+import type { CrclOverview, CrclMetric, CrclPoint, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from '@/api/types'
 
 const overview = ref<CrclOverview | null>(null)
 const metrics = ref<Record<string, CrclMetric>>({})
@@ -32,6 +32,96 @@ const fmtNum = (v: number | null | undefined, digits = 2) =>
   v == null ? '—' : v.toFixed(digits)
 const fmtTs = (ts: string | null | undefined) =>
   ts ? ts.replace('T', ' ').replace('Z', '') : '—'
+
+// ---------- 同比 / 环比 delta ----------
+interface TileDelta { text: string; dir?: 'up' | 'down' | 'flat' }
+
+/** 序列最新值相对 ~daysBack 天前的变化 %；数据不足返回 null。 */
+function seriesDelta(pts: CrclPoint[] | undefined, daysBack: number): number | null {
+  if (!pts || pts.length < 2) return null
+  const last = pts[pts.length - 1]
+  const target = new Date(last.date).getTime() - daysBack * 86400000
+  let best = pts[0]
+  for (const pt of pts) {
+    if (Math.abs(new Date(pt.date).getTime() - target) < Math.abs(new Date(best.date).getTime() - target)) best = pt
+  }
+  if (best.value <= 0) return null
+  return (last.value / best.value - 1) * 100
+}
+const pctChip = (label: string, v: number | null): TileDelta =>
+  v == null
+    ? { text: `${label} —` }
+    : { text: `${label} ${v >= 0 ? '+' : ''}${v.toFixed(1)}%`, dir: v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat' }
+const ppChip = (label: string, v: number | null): TileDelta =>
+  v == null
+    ? { text: `${label} —` }
+    : { text: `${label} ${v >= 0 ? '+' : ''}${v.toFixed(1)}pp`, dir: v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat' }
+
+const priceSeries = computed(() => metrics.value.crcl_close?.points ?? [])
+const priceDod = computed(() => {
+  const s = priceSeries.value
+  if (s.length < 2) return null
+  return (s[s.length - 1].value / s[s.length - 2].value - 1) * 100
+})
+const priceDeltas = computed<TileDelta[]>(() => [
+  pctChip('日环比', priceDod.value),
+  pctChip('同比', seriesDelta(priceSeries.value, 365)),
+])
+const usdcDeltas = computed<TileDelta[]>(() => [
+  pctChip('同比', seriesDelta(metrics.value.usdc_circ?.points, 365)),
+  pctChip('季环比', seriesDelta(metrics.value.usdc_circ?.points, 90)),
+])
+const totalDeltas = computed<TileDelta[]>(() => [
+  pctChip('同比', seriesDelta(metrics.value.stablecoin_total?.points, 365)),
+  pctChip('季环比', seriesDelta(metrics.value.stablecoin_total?.points, 90)),
+])
+const peDeltas = computed<TileDelta[]>(() => [
+  { text: `构成：TTM ${fmtNum(valuation.value.trailing_pe, 1)} / 前瞻 ${fmtNum(valuation.value.forward_pe, 1)}` },
+])
+const alertDeltas = computed<TileDelta[]>(() =>
+  triggeredRules.value.length
+    ? triggeredRules.value.map((r) => ({ text: r.rule }))
+    : [{ text: '当前无触发' }],
+)
+
+const prevQ = computed(() => {
+  const qs = fundamentals.value?.quarters ?? []
+  return qs.length >= 2 ? qs[qs.length - 2] : null
+})
+const num = (q: Record<string, number | string | null> | null, k: string): number | null => {
+  const v = q?.[k]
+  return typeof v === 'number' ? v : null
+}
+const revenueDeltas = computed<TileDelta[]>(() => [
+  pctChip('同比', num(latestQ.value, 'total_revenue_yoy_pct')),
+  pctChip('环比', num(latestQ.value, 'total_revenue_qoq_pct') ??
+    (num(latestQ.value, 'total_revenue_m') != null && num(prevQ.value, 'total_revenue_m')
+      ? (num(latestQ.value, 'total_revenue_m')! / num(prevQ.value, 'total_revenue_m')! - 1) * 100
+      : null)),
+])
+const reserveShareDeltas = computed<TileDelta[]>(() => [
+  pctChip('储备收入同比', num(latestQ.value, 'reserve_revenue_yoy_pct')),
+])
+const shareOf = (q: Record<string, number | string | null> | null) => num(q, 'nonreserve_share_pct')
+const nonreserveDeltas = computed<TileDelta[]>(() => [
+  ppChip('环比', num(latestQ.value, 'nonreserve_share_pp_qoq') ??
+    (shareOf(latestQ.value) != null && shareOf(prevQ.value) != null
+      ? shareOf(latestQ.value)! - shareOf(prevQ.value)!
+      : null)),
+])
+const cpnInstDeltas = computed<TileDelta[]>(() => {
+  const v = num(latestQ.value, 'cpn_institutions_qoq') ??
+    (num(latestQ.value, 'cpn_institutions') != null && num(prevQ.value, 'cpn_institutions') != null
+      ? num(latestQ.value, 'cpn_institutions')! - num(prevQ.value, 'cpn_institutions')!
+      : null)
+  return [v == null ? { text: '环比 —' } : { text: `环比 ${v >= 0 ? '+' : ''}${v.toFixed(0)} 家`, dir: v > 0 ? 'up' : v < 0 ? 'down' : 'flat' }]
+})
+const eurcDeltas = computed<TileDelta[]>(() => [
+  pctChip('环比', num(latestQ.value, 'eurc_circ_qoq_pct') ??
+    (num(latestQ.value, 'eurc_circ_m') != null && num(prevQ.value, 'eurc_circ_m')
+      ? (num(latestQ.value, 'eurc_circ_m')! / num(prevQ.value, 'eurc_circ_m')! - 1) * 100
+      : null)),
+])
 
 // ---------- KPI ----------
 const valuation = computed(() => (overview.value?.snapshots?.valuation ?? {}) as Record<string, number | null>)
@@ -228,17 +318,17 @@ onMounted(load)
     <!-- ① 指标卡片：自动采集 -->
     <div class="text-[10px] text-text-3 uppercase tracking-wide mb-2">实时采集</div>
     <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
-      <MetricTile label="CRCL 股价" :value="valuation.price ?? null" suffix="USD"
+      <MetricTile label="CRCL 股价" :deltas="priceDeltas" :value="valuation.price ?? null" suffix="USD"
         :tip="`Yahoo Finance 实时快照。\n\n取数：yfinance Ticker('CRCL').info → currentPrice。`" />
-      <MetricTile label="市值" :value="valuation.market_cap != null ? +(valuation.market_cap / 1e9).toFixed(1) : null" suffix="B"
-        :tip="`Yahoo Finance 口径市值（十亿美元）。\n\n取数：yfinance info.marketCap。`" />
-      <MetricTile label="前瞻 − TTM P/E 价差" :value="peSpread != null ? +peSpread.toFixed(1) : null" suffix="x" :accent="(peSpread ?? 0) > 0"
+      <MetricTile label="市值" :deltas="priceDeltas" :value="valuation.market_cap != null ? +(valuation.market_cap / 1e9).toFixed(1) : null" suffix="B"
+        :tip="`Yahoo Finance 口径市值（十亿美元）。日环比/同比由股价序列推导（股本短期不变）。\n\n取数：yfinance info.marketCap。`" />
+      <MetricTile label="前瞻 − TTM P/E 价差" :deltas="peDeltas" :value="peSpread != null ? +peSpread.toFixed(1) : null" suffix="x" :accent="(peSpread ?? 0) > 0"
         :tip="`前瞻 P/E 高于 TTM = 市场预期未来利润下滑（降息压缩储备收入）。这是论点跟踪的关键估值信号。\n\n取数：yfinance forwardPE − trailingPE。注意 Yahoo 口径 trailingPE 含一次性项目，绝对值与其他数据商有差异，看方向不看绝对。`" />
-      <MetricTile label="USDC 流通量" :value="stableSnap.usdc_circ != null ? +(Number(stableSnap.usdc_circ) / 1e9).toFixed(1) : null" suffix="B"
+      <MetricTile label="USDC 流通量" :deltas="usdcDeltas" :value="stableSnap.usdc_circ != null ? +(Number(stableSnap.usdc_circ) / 1e9).toFixed(1) : null" suffix="B"
         :tip="`USDC 链上流通量（十亿美元），DefiLlama 聚合口径（已去跨链桥重复）。\n\n取数：stablecoins.llama.fi/stablecoincharts/all?stablecoin=2。`" />
-      <MetricTile label="稳定币总盘" :value="stableSnap.stablecoin_total != null ? +(Number(stableSnap.stablecoin_total) / 1e9).toFixed(0) : null" suffix="B"
+      <MetricTile label="稳定币总盘" :deltas="totalDeltas" :value="stableSnap.stablecoin_total != null ? +(Number(stableSnap.stablecoin_total) / 1e9).toFixed(0) : null" suffix="B"
         :tip="`全部稳定币市值总盘（十亿美元）——行业水位。\n\n取数：stablecoins.llama.fi/stablecoincharts/all。`" />
-      <MetricTile label="已触发警报" :value="triggeredRules.length" :accent="triggeredRules.length > 0"
+      <MetricTile label="已触发警报" :deltas="alertDeltas" :value="triggeredRules.length" :accent="triggeredRules.length > 0"
         :tip="`当前处于触发状态的告警规则数（黄/红/确认）。规则定义见下方告警面板与 docs/CRCL监控体系.md。`" />
     </div>
 
@@ -248,19 +338,19 @@ onMounted(load)
       <span class="normal-case tracking-normal opacity-70 ml-1">（编辑 data/crcl_fundamentals.json 更新）</span>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
-      <MetricTile label="总收入" :value="latestQ?.total_revenue_m != null ? Number(latestQ.total_revenue_m) : null" suffix="M"
+      <MetricTile label="总收入" :deltas="revenueDeltas" :value="latestQ?.total_revenue_m != null ? Number(latestQ.total_revenue_m) : null" suffix="M"
         :tip="`Circle 季度总收入（百万美元）。\n\n来源：${latestQ?.source ?? '—'}`" />
-      <MetricTile label="储备收入占比" :value="latestQ?.reserve_revenue_m != null && latestQ?.total_revenue_m != null ? +(100 * Number(latestQ.reserve_revenue_m) / Number(latestQ.total_revenue_m)).toFixed(1) : null" suffix="%"
+      <MetricTile label="储备收入占比" :deltas="reserveShareDeltas" :value="latestQ?.reserve_revenue_m != null && latestQ?.total_revenue_m != null ? +(100 * Number(latestQ.reserve_revenue_m) / Number(latestQ.total_revenue_m)).toFixed(1) : null" suffix="%"
         :tip="`储备（利息）收入占总收入比——越高越像“货币基金”。\n\n来源：季报拆解。`" />
-      <MetricTile label="非储备收入占比 ⭐" :value="latestQ?.nonreserve_share_pct != null ? Number(latestQ.nonreserve_share_pct) : null" suffix="%" accent
+      <MetricTile label="非储备收入占比 ⭐" :deltas="nonreserveDeltas" :value="latestQ?.nonreserve_share_pct != null ? Number(latestQ.nonreserve_share_pct) : null" suffix="%" accent
         :tip="`论点核心指标：CPN/Arc 等平台收入占比。>15% 且流通增速 ≥20% 为确认信号组合之一；2027 年中 <10% 为证伪组合之一。\n\n来源：季报拆解（手工维护）。`" />
       <MetricTile label="EPS 实际" :value="latestQ?.eps_actual != null ? Number(latestQ.eps_actual) : null" :suffix="`/ 预期 ${latestQ?.eps_consensus ?? '—'}`"
         :tip="`每股收益实际值 vs 一致预期。Q2 为 miss（0.18 vs 0.26）。\n\n来源：季报。`" />
       <MetricTile label="CPN 交易量同比" :value="latestQ?.cpn_usdc_volume_yoy_pct != null ? Number(latestQ.cpn_usdc_volume_yoy_pct) : null" suffix="%"
         :tip="`Circle Payment Network 上 USDC 交易量同比增速——支付网络起量的领先指标。\n\n来源：季报/财报会。`" />
-      <MetricTile label="CPN 接入机构" :value="latestQ?.cpn_institutions != null ? Number(latestQ.cpn_institutions) : null" suffix="+"
+      <MetricTile label="CPN 接入机构" :deltas="cpnInstDeltas" :value="latestQ?.cpn_institutions != null ? Number(latestQ.cpn_institutions) : null" suffix="+"
         :tip="`接入 CPN 的金融机构数量。\n\n来源：财报会/AMA。`" />
-      <MetricTile label="EURC 流通" :value="latestQ?.eurc_circ_m != null ? Number(latestQ.eurc_circ_m) : null" suffix="M€"
+      <MetricTile label="EURC 流通" :deltas="eurcDeltas" :value="latestQ?.eurc_circ_m != null ? Number(latestQ.eurc_circ_m) : null" suffix="M€"
         :tip="`欧元稳定币流通量（百万欧元），全球最大数字欧元。\n\n来源：AMA（2026-08-19）。`" />
     </div>
 
