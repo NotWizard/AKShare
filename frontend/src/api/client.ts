@@ -1,7 +1,7 @@
 // API client — typed wrappers over the FastAPI endpoints. Types mirror the
 // Pydantic schemas (single source of truth via shared/openapi.json codegen; P0
 // ships hand-written types, `npm run gen:api` regenerates from OpenAPI).
-import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth } from './types'
+import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth, CrclOverview, CrclMetric, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from './types'
 
 export const BASE = '/api/v1'
 
@@ -78,4 +78,12 @@ export const api = {
   getSourcesHealth: () => getJSON<SourcesHealth>('/sources/health'),
   getCommentary: () => getJSON<Commentary>('/commentary'),
   regenerateCommentary: () => postJSON<Commentary>('/commentary/regenerate'),
+  // CRCL 监控
+  getCrclOverview: () => getJSON<CrclOverview>('/crcl/overview'),
+  getCrclMetrics: (keys?: string) =>
+    getJSON<{ metrics: Record<string, CrclMetric> }>(`/crcl/metrics${qs([['keys', keys]])}`),
+  getCrclEvents: () => getJSON<{ updated_at: string | null; events: CrclEvent[] }>('/crcl/events'),
+  getCrclAlerts: () => getJSON<{ rules: CrclAlertRule[]; history: CrclLogRow[] }>('/crcl/alerts'),
+  getCrclLogs: (limit = 60) => getJSON<{ logs: CrclLogRow[] }>(`/crcl/logs?limit=${limit}`),
+  getCrclFundamentals: () => getJSON<CrclFundamentals>('/crcl/fundamentals'),
 }

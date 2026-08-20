@@ -94,3 +94,61 @@ export interface SignalHistoryRow {
 export interface SignalHistory {
   items: SignalHistoryRow[]
 }
+
+// ---------- CRCL 监控 ----------
+export interface CrclPoint { date: string; value: number }
+
+export interface CrclMetric {
+  label: string
+  unit: string
+  source: string
+  freq: string
+  points: CrclPoint[]
+}
+
+export interface CrclOverview {
+  snapshots: Record<string, Record<string, number | string | null>>
+  alert_summary: {
+    triggered: Array<{ rule: string; level: string; status: string; message: string }>
+    levels: Record<string, string>
+    rule_count: number
+  }
+  last_run: { run_id: string; source: string; status: string; message: string; duration_ms: number; ts: string } | null
+  metric_labels: Record<string, [string, string, string, string]>
+}
+
+export interface CrclEvent {
+  date: string
+  category: string
+  title: string
+  detail: string
+  source: string
+  status: string
+}
+
+export interface CrclAlertRule {
+  rule: string
+  level: string
+  description: string
+  status: string
+  message: string
+  ts: string | null
+}
+
+export interface CrclLogRow {
+  run_id: string
+  source: string
+  status: string
+  message: string
+  duration_ms: number
+  ts: string
+}
+
+export interface CrclFundamentals {
+  updated_at?: string
+  flags?: Record<string, boolean>
+  quarters?: Array<Record<string, number | string | null>>
+  annual?: Array<Record<string, number | string | null>>
+  presale?: Record<string, number>
+  error?: string
+}

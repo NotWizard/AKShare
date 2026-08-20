@@ -1,0 +1,42 @@
+{
+  "_说明": "CRCL 监控 — 季报拆解与人工维护标志位。每季度财报后手工更新 quarters/annual；flags 用于告警规则判定（fed_cutting=降息周期中；clarity_act_passed=Clarity Act 已通过）。数值单位见字段名后缀。",
+  "updated_at": "2026-08-20",
+  "flags": {
+    "fed_cutting": true,
+    "clarity_act_passed": false
+  },
+  "quarters": [
+    {
+      "period": "2026Q2",
+      "total_revenue_m": 701,
+      "reserve_revenue_m": 668,
+      "reserve_revenue_yoy_pct": 5,
+      "nonreserve_share_pct": 4.7,
+      "eps_actual": 0.18,
+      "eps_consensus": 0.26,
+      "usdc_circ_avg_b": 73.3,
+      "usdc_circ_yoy_pct": 19,
+      "cpn_usdc_volume_yoy_pct": 151,
+      "cpn_institutions": 175,
+      "eurc_circ_m": 400,
+      "source": "Circle Q2 2026 财报 + 新闻稿 + 2026-08-19 AMA"
+    }
+  ],
+  "annual": [
+    {
+      "period": "2024",
+      "distribution_cost_m": 1010,
+      "coinbase_distribution_m": 908,
+      "distribution_cost_ratio_pct": null,
+      "ratio_note": "分发成本率分母口径（总储备收入 vs 分发相关收入）需对照 2024 年报核实后填入；Binance Research 口径约 $0.54/每美元分发收入",
+      "source": "Circle IPO 文件 / Binance Research 2026-05"
+    }
+  ],
+  "presale": {
+    "arc_presale_m": 222,
+    "arc_fdv_b": 3,
+    "presale_revenue_guidance_m": 180,
+    "milestone_linked_pct": 75,
+    "source": "Circle 财报指引"
+  }
+}

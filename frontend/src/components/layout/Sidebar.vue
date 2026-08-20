@@ -12,6 +12,7 @@ const items = [
   { to: '/real-estate', label: '房地产市场', icon: '▧' },
   { to: '/demographics', label: '人口与城镇化', icon: '◎' },
   { to: '/fiscal-external', label: '财政与外需', icon: '◫' },
+  { to: '/crcl-monitor', label: 'CRCL 监控', icon: '◒' },
 ]
 const isActive = (to: string) => computed(() =>
   to === '/overview' ? route.path === to : route.path.startsWith(to),

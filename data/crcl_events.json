@@ -1,0 +1,17 @@
+{
+  "_说明": "CRCL 监控 — 宏观事件与里程碑。手工维护：直接编辑本文件，页面实时读取。category ∈ {财报, 监管, 宏观, 里程碑, 合作, 检查点}；status ∈ {已发生, 进行中, 待观察, 待验证, 计划}。日期格式 YYYY-MM-DD。",
+  "updated_at": "2026-08-20",
+  "events": [
+    {"date": "2026-08-05", "category": "财报", "title": "Q2 2026 财报发布", "detail": "收入 $701M；储备收入 $668M (+5% YoY)；EPS $0.18 低于一致预期 $0.26；USDC 流通量 $73.3B (+19%)；Q2 链上交易量 $14.8T。", "source": "Circle IR 新闻稿 (ir.circle.com)", "status": "已发生"},
+    {"date": "2026-08-06", "category": "合作", "title": "Coinbase 分发协议续约", "detail": "USDC 分发条款更新；Coinbase 产品内 USDC 达 $20B（占流通量 30%+）。分发成本率的边际变化是利润弹性关键，需在下季财报验证。", "source": "公司公告/媒体报道", "status": "进行中"},
+    {"date": "2026-08-18", "category": "监管", "title": "SEC 发布 Regulation Crypto 规则制定", "detail": "数字代币销售与分类的监管框架推进，Allaire 在 AMA 中提及。", "source": "SEC / Circle AMA (2026-08-19)", "status": "进行中"},
+    {"date": "2026-08-19", "category": "财报", "title": "Q2 财报 AMA（Jeremy Allaire）", "detail": "提出 Arc = AWS 级机会；agent 经济三拼图（KYAgent/信誉/可编程策略）；EURC 破 €400M；Clarity Act 不通过也不影响 USDC 增长。当日股价 +9.6% 收 $78.59。", "source": "Circle 官方 X/YouTube 直播回放", "status": "已发生"},
+    {"date": "2026-09-16", "category": "里程碑", "title": "Arc 主网上线", "detail": "稳定币原生链（USDC 计 gas）；BlackRock、Visa 为首批合作伙伴；预售募资 $222M @ FDV $3B；2026 指引含 $180M 预售收入（75% 挂钩里程碑）。", "source": "Circle 财报指引/AMA", "status": "待验证"},
+    {"date": "2026-09-16", "category": "宏观", "title": "FOMC 利率决议（9 月会议，日期待核实）", "detail": "每 25bp 降息 ≈ 蒸发 ~$180M 年化储备收入。关注点阵图与降息路径。", "source": "Fed（会议日期以官方日历为准）", "status": "待观察"},
+    {"date": "2026-09-30", "category": "监管", "title": "Clarity Act 投票窗口（9 月）", "detail": "通过 = 估值催化；Allaire 表态即使不通过，监管机构将以规则制定兜底。", "source": "Circle AMA / 公开报道", "status": "待观察"},
+    {"date": "2026-11-05", "category": "财报", "title": "Q3 2026 财报（预计 11 月初，日期待公告）", "detail": "关注：非储备收入占比（基线 ~5%）、CPN 交易量（Q2 +151%）、分发成本率、EPS。", "source": "Circle IR", "status": "计划"},
+    {"date": "2026-12-09", "category": "宏观", "title": "FOMC 利率决议（12 月会议，日期待核实）", "detail": "年末降息路径确认窗口。", "source": "Fed（日期以官方日历为准）", "status": "待观察"},
+    {"date": "2027-01-18", "category": "监管", "title": "GENIUS Act 生效", "detail": "支付稳定币联邦框架生效，数字美元正式纳入美国金融体系；关注实施细则。", "source": "Circle AMA / 立法文本", "status": "计划"},
+    {"date": "2027-06-30", "category": "检查点", "title": "论点检查点：红色警报判定", "detail": "若非储备占比 <10% + 流通增速 <10% + 降息持续 → 估值锚滑向货币基金侧。", "source": "docs/CRCL监控体系.md 决策规则", "status": "计划"}
+  ]
+}

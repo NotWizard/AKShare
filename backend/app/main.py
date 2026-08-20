@@ -20,7 +20,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.app.api.v1 import router as v1_router
 from backend.app.core.db import _load_full
-from backend.app.core import commentary
+from backend.app.core import commentary, crcl_collect
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # table may not exist yet (fresh install) — skip silently
     commentary.ensure_on_startup()
+    crcl_collect.schedule_startup_collection()  # CRCL 监控：启动自动采集（后台线程，不阻塞）
     yield
 
 
