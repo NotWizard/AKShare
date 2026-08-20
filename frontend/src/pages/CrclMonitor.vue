@@ -195,7 +195,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="px-6 py-5 max-w-[1400px]">
+  <div class="p-6">
     <!-- header -->
     <div class="flex items-start justify-between gap-4 mb-5">
       <div>
