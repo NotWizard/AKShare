@@ -378,21 +378,21 @@ onMounted(load)
     <div class="mb-5">
       <GraphCard title="告警规则状态" :loading="loading" :error="error"
         :tip="`规则来自 docs/CRCL监控体系.md 决策规则。每次采集后自动评估，状态变化写入告警历史。数据驱动规则用采集数据；判定规则用 data/crcl_fundamentals.json 的标志位与季报数据（手工维护）。`">
-        <div class="space-y-2.5">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
           <div v-for="r in rules" :key="r.rule"
-            class="px-3.5 py-3 rounded-xl border bg-surface/60"
+            class="px-3.5 py-3 rounded-xl border bg-surface/60 flex flex-col gap-1.5"
             :class="[LEVEL_STYLE[r.level]?.ring ?? 'border-border', r.status === 'triggered' ? 'ring-1 ring-inset ring-red-500/40' : '']">
-            <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center justify-between gap-2">
               <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="LEVEL_STYLE[r.level]?.badge ?? 'bg-slate-500/15 text-slate-400'">
                 {{ LEVEL_STYLE[r.level]?.label ?? r.level }}
               </span>
-              <span class="text-[13px] font-medium text-text">{{ r.description }}</span>
-              <span class="ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium" :class="STATUS_LABEL[r.status]?.cls ?? 'bg-slate-500/20 text-slate-400'">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-medium" :class="STATUS_LABEL[r.status]?.cls ?? 'bg-slate-500/20 text-slate-400'">
                 {{ STATUS_LABEL[r.status]?.text ?? r.status }}
               </span>
             </div>
-            <div class="text-xs text-text-3 mt-1.5">{{ r.message || '—' }}</div>
-            <div class="text-[10px] text-text-3/60 mt-1">评估于 {{ fmtTs(r.ts) }} · rule: {{ r.rule }}</div>
+            <div class="text-xs font-medium text-text leading-snug">{{ r.description }}</div>
+            <div class="text-[11px] text-text-3 leading-snug">{{ r.message || '—' }}</div>
+            <div class="text-[10px] text-text-3/60 mt-auto pt-1">{{ fmtTs(r.ts) }} · {{ r.rule }}</div>
           </div>
         </div>
       </GraphCard>
