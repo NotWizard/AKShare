@@ -74,6 +74,10 @@ def _eval_y_nonreserve_stagnant() -> tuple[str, str]:
 def _eval_y_distribution_cost() -> tuple[str, str]:
     f = _load_fundamentals()
     ratios = [
+        q.get("distribution_cost_ratio_pct")
+        for q in f.get("quarters", [])
+        if q.get("distribution_cost_ratio_pct") is not None
+    ] + [
         a.get("distribution_cost_ratio_pct")
         for a in f.get("annual", [])
         if a.get("distribution_cost_ratio_pct") is not None

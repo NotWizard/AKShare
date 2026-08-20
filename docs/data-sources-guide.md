@@ -803,3 +803,33 @@ A: 部分接口需要积分，详见：https://tushare.pro/document/1?doc_id=108
 ---
 
 *文档版本：1.4 | 更新时间：2026-08-09*
+
+---
+
+## 十二、CRCL 监控数据源（海外：稳定币 / 美债 / 美股）
+
+> 服务于 `/crcl-monitor` 页面（Circle 投资论点追踪）。全部免费、无需 API key。
+> 采集代码：`backend/app/core/crcl_collect.py`；手工补充规则见 `docs/data-supplement-runbook.md` §9。
+
+### 数据源：DefiLlama Stablecoins API
+
+**接口地址**：
+- 单币历史：`https://stablecoins.llama.fi/stablecoincharts/all?stablecoin={id}`（USDC id=2，EURC id=50）
+- 全市场总盘：`https://stablecoins.llama.fi/stablecoincharts/all`
+- 币种目录：`https://stablecoins.llama.fi/stablecoins?includePrices=false`
+
+**请求方式**：HTTP GET，返回 JSON 数组 `[{date: <unix ts 字符串>, totalCirculating: {peggedUSD|peggedEUR}, totalCirculatingUSD: {...}}]`。
+
+**注意**：`/stablecoin/{id}` 单币详情端点返回按链拆分的 `chainBalances`（~20MB，直接加总会被跨链桥重复计算），**不要使用**；聚合端点已去重。
+
+### 数据源：Treasury.gov 日度收益率曲线 CSV
+
+**接口地址**：`https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv`
+
+**返回字段**：`Date,"1 Mo",...,"3 Mo","6 Mo","1 Yr",...`（MM/DD/YYYY）。按年取数，跨年需拼接两年文件。`api.fiscal.treasury.gov` 的 fiscaldata JSON API 实测返回空，弃用。
+
+### 数据源：AKShare 美股日线（主）+ Yahoo Finance（备）
+
+**AKShare**：`ak.stock_us_daily(symbol='CRCL')`（新浪端点，偶发不可达）。
+**yfinance 备用**：`yf.Ticker('CRCL').history(period='max')`；估值快照 `yf.Ticker('CRCL').info`（marketCap / trailingPE / forwardPE / priceToSalesTrailing12Months / fiftyTwoWeek*）。
+**口径提示**：Yahoo trailingPE 含一次性项目，与 WSJ 等数据商差异大；看方向（前瞻−TTM 价差）不看绝对值。

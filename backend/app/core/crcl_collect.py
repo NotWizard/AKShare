@@ -29,6 +29,7 @@ METRIC_LABELS = {
     "treasury_6m": ("美债收益率 6M", "%", "Treasury.gov 年度 CSV", "日"),
     "treasury_1y": ("美债收益率 1Y", "%", "Treasury.gov 年度 CSV", "日"),
     "crcl_close": ("CRCL 收盘价", "美元", "AKShare stock_us_daily", "日"),
+    "eurc_circ": ("EURC 流通量", "欧元", "DefiLlama /stablecoincharts/all?stablecoin=50", "日"),
     "crcl_volume": ("CRCL 成交量", "股", "AKShare stock_us_daily", "日"),
 }
 
@@ -61,6 +62,29 @@ def collect_usdc_circ(run_id: str) -> int:
         return n
     except Exception as e:  # noqa: BLE001 — collector must never raise
         _log(run_id, "defillama_usdc", "error", f"{type(e).__name__}: {e}", t0)
+        return 0
+
+
+def collect_eurc_circ(run_id: str) -> int:
+    """EURC 流通量历史（DefiLlama 聚合端点，stablecoin=50，欧元计价）。"""
+    t0 = time.time()
+    try:
+        r = httpx.get(
+            "https://stablecoins.llama.fi/stablecoincharts/all?stablecoin=50",
+            timeout=DEFILLAMA_TIMEOUT,
+            follow_redirects=True,
+        )
+        r.raise_for_status()
+        points = []
+        for row in r.json():
+            v = (row.get("totalCirculating") or {}).get("peggedEUR")
+            if v is not None:
+                points.append((_iso_from_ts(row["date"]), float(v)))
+        n = crcl_db.upsert_points("eurc_circ", points)
+        _log(run_id, "defillama_eurc", "ok", f"{n} 个数据点", t0)
+        return n
+    except Exception as e:  # noqa: BLE001
+        _log(run_id, "defillama_eurc", "error", f"{type(e).__name__}: {e}", t0)
         return 0
 
 
@@ -197,6 +221,10 @@ def update_circ_snapshot(run_id: str) -> None:
         if total:
             snap["stablecoin_total"] = total[-1]["value"]
             snap["stablecoin_total_date"] = total[-1]["date"]
+        eurc = crcl_db.get_series("eurc_circ")
+        if eurc:
+            snap["eurc_circ"] = eurc[-1]["value"]
+            snap["eurc_circ_date"] = eurc[-1]["date"]
         if snap:
             crcl_db.set_snapshot("stablecoins", snap)
             _log(run_id, "snapshot_stablecoins", "ok", "流通量快照已更新", t0)
@@ -213,6 +241,7 @@ def collect_all(progress_cb=None) -> dict:
     steps = [
         ("USDC 流通量历史", collect_usdc_circ),
         ("稳定币总盘历史", collect_stablecoin_total),
+        ("EURC 流通量历史", collect_eurc_circ),
         ("美债收益率", collect_treasury),
         ("CRCL 日线", collect_crcl_stock),
     ]

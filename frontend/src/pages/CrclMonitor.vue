@@ -328,6 +328,9 @@ onMounted(load)
         :tip="`USDC 链上流通量（十亿美元），DefiLlama 聚合口径（已去跨链桥重复）。\n\n取数：stablecoins.llama.fi/stablecoincharts/all?stablecoin=2。`" />
       <MetricTile label="稳定币总盘" :deltas="totalDeltas" :value="stableSnap.stablecoin_total != null ? +(Number(stableSnap.stablecoin_total) / 1e9).toFixed(0) : null" suffix="B"
         :tip="`全部稳定币市值总盘（十亿美元）——行业水位。\n\n取数：stablecoins.llama.fi/stablecoincharts/all。`" />
+      <MetricTile label="EURC 流通" :value="stableSnap.eurc_circ != null ? +(Number(stableSnap.eurc_circ) / 1e6).toFixed(0) : null" suffix="M€"
+        :deltas="eurcDeltas"
+        :tip="`欧元稳定币流通量（百万欧元），全球最大数字欧元，自动采集。\n\n取数：DefiLlama stablecoincharts/all?stablecoin=50，日频。`" />
       <MetricTile label="已触发警报" :deltas="alertDeltas" :value="triggeredRules.length" :accent="triggeredRules.length > 0"
         :tip="`当前处于触发状态的告警规则数（黄/红/确认）。规则定义见下方告警面板与 docs/CRCL监控体系.md。`" />
     </div>
@@ -350,8 +353,6 @@ onMounted(load)
         :tip="`Circle Payment Network 上 USDC 交易量同比增速——支付网络起量的领先指标。\n\n来源：季报/财报会。`" />
       <MetricTile label="CPN 接入机构" :deltas="cpnInstDeltas" :value="latestQ?.cpn_institutions != null ? Number(latestQ.cpn_institutions) : null" suffix="+"
         :tip="`接入 CPN 的金融机构数量。\n\n来源：财报会/AMA。`" />
-      <MetricTile label="EURC 流通" :deltas="eurcDeltas" :value="latestQ?.eurc_circ_m != null ? Number(latestQ.eurc_circ_m) : null" suffix="M€"
-        :tip="`欧元稳定币流通量（百万欧元），全球最大数字欧元。\n\n来源：AMA（2026-08-19）。`" />
     </div>
 
     <!-- ② 图表 -->

@@ -7,6 +7,25 @@
   },
   "quarters": [
     {
+      "period": "2026Q1",
+      "total_revenue_m": 694,
+      "total_revenue_yoy_pct": 20,
+      "reserve_revenue_m": 653,
+      "reserve_revenue_yoy_pct": 17,
+      "other_revenue_m": 42,
+      "nonreserve_share_pct": 6.1,
+      "eps_actual": 0.21,
+      "eps_consensus": 0.18,
+      "usdc_circ_end_b": 77.0,
+      "usdc_circ_yoy_pct": 28,
+      "usdc_onchain_volume_t": 21.5,
+      "distribution_cost_m": 407,
+      "distribution_cost_ratio_pct": 58.6,
+      "eurc_circ_m": 358,
+      "cpn_tpv_annualized_b": 10,
+      "source": "Circle Q1 2026 财报新闻稿 (2026-05-11) + Q1 财报电话会转录"
+    },
+    {
       "period": "2026Q2",
       "total_revenue_m": 701,
       "reserve_revenue_m": 668,
@@ -20,7 +39,9 @@
       "cpn_institutions": 175,
       "eurc_circ_m": 400,
       "source": "Circle Q2 2026 财报 + 新闻稿 + 2026-08-19 AMA",
-      "total_revenue_yoy_pct": 6.6
+      "total_revenue_yoy_pct": 6.6,
+      "other_revenue_m": 33,
+      "usdc_circ_end_b": 72.1
     }
   ],
   "annual": [

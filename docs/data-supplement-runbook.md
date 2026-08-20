@@ -134,10 +134,13 @@
 | 人口 出生率/自然增长率（2025） | **Agent 网页获取** | 《2025年国民经济和社会发展统计公报》stats.gov.cn（Web 搜索读取官方值 5.63‰ / -2.41‰） |
 | 宏观杠杆率 NIFD | **Agent 网页获取** | NIFD 季报 nifd.cn / PDF（人工/Agent 读取录入 `_NIFD_DATA`） |
 | 美国 ISM 制造业 PMI | **Agent 网页获取** | ISM 官方 / PR Newswire 月度发布（Workflow 逐月读取录入 `_ISM_SUPPLEMENT`） |
+| CRCL 稳定币流通量/总盘/美债收益率/行情估值 | **API** | DefiLlama / Treasury.gov / AKShare / yfinance（启动+手动自动采集，见 §9.1） |
+| CRCL 季报拆解/事件日历/标志位 | **手工 JSON** | Circle 新闻稿/财报会、Fed 日历、立法进展（`data/crcl_fundamentals.json`、`data/crcl_events.json`，见 §9.2） |
 
 **Agent 网页获取的维护**：上述三项均为官方发布值，录入显式补充表；每发布周期由 Agent 按 §7 窗口读取官方网页/公报补一行，跑 `01_fetch_data.py` 入库。API 数据无需此步骤。
 | 季 | GDP（累计季度） | 季后 ~1 个月（Q3≈10 月） | 跑 `01_fetch_data.py`（解析器已支持累计季度） |
 | 季 | 杠杆率 NIFD | 季后 ~1 个月（Q3≈10 月） | 按 §1 由 Agent 补一期 `_NIFD_DATA` 后跑 `01_fetch_data.py` |
+| 季 | Circle 季报拆解（CRCL 监控） | 2/5/8/11 月初财报 | 按 §9.2 补 `data/crcl_fundamentals.json` 一期 |
 | 年 | 居民收入 / 人口 | 次年 1 月 | 跑 `01_fetch_data.py` |
 
 **手动触发命令**（项目根目录）：
@@ -148,6 +151,47 @@
 ```
 
 **触发后校验**：查各表 `MAX(date)` 是否前进到预期月份（见上表）；`derived_quarterly.hh_debt_to_income` 末行非空且量级 ~120-140。
+
+---
+
+## 9. CRCL 监控体系（Circle）—— API 自动 + 手工 JSON 混合
+
+> 页面：`/crcl-monitor`；规范：`docs/CRCL监控体系.md`；进度：`docs/crcl_monitor_progress.md`。
+> 存储：`data/crcl_monitor.db`（独立于 macro_data.db，互不影响）。
+
+### 9.1 自动采集（API，无需手工）
+
+| 数据 | 源 | 端点 / 接口 | 频率 |
+|---|---|---|---|
+| USDC 流通量历史 | DefiLlama | `stablecoins.llama.fi/stablecoincharts/all?stablecoin=2`（已去跨链桥重复） | 日 |
+| EURC 流通量历史 | DefiLlama | `stablecoins.llama.fi/stablecoincharts/all?stablecoin=50`（欧元计价） | 日 |
+| 稳定币总盘历史 | DefiLlama | `stablecoins.llama.fi/stablecoincharts/all` | 日 |
+| 短端美债收益率 3M/6M/1Y | Treasury.gov | `home.treasury.gov/.../daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv`（回填 2 年；fiscaldata JSON API 实测不可用，弃用） | 日 |
+| CRCL 日线 | AKShare 主 / yfinance 备 | `ak.stock_us_daily(symbol='CRCL')`；新浪端点不可达时自动切 `yf.Ticker('CRCL').history(period='max')` | 日 |
+| CRCL 估值快照 | yfinance | `Ticker('CRCL').info`（marketCap/trailingPE/forwardPE/P-S/52 周） | 每次采集 |
+
+触发：应用启动自动一次（lifespan 后台线程；`CRCL_STARTUP_COLLECT=0` 可关）+ 页内「手动刷新」（SSE 进度）。
+代码：`backend/app/core/crcl_collect.py`；告警引擎 `crcl_alerts.py`（5 规则，状态变化写历史）。
+
+### 9.2 手工补充（Agent / 人工，季度维护）
+
+| 项 | 目标文件 | 当前补到 | 数据源 | 更新时机 |
+|---|---|---|---|---|
+| 季报拆解 | `data/crcl_fundamentals.json` → `quarters[]` | 2026Q1+Q2 | Circle 财报新闻稿 + 财报会转录 | 每季财报后（2/5/8/11 月初） |
+| 标志位 | 同上 → `flags` | 已填 | Fed 决议 / 立法进展 | 事件发生时 |
+| 宏观事件与里程碑 | `data/crcl_events.json` | 11 条 | Fed 日历 / SEC / Circle IR / 媒体 | 滚动维护 |
+
+**Agent 补充步骤（每季财报）**：
+1. 读 Circle 官方新闻稿（circle.com/pressroom）+ 财报会转录（Motley Fool 等）。
+2. 提取：总收入 / 储备收入 / 其他收入 / EPS 实际与预期 / 分发成本 / USDC 期末流通 / CPN 统计。
+3. 在 `quarters` 按 period 升序追加一条；派生字段：`nonreserve_share_pct` = 其他收入 ÷ 总收入 ×100；`distribution_cost_ratio_pct` = 分发成本 ÷ 总收入 ×100。
+4. 刷新 `/crcl-monitor` 验证 KPI delta 与告警面板；跑 `backend/tests/test_crcl_alerts.py` 确认规则无回归。
+
+**校验规则**（防录错）：
+- `reserve_revenue_m + other_revenue_m ≈ total_revenue_m`（±1%）。
+- `total_revenue_m` 当前量级 600–900；单季环比变化 >±20% 需复核。
+- `nonreserve_share_pct` 应在 0–20；`distribution_cost_ratio_pct` 应在 40–75。
+- EURC 无需手工（已自动采集）；若手工值与自动序列冲突，以自动序列为准。
 
 ---
 
