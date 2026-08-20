@@ -23,6 +23,7 @@ let reqId = 0
 
 const refreshing = ref(false)
 const progress = ref(0)
+const logsOpen = ref(false)
 
 // ---------- formatting ----------
 const fmtB = (v: number | null | undefined, digits = 1) =>
@@ -224,8 +225,9 @@ onMounted(load)
 
     <div v-if="error" role="alert" class="mb-4 px-4 py-3 rounded-xl border border-red-500/40 bg-red-500/10 text-red-300 text-xs">{{ error }}</div>
 
-    <!-- ① KPI -->
-    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+    <!-- ① 指标卡片：自动采集 -->
+    <div class="text-[10px] text-text-3 uppercase tracking-wide mb-2">实时采集</div>
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
       <MetricTile label="CRCL 股价" :value="valuation.price ?? null" suffix="USD"
         :tip="`Yahoo Finance 实时快照。\n\n取数：yfinance Ticker('CRCL').info → currentPrice。`" />
       <MetricTile label="市值" :value="valuation.market_cap != null ? +(valuation.market_cap / 1e9).toFixed(1) : null" suffix="B"
@@ -235,9 +237,31 @@ onMounted(load)
       <MetricTile label="USDC 流通量" :value="stableSnap.usdc_circ != null ? +(Number(stableSnap.usdc_circ) / 1e9).toFixed(1) : null" suffix="B"
         :tip="`USDC 链上流通量（十亿美元），DefiLlama 聚合口径（已去跨链桥重复）。\n\n取数：stablecoins.llama.fi/stablecoincharts/all?stablecoin=2。`" />
       <MetricTile label="稳定币总盘" :value="stableSnap.stablecoin_total != null ? +(Number(stableSnap.stablecoin_total) / 1e9).toFixed(0) : null" suffix="B"
-        :tip="`全稳定币市值总盘（十亿美元）——行业水位。\n\n取数：stablecoins.llama.fi/stablecoincharts/all。`" />
+        :tip="`全部稳定币市值总盘（十亿美元）——行业水位。\n\n取数：stablecoins.llama.fi/stablecoincharts/all。`" />
       <MetricTile label="已触发警报" :value="triggeredRules.length" :accent="triggeredRules.length > 0"
         :tip="`当前处于触发状态的告警规则数（黄/红/确认）。规则定义见下方告警面板与 docs/CRCL监控体系.md。`" />
+    </div>
+
+    <!-- ① 指标卡片：手工维护（季报） -->
+    <div class="text-[10px] text-text-3 uppercase tracking-wide mb-2">
+      手工维护 · {{ latestQ?.period ?? '—' }} 财报
+      <span class="normal-case tracking-normal opacity-70 ml-1">（编辑 data/crcl_fundamentals.json 更新）</span>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
+      <MetricTile label="总收入" :value="latestQ?.total_revenue_m != null ? Number(latestQ.total_revenue_m) : null" suffix="M"
+        :tip="`Circle 季度总收入（百万美元）。\n\n来源：${latestQ?.source ?? '—'}`" />
+      <MetricTile label="储备收入占比" :value="latestQ?.reserve_revenue_m != null && latestQ?.total_revenue_m != null ? +(100 * Number(latestQ.reserve_revenue_m) / Number(latestQ.total_revenue_m)).toFixed(1) : null" suffix="%"
+        :tip="`储备（利息）收入占总收入比——越高越像“货币基金”。\n\n来源：季报拆解。`" />
+      <MetricTile label="非储备收入占比 ⭐" :value="latestQ?.nonreserve_share_pct != null ? Number(latestQ.nonreserve_share_pct) : null" suffix="%" accent
+        :tip="`论点核心指标：CPN/Arc 等平台收入占比。>15% 且流通增速 ≥20% 为确认信号组合之一；2027 年中 <10% 为证伪组合之一。\n\n来源：季报拆解（手工维护）。`" />
+      <MetricTile label="EPS 实际" :value="latestQ?.eps_actual != null ? Number(latestQ.eps_actual) : null" :suffix="`/ 预期 ${latestQ?.eps_consensus ?? '—'}`"
+        :tip="`每股收益实际值 vs 一致预期。Q2 为 miss（0.18 vs 0.26）。\n\n来源：季报。`" />
+      <MetricTile label="CPN 交易量同比" :value="latestQ?.cpn_usdc_volume_yoy_pct != null ? Number(latestQ.cpn_usdc_volume_yoy_pct) : null" suffix="%"
+        :tip="`Circle Payment Network 上 USDC 交易量同比增速——支付网络起量的领先指标。\n\n来源：季报/财报会。`" />
+      <MetricTile label="CPN 接入机构" :value="latestQ?.cpn_institutions != null ? Number(latestQ.cpn_institutions) : null" suffix="+"
+        :tip="`接入 CPN 的金融机构数量。\n\n来源：财报会/AMA。`" />
+      <MetricTile label="EURC 流通" :value="latestQ?.eurc_circ_m != null ? Number(latestQ.eurc_circ_m) : null" suffix="M€"
+        :tip="`欧元稳定币流通量（百万欧元），全球最大数字欧元。\n\n来源：AMA（2026-08-19）。`" />
     </div>
 
     <!-- ② 图表 -->
@@ -260,114 +284,96 @@ onMounted(load)
       </GraphCard>
     </div>
 
-    <!-- ③ 宏观事件与里程碑 -->
-    <GraphCard title="宏观事件与里程碑" :loading="loading" :error="error"
-      :tip="`手工维护：编辑 data/crcl_events.json 后刷新页面即可。FOMC 具体日期以 Fed 官方日历为准（标注待核实的条目请核实）。`">
-      <div class="text-[10px] text-text-3 mb-3">文件更新于 {{ eventsUpdatedAt ?? '—' }} · 共 {{ events.length }} 条</div>
-      <div class="space-y-2.5">
-        <div v-for="(ev, i) in events" :key="i"
-          class="flex gap-3 px-3.5 py-3 rounded-xl border border-border bg-surface/60">
-          <div class="shrink-0 w-[86px] pt-0.5">
-            <div class="text-xs font-semibold text-text tabular-nums">{{ ev.date }}</div>
-            <span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px]" :class="CATEGORY_CLS[ev.category] ?? 'bg-slate-500/15 text-slate-400'">{{ ev.category }}</span>
-          </div>
-          <div class="min-w-0">
-            <div class="text-[13px] font-medium text-text">
-              {{ ev.title }}
-              <span class="ml-2 text-[10px]" :class="EVENT_STATUS_CLS[ev.status] ?? 'text-text-3'">● {{ ev.status }}</span>
-            </div>
-            <div class="text-xs text-text-3 mt-1 leading-relaxed">{{ ev.detail }}</div>
-            <div class="text-[10px] text-text-3/70 mt-1">来源：{{ ev.source }}</div>
-          </div>
-        </div>
-      </div>
-    </GraphCard>
-
-    <!-- ④ 告警面板 -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5">
-      <div class="lg:col-span-2">
-        <GraphCard title="告警规则状态" :loading="loading" :error="error"
-          :tip="`规则来自 docs/CRCL监控体系.md 决策规则。每次采集后自动评估，状态变化写入告警历史。数据驱动规则用采集数据；判定规则用 data/crcl_fundamentals.json 的标志位与季报数据（手工维护）。`">
-          <div class="space-y-2.5">
-            <div v-for="r in rules" :key="r.rule"
-              class="px-3.5 py-3 rounded-xl border bg-surface/60"
-              :class="[LEVEL_STYLE[r.level]?.ring ?? 'border-border', r.status === 'triggered' ? 'ring-1 ring-inset ring-red-500/40' : '']">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="LEVEL_STYLE[r.level]?.badge ?? 'bg-slate-500/15 text-slate-400'">
-                  {{ LEVEL_STYLE[r.level]?.label ?? r.level }}
-                </span>
-                <span class="text-[13px] font-medium text-text">{{ r.description }}</span>
-                <span class="ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium" :class="STATUS_LABEL[r.status]?.cls ?? 'bg-slate-500/20 text-slate-400'">
-                  {{ STATUS_LABEL[r.status]?.text ?? r.status }}
-                </span>
-              </div>
-              <div class="text-xs text-text-3 mt-1.5">{{ r.message || '—' }}</div>
-              <div class="text-[10px] text-text-3/60 mt-1">评估于 {{ fmtTs(r.ts) }} · rule: {{ r.rule }}</div>
-            </div>
-          </div>
-        </GraphCard>
-      </div>
-      <div>
-        <GraphCard title="手工维护数据（最新季报 + 标志位）" :loading="loading" :error="error"
-          :tip="`来自 data/crcl_fundamentals.json：每季度财报后手工更新 quarters；flags 供告警规则使用（fed_cutting=降息周期中，clarity_act_passed=法案已通过）。`">
-          <div v-if="latestQ" class="space-y-1.5 text-xs">
-            <div class="flex justify-between"><span class="text-text-3">报告期</span><span class="text-text font-medium">{{ latestQ.period }}</span></div>
-            <div class="flex justify-between"><span class="text-text-3">总收入</span><span class="text-text">${{ latestQ.total_revenue_m }}M</span></div>
-            <div class="flex justify-between"><span class="text-text-3">储备收入占比</span><span class="text-text">{{ latestQ.reserve_revenue_m != null && latestQ.total_revenue_m != null ? (100 * Number(latestQ.reserve_revenue_m) / Number(latestQ.total_revenue_m)).toFixed(1) : '—' }}%</span></div>
-            <div class="flex justify-between"><span class="text-text-3">非储备收入占比 ⭐</span><span class="text-amber-400 font-semibold">{{ latestQ.nonreserve_share_pct }}%</span></div>
-            <div class="flex justify-between"><span class="text-text-3">EPS 实际 vs 预期</span><span class="text-text">${{ latestQ.eps_actual }} vs ${{ latestQ.eps_consensus }}</span></div>
-            <div class="flex justify-between"><span class="text-text-3">CPN 交易量同比</span><span class="text-text">+{{ latestQ.cpn_usdc_volume_yoy_pct }}%</span></div>
-            <div class="flex justify-between"><span class="text-text-3">CPN 机构数</span><span class="text-text">{{ latestQ.cpn_institutions }}+</span></div>
-            <div class="flex justify-between"><span class="text-text-3">EURC 流通</span><span class="text-text">€{{ latestQ.eurc_circ_m }}M</span></div>
-            <div class="border-t border-border mt-2 pt-2 flex items-center gap-2">
-              <span class="text-text-3">标志位</span>
-              <span class="px-1.5 py-0.5 rounded text-[10px]" :class="fundamentals?.flags?.fed_cutting ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-500/15 text-slate-400'">
-                降息周期 {{ fundamentals?.flags?.fed_cutting ? '中' : '否' }}
+    <!-- ③ 告警规则状态 -->
+    <div class="mb-5">
+      <GraphCard title="告警规则状态" :loading="loading" :error="error"
+        :tip="`规则来自 docs/CRCL监控体系.md 决策规则。每次采集后自动评估，状态变化写入告警历史。数据驱动规则用采集数据；判定规则用 data/crcl_fundamentals.json 的标志位与季报数据（手工维护）。`">
+        <div class="space-y-2.5">
+          <div v-for="r in rules" :key="r.rule"
+            class="px-3.5 py-3 rounded-xl border bg-surface/60"
+            :class="[LEVEL_STYLE[r.level]?.ring ?? 'border-border', r.status === 'triggered' ? 'ring-1 ring-inset ring-red-500/40' : '']">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="LEVEL_STYLE[r.level]?.badge ?? 'bg-slate-500/15 text-slate-400'">
+                {{ LEVEL_STYLE[r.level]?.label ?? r.level }}
               </span>
-              <span class="px-1.5 py-0.5 rounded text-[10px]" :class="fundamentals?.flags?.clarity_act_passed ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'">
-                Clarity Act {{ fundamentals?.flags?.clarity_act_passed ? '已通过' : '未通过' }}
+              <span class="text-[13px] font-medium text-text">{{ r.description }}</span>
+              <span class="ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium" :class="STATUS_LABEL[r.status]?.cls ?? 'bg-slate-500/20 text-slate-400'">
+                {{ STATUS_LABEL[r.status]?.text ?? r.status }}
               </span>
             </div>
+            <div class="text-xs text-text-3 mt-1.5">{{ r.message || '—' }}</div>
+            <div class="text-[10px] text-text-3/60 mt-1">评估于 {{ fmtTs(r.ts) }} · rule: {{ r.rule }}</div>
           </div>
-          <div v-else class="text-xs text-text-3">无季报数据（编辑 data/crcl_fundamentals.json）</div>
-        </GraphCard>
-      </div>
-    </div>
-
-    <!-- ⑤ 更新日志 -->
-    <div class="mt-5">
-      <GraphCard title="采集与告警日志" :loading="loading" :error="error"
-        :tip="`每次采集运行（启动自动 / 手动刷新）逐数据源记录结果；告警状态变化也写入日志。存于 data/crcl_monitor.db → collect_log 表。`">
-        <div class="overflow-x-auto">
-          <table class="w-full text-xs tabular-nums">
-            <thead>
-              <tr class="text-left text-text-3 border-b border-border">
-                <th class="py-1.5 pr-3 font-medium">时间 (UTC)</th>
-                <th class="py-1.5 pr-3 font-medium">来源</th>
-                <th class="py-1.5 pr-3 font-medium">状态</th>
-                <th class="py-1.5 pr-3 font-medium">信息</th>
-                <th class="py-1.5 font-medium text-right">耗时</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(l, i) in logs" :key="i" class="border-b border-border/40 last:border-0">
-                <td class="py-1.5 pr-3 text-text-3 whitespace-nowrap">{{ fmtTs(l.ts) }}</td>
-                <td class="py-1.5 pr-3 text-text-2 font-mono text-[11px]">{{ l.source }}</td>
-                <td class="py-1.5 pr-3">
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                    :class="l.status === 'ok' ? 'bg-emerald-500/15 text-emerald-400'
-                      : l.status === 'error' ? 'bg-red-500/15 text-red-300'
-                      : l.status === 'alert' ? 'bg-amber-500/15 text-amber-400'
-                      : 'bg-slate-500/15 text-slate-400'">{{ l.status }}</span>
-                </td>
-                <td class="py-1.5 pr-3 text-text-2 max-w-[420px] truncate" :title="l.message">{{ l.message }}</td>
-                <td class="py-1.5 text-right text-text-3">{{ l.duration_ms >= 0 ? l.duration_ms + 'ms' : '' }}</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </GraphCard>
     </div>
+
+    <!-- ④ 宏观事件与里程碑 -->
+    <div class="mb-5">
+      <GraphCard title="宏观事件与里程碑" :loading="loading" :error="error"
+        :tip="`手工维护：编辑 data/crcl_events.json 后刷新页面即可。FOMC 具体日期以 Fed 官方日历为准（标注待核实的条目请核实）。`">
+        <div class="text-[10px] text-text-3 mb-3">文件更新于 {{ eventsUpdatedAt ?? '—' }} · 共 {{ events.length }} 条</div>
+        <div class="space-y-2.5">
+          <div v-for="(ev, i) in events" :key="i"
+            class="flex gap-3 px-3.5 py-3 rounded-xl border border-border bg-surface/60">
+            <div class="shrink-0 w-[86px] pt-0.5">
+              <div class="text-xs font-semibold text-text tabular-nums">{{ ev.date }}</div>
+              <span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px]" :class="CATEGORY_CLS[ev.category] ?? 'bg-slate-500/15 text-slate-400'">{{ ev.category }}</span>
+            </div>
+            <div class="min-w-0">
+              <div class="text-[13px] font-medium text-text">
+                {{ ev.title }}
+                <span class="ml-2 text-[10px]" :class="EVENT_STATUS_CLS[ev.status] ?? 'text-text-3'">● {{ ev.status }}</span>
+              </div>
+              <div class="text-xs text-text-3 mt-1 leading-relaxed">{{ ev.detail }}</div>
+              <div class="text-[10px] text-text-3/70 mt-1">来源：{{ ev.source }}</div>
+            </div>
+          </div>
+        </div>
+      </GraphCard>
+    </div>
+
+    <!-- ⑤ 采集与告警日志（默认折叠） -->
+    <section class="bg-card border border-border rounded-2xl p-5">
+      <button class="w-full flex items-center justify-between gap-2 text-left" @click="logsOpen = !logsOpen"
+        :aria-expanded="logsOpen">
+        <h3 class="text-sm font-semibold text-text">
+          采集与告警日志
+          <span class="text-text-3 text-xs font-normal ml-2">
+            {{ logs.length }} 条 · 最近 {{ logs.length ? fmtTs(logs[0].ts) : '—' }}
+          </span>
+        </h3>
+        <span class="text-text-3 text-xs shrink-0">{{ logsOpen ? '收起 ▲' : '展开 ▼' }}</span>
+      </button>
+      <div v-if="logsOpen" class="mt-3 overflow-x-auto">
+        <table class="w-full text-xs tabular-nums">
+          <thead>
+            <tr class="text-left text-text-3 border-b border-border">
+              <th class="py-1.5 pr-3 font-medium">时间 (UTC)</th>
+              <th class="py-1.5 pr-3 font-medium">来源</th>
+              <th class="py-1.5 pr-3 font-medium">状态</th>
+              <th class="py-1.5 pr-3 font-medium">信息</th>
+              <th class="py-1.5 font-medium text-right">耗时</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(l, i) in logs" :key="i" class="border-b border-border/40 last:border-0">
+              <td class="py-1.5 pr-3 text-text-3 whitespace-nowrap">{{ fmtTs(l.ts) }}</td>
+              <td class="py-1.5 pr-3 text-text-2 font-mono text-[11px]">{{ l.source }}</td>
+              <td class="py-1.5 pr-3">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  :class="l.status === 'ok' ? 'bg-emerald-500/15 text-emerald-400'
+                    : l.status === 'error' ? 'bg-red-500/15 text-red-300'
+                    : l.status === 'alert' ? 'bg-amber-500/15 text-amber-400'
+                    : 'bg-slate-500/15 text-slate-400'">{{ l.status }}</span>
+              </td>
+              <td class="py-1.5 pr-3 text-text-2 max-w-[420px] truncate" :title="l.message">{{ l.message }}</td>
+              <td class="py-1.5 text-right text-text-3">{{ l.duration_ms >= 0 ? l.duration_ms + 'ms' : '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <div class="text-[10px] text-text-3/60 mt-4 leading-relaxed">
       数据源：DefiLlama（稳定币）· Treasury.gov（美债收益率）· AKShare/Yahoo Finance（CRCL 行情与估值）· 手工 JSON（事件/季报/标志位）。
