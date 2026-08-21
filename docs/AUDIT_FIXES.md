@@ -50,12 +50,13 @@
 - files: backend/app/main.py, run_app.sh, frontend/vite.config.ts, backend/tests/test_static_serving.py
 - reviewer: PASS（独立 reviewer 子 Agent：live TestClient `/api/未命中`→JSON 404 非 HTML 壳、deep-link→index、`/assets` 命中/缺失正确、路径穿越守护成立；run_app.sh 确单进程无 vite preview、指纹重建、就绪失败 exit1 无假报、cleanup set +e；10 例 passed，另 2 failed 属 G03）· commit: 本批次提交 · evidence: test_static_serving.py（10 例 passed）· 3 项非阻断 follow-up：①fingerprint 未含 build-config(vite/tsconfig/tailwind)②test docstring 仍述旧设计③main.py 注释措辞
 
-### G06 · 健康端点说真话 + 采集非零退出 + 日志 · ⬜
+### G06 · 健康端点说真话 + 采集非零退出 + 日志 · ✅
 - findings: O-C1/B1 (`refresh.py:97`,`sources.py`) + P-H2 (`01_fetch_data.py:1119`)
 - 症状: `sources==[]`→green、无新鲜度判据、`01_fetch` 从不非零退出、零日志零告警 → 数据陈旧一个月仍绿灯。
-- 根治: 采集脚本汇总退出码（任一表失败/kept_previous→非零）；`sources_health` 加 staleness 判据、`sources==[]`→unknown(灰)；引入 logging + 可插拔 notifier。新增测试。
-- files: scripts/01_fetch_data.py, backend/app/api/v1/sources.py, backend/app/core/refresh.py, backend/tests/
-- reviewer: — · commit: — · evidence: —
+- 根治: `01_fetch_data.py` `compute_exit_code` 汇总退出码（任一表因失败落 kept_previous → exit 2，区别于窗口外跳过）+ `sys.exit(main())`；`sources_health` 空→unknown、加 staleness(40/80d，HEALTH_STALE_DAYS 可配)；stderr + RotatingFile 日志。
+- files: backend/app/core/refresh.py, backend/app/schemas/sources.py（+unknown Literal）, scripts/01_fetch_data.py, backend/tests/test_sources_health.py, backend/tests/test_health_truthfulness.py
+- reviewer: 编排者复核（读 test_sources_health diff 确认为口径修正非弱化：空→unknown、端点 shape 增 unknown、green 用例改动态新鲜 ts；test-gate 提交前 test_health_truthfulness + test_sources_health 全过）；fixer 报告全套 107 passed。因预算未派独立 reviewer 子 Agent · commit: 本批次提交 · evidence: test_health_truthfulness.py 9 例（改前 empty→green/无 staleness/无 compute_exit_code 失败）· 注意 run_refresh 现对任一失败表报 error（预期"响亮失败"）
+- 遗留 follow-up（来自 G03 reviewer）：G03b — `/cycles/{name}`(classify_*) 与 `/real-estate`(_analyze_real_estate_cached) 缓存未纳入版本键，CLI/cron 换库后对这两端点仍可能陈旧，需在 cycle_*.py/real_estate.py 补版本键以完全闭合 F3。
 
 ### G07 · 前端图表渲染重构（去响应式代理+停止卸载）· ✅
 - findings: FE-C1 (各页 buildXxx 模板表达式 + `ref<Rec[]>`) + FE-H1 (`GraphCard.vue:14-20`)

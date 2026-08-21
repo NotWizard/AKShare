@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from backend.app.core.cache import clear_all_caches
@@ -89,18 +90,55 @@ def read_manifest_summary() -> dict:
     }
 
 
-def sources_health(manifest: dict) -> dict:
+# Staleness threshold for the manifest timestamp. Macro data is monthly, so a
+# manifest older than ~40 days almost certainly means the scheduled refresh has
+# silently stopped feeding fresh data (env-overridable via HEALTH_STALE_DAYS).
+# Past 2× the threshold the data is badly stale → treated as a hard failure.
+HEALTH_STALE_DAYS = int(os.getenv("HEALTH_STALE_DAYS", "40"))
+
+# Severity ordering so staleness can only ESCALATE the per-source status, never
+# downgrade it (a red source stays red even when the manifest is fresh).
+_SEVERITY = {"green": 0, "yellow": 1, "red": 2}
+
+
+def _staleness_status(updated_at, now, stale_days=None):
+    """Severity contributed by manifest age: None when fresh / unparseable /
+    absent, ``"yellow"`` once older than ``stale_days``, ``"red"`` past 2×.
+
+    A missing or unparseable timestamp yields None (no staleness opinion); the
+    empty-sources case is handled as ``unknown`` by the caller before this runs.
+    """
+    if not updated_at:
+        return None
+    stale_days = HEALTH_STALE_DAYS if stale_days is None else stale_days
+    try:
+        age_days = (now - datetime.fromisoformat(updated_at)).total_seconds() / 86400.0
+    except (TypeError, ValueError):
+        return None
+    if age_days >= stale_days * 2:
+        return "red"
+    if age_days >= stale_days:
+        return "yellow"
+    return None
+
+
+def sources_health(manifest: dict, now=None) -> dict:
     """Derive per-source red/yellow/green from the manifest (pure function, no
     new storage — last_run.json is the only source of truth).
 
     规则：任一源 consecutive_failures ≥ 2 → red；否则任一源 1 连败、
     kept_previous warning（验证闸门拒收）或 dual divergence warning（双源比对
-    分歧）→ yellow；其余 → green。
-    sources 为空 → green + updated_at=None（前端画灰点 = 尚无运行记录）。
+    分歧）→ yellow；其余 → green。此外，manifest 时间戳过旧（宏观月频，默认
+    > HEALTH_STALE_DAYS 天）→ 至少转黄、> 2× → 转红：陈旧数据绝不报绿。
+    sources 为空 → unknown + updated_at=None（前端画灰点 = 尚无有效运行记录，
+    绝不当作健康的绿灯——O-C1/B1 修复点）。
+    ``now`` 可注入以便测试，默认 datetime.now()。
     """
     sources = manifest.get("sources") or []
     if not sources:
-        return {"status": "green", "updated_at": None, "sources": []}
+        return {"status": "unknown", "updated_at": None, "sources": []}
+    if now is None:
+        now = datetime.now()
     tables = manifest.get("tables", {})
     status = "green"
     out = []
@@ -119,12 +157,17 @@ def sources_health(manifest: dict) -> dict:
             status = "red"
         elif status != "red" and (cf == 1 or warning):
             status = "yellow"
-    return {"status": status, "updated_at": manifest.get("ts"), "sources": out}
+    updated_at = manifest.get("ts")
+    stale = _staleness_status(updated_at, now)
+    if stale and _SEVERITY[stale] > _SEVERITY[status]:
+        status = stale
+    return {"status": status, "updated_at": updated_at, "sources": out}
 
 
 def read_sources_health() -> dict:
     """Read data/last_run.json and derive sources health. Never raises;
-    absent/corrupt manifest → green + updated_at=None. No caching (file is tiny)."""
+    absent/corrupt manifest or a derivation error → unknown + updated_at=None
+    (gray, never a false green). No caching (file is tiny)."""
     try:
         m = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
     except (json.JSONDecodeError, OSError):
@@ -132,7 +175,7 @@ def read_sources_health() -> dict:
     try:
         return sources_health(m if isinstance(m, dict) else {})
     except Exception:
-        return {"status": "green", "updated_at": None, "sources": []}
+        return {"status": "unknown", "updated_at": None, "sources": []}
 
 
 def _build_cmd(full: bool) -> list:

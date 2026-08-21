@@ -6,12 +6,14 @@
 
 import argparse
 import json
+import logging
 import sqlite3
 import os
 import sys
 import time
 import warnings
 from datetime import date, datetime
+from logging.handlers import RotatingFileHandler
 
 import akshare as ak
 import pandas as pd
@@ -45,6 +47,35 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+# Structured run logger, separate from the human-facing stdout `log()` above
+# (which the refresh driver parses for ✅ progress). Emits to stderr so a failed
+# run leaves a record even when stdout is discarded; a partial failure logs an
+# ERROR line. Messages stay plain ASCII so they never trip the driver's stdout
+# parsing (no ✅, no "计划抓取 N/").
+logger = logging.getLogger("fetch_data")
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    _sh = logging.StreamHandler(sys.stderr)
+    _sh.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    logger.addHandler(_sh)
+    logger.propagate = False
+
+
+def _attach_file_log():
+    """Best-effort: also persist run logs to data/logs/fetch.log (rotating) so a
+    scheduled run whose stderr is discarded still leaves a durable record. A
+    logging-setup failure must never abort a data run."""
+    try:
+        log_dir = os.path.join(os.path.dirname(__file__), "..", "data", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        fh = RotatingFileHandler(os.path.join(log_dir, "fetch.log"),
+                                 maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(fh)
+    except Exception:
+        pass
 
 
 # Per-run audit manifest, populated by save_to_db and flushed by main().
@@ -195,6 +226,7 @@ def fetch_cpi(conn):
     })
     if em.empty:
         log("  ⚠️ 东方财富 CPI 无数据，保留旧表")
+        save_to_db(pd.DataFrame(), "cpi", conn)  # 记 kept_previous → 计入退出码/健康灯
         return pd.DataFrame()
     em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
     em["cpi_yoy"] = pd.to_numeric(em["cpi_yoy"], errors="coerce")
@@ -252,6 +284,7 @@ def fetch_ppi(conn):
     })
     if em.empty:
         log("  ⚠️ 东方财富 PPI 无数据，保留旧表")
+        save_to_db(pd.DataFrame(), "ppi", conn)  # 记 kept_previous → 计入退出码/健康灯
         return pd.DataFrame()
     em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
     em["ppi_yoy"] = pd.to_numeric(em["ppi_yoy"], errors="coerce")
@@ -982,6 +1015,28 @@ def fetch_external_demand(conn):
 
 
 # ─────────────────────────────────────────────
+# 退出码汇总
+# ─────────────────────────────────────────────
+def compute_exit_code(manifest: dict) -> int:
+    """Aggregate the process exit code from the run manifest.
+
+    A table appears in ``manifest['tables']`` ONLY if it was actually attempted
+    this run — written by ``save_to_db`` (updated / kept_previous) or by main()'s
+    fetcher-exception handler (kept_previous). A table skipped because it's
+    outside its release window is never added there; it is only carried over in
+    ``manifest['sources']``. Therefore a ``kept_previous`` entry in
+    ``manifest['tables']`` is unambiguously a REAL fetch/validate failure this
+    run — never an in-window skip.
+
+    Returns 2 (partial failure) when any attempted table ended ``kept_previous``,
+    else 0 (fully clean)."""
+    tables = manifest.get("tables", {}) or {}
+    failed = [t for t, v in tables.items()
+              if isinstance(v, dict) and v.get("status") == "kept_previous"]
+    return 2 if failed else 0
+
+
+# ─────────────────────────────────────────────
 # 主流程
 # ─────────────────────────────────────────────
 def main():
@@ -990,6 +1045,7 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    _attach_file_log()
     global _MANIFEST
 
     log("=" * 50)
@@ -1115,6 +1171,17 @@ def main():
     log(f"  kept_previous {len(kept)}: {', '.join(kept) or '-'}")
     log("=" * 50)
 
+    # Aggregate exit code: any kept_previous table this run = real fetch/validate
+    # failure → nonzero, so run_refresh / cron / launchd actually see the failure
+    # (previously main() always fell through to exit 0, hiding partial failures).
+    code = compute_exit_code(_MANIFEST)
+    if code:
+        logger.error("partial failure: %d table(s) kept previous due to "
+                     "fetch/validate failure: %s", len(kept), ", ".join(kept) or "-")
+    else:
+        logger.info("clean run: %d table(s) updated, no real failures", len(updated))
+    return code
+
 
 if __name__ == "__main__":
     # Share the SAME flock as the API refresh driver so a manual run and an
@@ -1134,7 +1201,7 @@ if __name__ == "__main__":
 
     try:
         with _guard:
-            main()
+            sys.exit(main())
     except BlockingIOError:
         log("⛔ 已有刷新在进行中（另一进程持有刷新锁），本次退出")
         sys.exit(1)

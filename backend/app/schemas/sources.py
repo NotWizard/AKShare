@@ -17,6 +17,6 @@ class SourceHealth(BaseModel):
 
 
 class SourcesHealth(BaseModel):
-    status: Literal["green", "yellow", "red"]
+    status: Literal["green", "yellow", "red", "unknown"]
     updated_at: str | None = None
     sources: list[SourceHealth] = []

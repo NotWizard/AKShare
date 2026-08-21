@@ -4,6 +4,7 @@ Run:  .venv312/bin/python -m pytest backend/tests -q
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -22,11 +23,14 @@ def _src(table, cf=0, ok=True, error=None):
 
 
 def test_green_all_ok():
-    m = {"ts": "2026-08-09T10:00:00", "tables": {"cpi": {"status": "updated"}},
+    # 用动态新鲜时间戳：新增陈旧度规则会把任何写死的过去日期最终判为过期(黄)，
+    # 故这里取 now() 以确定性地检验本意——全部源 ok + manifest 新鲜 → green。
+    ts = datetime.now().isoformat(timespec="seconds")
+    m = {"ts": ts, "tables": {"cpi": {"status": "updated"}},
          "sources": [_src("cpi"), _src("ppi")]}
     h = sources_health(m)
     assert h["status"] == "green"
-    assert h["updated_at"] == "2026-08-09T10:00:00"
+    assert h["updated_at"] == ts
     assert all(s["warning"] is None for s in h["sources"])
 
 
@@ -88,7 +92,8 @@ def test_carried_over_entry_still_counts():
 
 
 def test_no_manifest():
-    assert sources_health({}) == {"status": "green", "updated_at": None, "sources": []}
+    # 空 manifest（无 sources）→ unknown（灰），不再谎报 green（O-C1/B1 修复）
+    assert sources_health({}) == {"status": "unknown", "updated_at": None, "sources": []}
 
 
 def test_empty_sources():
@@ -99,6 +104,6 @@ def test_endpoint_shape():
     resp = client.get("/api/v1/sources/health")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["status"] in ("green", "yellow", "red")
+    assert body["status"] in ("green", "yellow", "red", "unknown")
     assert body["updated_at"] is None or isinstance(body["updated_at"], str)
     assert isinstance(body["sources"], list)
