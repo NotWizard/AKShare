@@ -1117,4 +1117,25 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Share the SAME flock as the API refresh driver so a manual run and an
+    # API-triggered refresh can never race on the shared staging DB.
+    # When run_refresh spawns this script it already holds the lock in the parent
+    # and sets REFRESH_LOCK_HELD=1, so we skip re-acquiring (would self-conflict);
+    # a standalone `python scripts/01_fetch_data.py` acquires it here and exits
+    # non-zero if another refresh already holds it.
+    from contextlib import nullcontext
+
+    if os.getenv("REFRESH_LOCK_HELD") == "1":
+        _guard = nullcontext()
+    else:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from backend.app.core.locking import refresh_lock
+        _guard = refresh_lock()
+
+    try:
+        with _guard:
+            main()
+    except BlockingIOError:
+        log("⛔ 已有刷新在进行中（另一进程持有刷新锁），本次退出")
+        sys.exit(1)
+

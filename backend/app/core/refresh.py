@@ -9,20 +9,36 @@ The progress callback is exposed so the API layer can drive an SSE stream.
 
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 from backend.app.core.cache import clear_all_caches
 from backend.app.core.db import _load_full
+# Single source of truth for the refresh lock (flock-based, shared with the CLI).
+# is_running/LOCK_PATH are re-exported here so the API layer and callers keep
+# importing them from backend.app.core.refresh unchanged.
+from backend.app.core.locking import LOCK_PATH, is_running, refresh_lock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FETCH_SCRIPT = PROJECT_ROOT / "scripts" / "01_fetch_data.py"
 MANIFEST_PATH = PROJECT_ROOT / "data" / "last_run.json"
-LOCK_PATH = PROJECT_ROOT / "data" / ".refresh.lock"
 VENV_PY = PROJECT_ROOT / ".venv312" / "bin" / "python"
+
+# Wall-clock ceiling for a single refresh subprocess. Enforced independently of
+# whether the child emits any stdout (see run_refresh) so a silent no-timeout
+# network hang inside akshare is actually killed. Env-overridable so tests can
+# set it to a couple of seconds.
+REFRESH_TIMEOUT_S = int(os.getenv("REFRESH_TIMEOUT_S", "300"))
+
+# Env flag: run_refresh (which already holds the flock in THIS process) sets this
+# in the child's environment so scripts/01_fetch_data.py skips re-acquiring the
+# same lock (the parent holds it). A manual CLI run has it unset and acquires.
+LOCK_HELD_ENV = "REFRESH_LOCK_HELD"
 
 # Expected number of ✅ lines from 01_fetch_data.py stdout:
 # 16 fetchers (money_supply, gdp, cpi, ppi, pmi, leverage, social_finance, lpr,
@@ -34,17 +50,6 @@ VENV_PY = PROJECT_ROOT / ".venv312" / "bin" / "python"
 # 100% early. Initial fallback only: the 📋 计划抓取 K/N line refines expected
 # per run (incremental mode skips tables outside their release window).
 EXPECTED_FETCH_STEPS = 18
-
-
-def is_running() -> bool:
-    if not LOCK_PATH.exists():
-        return False
-    # Stale detection: if lockfile mtime > 10 minutes, treat as stale (backend crashed)
-    mtime = LOCK_PATH.stat().st_mtime
-    if time.time() - mtime > 600:  # 10 minutes
-        LOCK_PATH.unlink(missing_ok=True)
-        return False
-    return True
 
 
 def _subprocess_env() -> dict:
@@ -130,46 +135,96 @@ def read_sources_health() -> dict:
         return {"status": "green", "updated_at": None, "sources": []}
 
 
+def _build_cmd(full: bool) -> list:
+    """Build the fetch-subprocess command. Split out as a seam so tests can
+    monkeypatch it to a fake child (e.g. a sleeper that emits no output) without
+    rewiring run_refresh."""
+    py = str(VENV_PY) if VENV_PY.exists() else sys.executable
+    return [py, str(FETCH_SCRIPT)] + (["--full"] if full else [])
+
+
 def run_refresh(progress_cb=None, stop_event=None, full=False) -> dict:
     """Run the fetch pipeline as a subprocess; clear caches on success.
 
     Streams stdout so ``progress_cb(fraction)`` is driven by per-table ✅ lines.
-    Single-flight: a lockfile prevents two refreshes racing on the staging DB.
+    Single-flight via an OS-level ``flock`` (see backend.app.core.locking): the
+    lock is acquired atomically for the WHOLE refresh, so two concurrent callers
+    can never both spawn a fetcher and race on the shared staging DB — the loser
+    gets ``BlockingIOError`` and a "busy" result. The kernel drops the lock if
+    this process dies (no stale-file heuristic). The same lock is shared with a
+    manual ``python scripts/01_fetch_data.py`` run.
     Supports cancellation via ``stop_event`` (threading.Event): if set, the
-    subprocess is killed early and the lockfile released.
-    ``full=True`` appends --full (bypass the release calendar, fetch all tables).
-    Returns a UI-friendly result dict.
+    subprocess is killed early. ``full=True`` appends --full (bypass the release
+    calendar). Returns a UI-friendly result dict.
     """
-    if is_running():
+    try:
+        with refresh_lock():
+            return _run_refresh_locked(progress_cb, stop_event, full)
+    except BlockingIOError:
         return {"status": "busy", "msg": "已有刷新在进行中，请稍候…",
                 "ts": None, "updated": [], "kept_previous": []}
 
-    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_PATH.touch()
+
+def _run_refresh_locked(progress_cb, stop_event, full) -> dict:
+    """Body of run_refresh, executed while holding the refresh lock."""
     proc = None
     try:
-        py = str(VENV_PY) if VENV_PY.exists() else sys.executable
-        cmd = [py, str(FETCH_SCRIPT)] + (["--full"] if full else [])
+        env = _subprocess_env()
+        env[LOCK_HELD_ENV] = "1"  # 父进程已持锁 → 子脚本跳过重复获取，避免自我冲突
         proc = subprocess.Popen(
-            cmd,
+            _build_cmd(full),
             cwd=str(PROJECT_ROOT),
-            env=_subprocess_env(),
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
         )
+        # Pump child stdout in a reader thread into a queue so the wall-clock
+        # deadline and stop_event are enforced even when the child emits NO
+        # output for a long time (a bare no-timeout requests.get can hang
+        # forever). The old `for line in proc.stdout:` blocked in readline(), so
+        # the deadline check never ran until a line happened to arrive — a silent
+        # hang could never be killed. Draining the queue with a per-iteration
+        # timeout guarantees the loop keeps ticking regardless of child output.
+        lines: "queue.Queue" = queue.Queue()
+
+        def _pump():
+            try:
+                for line in proc.stdout:
+                    lines.put(line)
+            finally:
+                lines.put(None)  # EOF sentinel
+
+        reader = threading.Thread(target=_pump, daemon=True)
+        reader.start()
+
         expected, done = EXPECTED_FETCH_STEPS, 0
         if progress_cb:
             progress_cb(0.0)
         tail = []
-        deadline = time.time() + 300
-        for line in proc.stdout:
-            # Check for cancellation signal
+        deadline = time.time() + REFRESH_TIMEOUT_S
+        while True:
             if stop_event is not None and stop_event.is_set():
                 proc.kill()
+                proc.wait()
                 return {"status": "cancelled", "msg": "刷新已取消（客户端断开）",
                         "ts": None, "updated": [], "kept_previous": []}
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                proc.kill()
+                proc.wait()
+                return {"status": "error",
+                        "msg": f"❌ 采集超时（>{REFRESH_TIMEOUT_S} 秒）",
+                        "detail": "".join(tail),
+                        "ts": None, "updated": [], "kept_previous": []}
+            try:
+                # cap the wait so the deadline/stop_event are re-checked ~1s
+                line = lines.get(timeout=min(1.0, remaining))
+            except queue.Empty:
+                continue  # 无新行也回到循环顶部重查 deadline / stop_event
+            if line is None:
+                break  # child stdout hit EOF → process is finishing
             tail.append(line)
             tail = tail[-60:]
             m = re.search(r"计划抓取 (\d+)/", line)
@@ -180,11 +235,6 @@ def run_refresh(progress_cb=None, stop_event=None, full=False) -> dict:
                 done = min(done + 1, expected)
                 if progress_cb:
                     progress_cb(done / expected)
-            if time.time() > deadline:
-                proc.kill()
-                return {"status": "error", "msg": "❌ 采集超时（>5 分钟）",
-                        "detail": "".join(tail),
-                        "ts": None, "updated": [], "kept_previous": []}
         proc.wait()
         if proc.returncode != 0:
             return {"status": "error",
@@ -212,6 +262,15 @@ def run_refresh(progress_cb=None, stop_event=None, full=False) -> dict:
         return {"status": "error", "msg": f"❌ 刷新异常：{type(e).__name__}: {e}",
                 "ts": None, "updated": [], "kept_previous": []}
     finally:
+        # Guarantee no orphaned child (and reap it) whatever path we took above.
         if proc is not None:
-            proc.wait()
-        LOCK_PATH.unlink(missing_ok=True)
+            if proc.poll() is None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+

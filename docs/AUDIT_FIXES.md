@@ -22,12 +22,12 @@
 - files: analysis/cycle_merrill.py, backend/tests/test_merrill_phase.py（02_compute_derived.py 经评估不改）
 - reviewer: PASS（独立 reviewer 子 Agent：中位数=稳健潜在增速代理、无 look-ahead、window{3-9}均判 recovery、迟滞不粘滞、边界正确；2026 gdp5.0/cpi0.98 recession→recovery、composite −2→0；确认 02 不可重建全年 YoY。残留：growth 轴偏扩张、极少报衰退，非阻断）· commit: 本批次提交 · evidence: test_merrill_phase.py（8 例 passed，改前 6 failed）；全套 85 passed
 
-### G02 · 刷新锁 flock 化（原子锁+真超时+去除只读删锁）· ⬜
+### G02 · 刷新锁 flock 化（原子锁+真超时+去除只读删锁）· ✅
 - findings: F1 (`refresh.py:143-148`,`_pipeline.py:39`) + F2 (`refresh.py:166-187`) + F8 (`refresh.py:39-47`)
 - 症状: TOCTOU 竞态 + 超时不可执行 + 只读端点 unlink 运行中的锁 → 生产库损坏。
 - 根治: `fcntl.flock(LOCK_EX|LOCK_NB)`（内核退出自动释放，删除陈旧启发式）；`proc.wait(timeout=)` 与输出解耦；CLI(`01_fetch_data.py` main)共享同一锁。新增测试。
-- files: backend/app/core/refresh.py, scripts/01_fetch_data.py, backend/tests/
-- reviewer: — · commit: — · evidence: —
+- files: backend/app/core/refresh.py, backend/app/core/locking.py(新), scripts/01_fetch_data.py, backend/tests/test_refresh_lock.py
+- reviewer: PASS（独立 reviewer 子 Agent：跨进程 flock 互斥 BlockingIOError；静默 sleep 子进程 REFRESH_TIMEOUT_S=2 时 2.00s 被 SIGKILL 回收（旧代码 8s）；is_running 无副作用不 unlink；SSE 进度分数单调；CLI 共享锁 + REFRESH_LOCK_HELD 委托无自锁）· commit: 本批次提交 · evidence: test_refresh_lock.py（5 例 passed）；全套 85 passed
 
 ### G03 · 版本化缓存失效 · ⬜
 - findings: F3 (`cache.py:28`,`db.py:19`) + F14 (`db.py:22`)

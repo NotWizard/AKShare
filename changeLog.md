@@ -11,6 +11,7 @@
   2. [G19｜F9 High] 日期参数类型化：`/derived/monthly`、`/derived/quarterly`、`/table/{name}`、`/cycles/{name}` 的 `start`/`end` 声明为 `date | None`，非法日期在进入处理器前即返回 422；删除 `db.load` 静默的 `try/except`。修复此前非法 `start` 在月度端点静默返回全表（口径错误）、在周期端点抛 500 的不一致。新增 `test_date_params.py`（6 例，改前 3 例失败）。
   3. [G04｜F5 High] JSON 非有限值安全：新增全局 `SafeJSONResponse`（`default_response_class`），递归将 `NaN`/`±Inf` 转 `null`；`serial` 改用 `isfinite` 兼顾 ±inf；`crcl_db.set_snapshot` 落库前清洗，避免 `NaN` 字面量写入 SQLite。修复此前无 `response_model` 的端点（全部 `crcl/*`、`real-estate`）遇 yfinance `NaN` 直接 HTTP 500 且坏值持久化到库。新增 `test_json_safety.py`（3 例，改前失败）。
   4. [G01｜A-C1 Critical] 美林时钟判据重构：`gdp_trend` 由对异常值敏感的滚动均值改为滚动中位数（对 2020/2021 基数效应稳健），并加入迟滞（0.5pp 死区 + 连续 2 期持续），消除"相对自身趋势"误判。真实数据 +5% 增长、低 CPI 由 recession 纠正为 recovery，composite 由 −2 回到 0（中性）。`02_compute_derived.py` 保持不动（原始 gdp 每年仅 Q1 单季行，全年 YoY 无法从库重建，故在分类器侧稳健化）。新增 `test_merrill_phase.py`（8 例，改前 6 例失败）。
+  5. [G02｜F1/F2/F8 Critical] 刷新锁改 `fcntl.flock` 原子互斥：消除"检查-占用"竞态（两个刷新并发写同一 staging → 生产库损坏）；超时改用独立墙钟 deadline + 读线程，静默挂死的采集子进程能被真正 kill（此前超时判断在 `for line in proc.stdout` 内，无输出即永不触发）；`is_running()` 改为无副作用探测（不再 unlink 运行中的锁）；CLI(`01_fetch_data.py`) 与 API 共享同一锁。新增 `test_refresh_lock.py`（5 例）。
 
 ### Code-audit fix batch (targeting v1.1.0)
 
