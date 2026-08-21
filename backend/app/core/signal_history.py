@@ -36,8 +36,13 @@ def read_history(limit=60, db_path=DB_PATH):
             f"FROM {TABLE} ORDER BY rowid DESC LIMIT ?", (limit + 1,))
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    except sqlite3.Error:
-        return []
+    except sqlite3.OperationalError as e:
+        # 唯一良性分支：全新安装尚无该表 → 空历史（fresh install 不 500）。
+        # 其余（列缺失=schema 漂移、磁盘镜像损坏等）必须冒泡，
+        # 避免把"读取失败"静默伪装成"暂无数据"。
+        if "no such table" in str(e).lower():
+            return []
+        raise
     finally:
         conn.close()
     return annotate_flips(rows)[:limit]

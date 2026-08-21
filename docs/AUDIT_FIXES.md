@@ -170,11 +170,12 @@
 - reviewer: — · commit: — · evidence: —
 - 注: High 级 finding，因与 G01 同属 analysis 深改、需在 G01 后做以免冲突，故排此处。
 
-### G24 · 后端查询/错误/健壮性中危项 · ⬜
+### G24 · 后端查询/错误/健壮性中危项 · 🟨（部分：F13-signal_history 已修）
 - findings: F11 (`crcl.py:46-60,101-104` keys 校验+LIMIT) + F12 (`refresh.py:186` 错误泄露路径) + F13 (`signal_history.py:39`,`commentary.py:244`,`crcl.py:68` 吞异常)
 - 根治: keys 白名单过滤 + `Query(ge,le)`；错误落日志回 error_id + 子进程 env 白名单；只吞 "no such table" 其余上抛。
-- files: backend/app/api/v1/crcl.py, core/{refresh,signal_history,commentary}.py
-- reviewer: — · commit: — · evidence: —
+- 进度: [G24a] `signal_history.read_history` 已改为仅在"表不存在"返回 []、其余（schema 漂移/损坏）冒泡（本批次提交）；**待续**：F11(crcl keys 白名单+LIMIT ge/le)、F12(错误改 error_id + 子进程 env 白名单)、F13 剩余(commentary.py:244 / crcl.py:68 的宽 except)。
+- files: backend/app/core/signal_history.py, backend/tests/test_signal_history_errors.py（已）; 待续 backend/app/api/v1/crcl.py, core/{refresh,commentary}.py
+- reviewer: 编排者 test-gate（test_signal_history_errors + test_signal_history 13 passed）· commit: 本批次提交（G24a 部分）· evidence: schema 漂移改前静默返回 []、改后冒泡 OperationalError
 
 ### G25 · 前端交互/性能中危项 · ⬜
 - findings: FE-M1(sampling) M2(去重缓存) M3(signal 取消) M4(countUp 小数) M7(响应式断点) M8(对比度) M9(ChartTip a11y) M10(chunk 兜底) M11(manualChunks)
