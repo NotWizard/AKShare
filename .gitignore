@@ -44,3 +44,10 @@ frontend/dist/
 
 # Worktrees
 .worktrees/
+
+# Scratch / untracked artifacts (audit O-M4/O-M5: screenshots, external MCP output,
+# orphaned backtest analysis unrelated to the macro platform)
+.playwright-mcp/
+backtest_hshylv/
+x-ai-news-search.png
+x-claude-search.png

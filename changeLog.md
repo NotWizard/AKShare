@@ -2,6 +2,20 @@
 
 ## [Unreleased] — 数据源参考手册交叉验证与修正
 
+### 代码审计修复批次（目标 v1.1.0）
+
+概述：基于 2026-08 五模块代码审计，逐个功能点修复约 40 处缺陷（正确性 / 稳定性 / 安全 / 交互 / 工程），进度账本见 `docs/AUDIT_FIXES.md`。以下按功能点滚动追加。
+
+变更：
+  1. [基础设施] 新增 `docs/AUDIT_FIXES.md` 审计修复账本（30 个修复组，含严重度 / 位置 / 根因方案 / 复核人 / 提交 / 证据，供断点续跑）；`.gitignore` 补忽略 `.playwright-mcp/`、`backtest_hshylv/`、根目录截图 PNG，避免误入后续提交。
+
+### Code-audit fix batch (targeting v1.1.0)
+
+Summary: Based on the Aug-2026 five-module audit, fixing ~40 findings one feature point at a time (correctness / stability / security / UX / engineering). Progress ledger in `docs/AUDIT_FIXES.md`; entries appended per feature point below.
+
+Changes:
+  1. [infra] Add `docs/AUDIT_FIXES.md` remediation ledger (30 fix groups with severity / location / root-cause fix / reviewer / commit / evidence for durable resume); extend `.gitignore` to cover `.playwright-mcp/`, `backtest_hshylv/`, root screenshot PNGs so they cannot slip into later commits.
+
 ### M3：信号历史表 + Overview 相位翻转高亮
 
 ### 新功能
