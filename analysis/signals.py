@@ -20,6 +20,7 @@ Interpretation bands:
 """
 
 import functools
+import os
 import sys
 from pathlib import Path
 from typing import Dict
@@ -80,14 +81,63 @@ def _interpret(score: int) -> str:
         return "Strongly bearish — most cycles aligned in contraction"
 
 
-@functools.lru_cache(maxsize=4)
-def compute_signals(db_path: str) -> Dict:
-    """Compute composite macro signals from all four cycle frameworks.
+def _db_version(db_path: str) -> tuple:
+    """Cheap content tag for *db_path*: ``(mtime_ns, size)``.
 
-    Parameters
-    ----------
-    db_path : str
-        Path to the SQLite database.
+    Mirrors ``backend.app.core.db._db_version`` but keyed on the *argument*
+    path — ``compute_signals`` is always called with an explicit ``db_path``
+    (the real DB in production, a temp copy in tests). Replicated (not imported)
+    so the ``analysis`` package stays importable without the ``backend`` package
+    on ``sys.path``. Missing file → ``(0, 0)`` (fresh install must not crash).
+    """
+    try:
+        st = os.stat(db_path)
+    except OSError:
+        return (0, 0)
+    return (st.st_mtime_ns, st.st_size)
+
+
+# The four cycle classifiers cache on the db_path STRING (defined in
+# analysis/cycle_* — out of scope to edit here). compute_signals is the version
+# gate for the whole signals computation: whenever the DB file version changes
+# (any swap, from any caller), the versioned cache below misses and we drop
+# these downstream caches so they re-read the new file too. Captured at import,
+# so a test that monkeypatches the module-level names still runs fresh functions
+# while these originals get cleared harmlessly. (cross_indicator's
+# leading_lag_analysis is uncached — always fresh.)
+_DOWNSTREAM_DB_PATH_CACHES = (
+    classify_merrill,
+    classify_credit,
+    classify_inventory,
+    classify_debt,
+)
+
+
+def _invalidate_downstream_caches() -> None:
+    for fn in _DOWNSTREAM_DB_PATH_CACHES:
+        cache_clear = getattr(fn, "cache_clear", None)
+        if cache_clear is not None:
+            cache_clear()
+
+
+def compute_signals(db_path: str) -> Dict:
+    """Compute composite macro signals, invalidating automatically on a DB swap.
+
+    Thin wrapper: the cache key of :func:`_compute_signals_versioned` includes
+    ``_db_version(db_path)`` so an atomic swap of the DB file — regardless of who
+    performed it — yields a fresh key and a fresh computation, with no dependency
+    on an explicit ``clear_all_caches()`` call.
+    """
+    return _compute_signals_versioned(db_path, _db_version(db_path))
+
+
+@functools.lru_cache(maxsize=4)
+def _compute_signals_versioned(db_path: str, version: tuple) -> Dict:
+    """Cached body, keyed by ``(db_path, DB version)``.
+
+    Runs only on a real version change (or first call) — exactly when the
+    db_path-keyed downstream classifier caches must be dropped so they re-read
+    the swapped file. ``version`` is otherwise unused (key-only).
 
     Returns
     -------
@@ -101,6 +151,7 @@ def compute_signals(db_path: str) -> Dict:
             composite_score : int   — sum in [−4, +4]
             interpretation  : str   — plain-English summary
     """
+    _invalidate_downstream_caches()
     # ── Run classifiers ──────────────────────────────────────────────────────
     merrill_df = classify_merrill(db_path)
     credit_df = classify_credit(db_path)

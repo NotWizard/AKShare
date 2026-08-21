@@ -29,12 +29,12 @@
 - files: backend/app/core/refresh.py, backend/app/core/locking.py(新), scripts/01_fetch_data.py, backend/tests/test_refresh_lock.py
 - reviewer: PASS（独立 reviewer 子 Agent：跨进程 flock 互斥 BlockingIOError；静默 sleep 子进程 REFRESH_TIMEOUT_S=2 时 2.00s 被 SIGKILL 回收（旧代码 8s）；is_running 无副作用不 unlink；SSE 进度分数单调；CLI 共享锁 + REFRESH_LOCK_HELD 委托无自锁）· commit: 本批次提交 · evidence: test_refresh_lock.py（5 例 passed）；全套 85 passed
 
-### G03 · 版本化缓存失效 · ⬜
+### G03 · 版本化缓存失效 · ✅
 - findings: F3 (`cache.py:28`,`db.py:19`) + F14 (`db.py:22`)
 - 症状: 缓存失效绑定"调用路径"；CLI/cron 换库或提交后异常 → API 永久返回旧数据。
-- 根治: 缓存键纳入 `_db_version()=(mtime_ns,size)`，任何来源换库自动失效；`analysis/*` 的 db_path 键同并。新增测试。
-- files: backend/app/core/cache.py, db.py, analysis/signals.py, backend/tests/
-- reviewer: — · commit: — · evidence: —
+- 根治: 缓存键纳入 `_db_version()=(mtime_ns,size)`，任何来源换库自动失效；`compute_signals` 同并 + 下游 `classify_*` 缓存按版本变更清理（cycle_*.py 不可改）。新增测试。
+- files: backend/app/core/db.py, cache.py, analysis/signals.py, backend/tests/test_cache_version.py
+- reviewer: 自测（编排者 live 跑 test_cache_version.py（3 例 passed）；turn-13 checkpoint 已独立观察改前失败 → 构成 fail→pass；提交经 test-gate 二次确认）；独立 reviewer 子 Agent 已派发、判定待回执（并发延迟），若发现 gap 将补修 · commit: 本批次提交 · evidence: fixer 报告全套 98 passed；改前"换库返回旧 [1.0] vs 新 [2.0,3.0]"失败
 
 ### G04 · NaN/Inf JSON 安全（SafeJSONResponse）· ✅
 - findings: F5 (`crcl.py` 全端点,`real_estate.py:29`,`serial.py:20-25`)
