@@ -15,12 +15,12 @@
 
 ## Critical 层
 
-### G01 · 美林时钟误判重构（旗舰）· ⬜
+### G01 · 美林时钟误判重构（旗舰）· ✅
 - findings: A-C1 (`cycle_merrill.py:78,81-91`) + GDP 口径 (`02_compute_derived.py:203,206-207`)
 - 症状: +5% 增长被判 "recession"，拖累 composite=-2。根因: gdp 存的是 Q1 单季累计同比 → 4 年滚动趋势被 2021 低基数污染 + 相对阈值 `gdp_yoy>gdp_trend` + 零迟滞。
-- 根治: growth 轴改绝对/潜在增速缺口（剔除基数异常）；加迟滞（连续 N 期或死区）；修正/标注 GDP 年度口径。新增 `tests/test_merrill_phase.py`。
-- files: analysis/cycle_merrill.py, scripts/02_compute_derived.py, backend/tests/test_merrill_phase.py
-- reviewer: — · commit: — · evidence: —
+- 根治: `gdp_trend` 滚动均值改滚动中位数（对基数异常稳健的潜在增速代理）+ 迟滞（0.5pp 死区 + 连续 2 期持续）；`02_compute_derived.py` 保持不动（全年 YoY 不可从库重建，分类器侧稳健化）。
+- files: analysis/cycle_merrill.py, backend/tests/test_merrill_phase.py（02_compute_derived.py 经评估不改）
+- reviewer: PASS（独立 reviewer 子 Agent：中位数=稳健潜在增速代理、无 look-ahead、window{3-9}均判 recovery、迟滞不粘滞、边界正确；2026 gdp5.0/cpi0.98 recession→recovery、composite −2→0；确认 02 不可重建全年 YoY。残留：growth 轴偏扩张、极少报衰退，非阻断）· commit: 本批次提交 · evidence: test_merrill_phase.py（8 例 passed，改前 6 failed）；全套 85 passed
 
 ### G02 · 刷新锁 flock 化（原子锁+真超时+去除只读删锁）· ⬜
 - findings: F1 (`refresh.py:143-148`,`_pipeline.py:39`) + F2 (`refresh.py:166-187`) + F8 (`refresh.py:39-47`)
