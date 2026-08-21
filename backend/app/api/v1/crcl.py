@@ -5,17 +5,45 @@ files (events / fundamentals). Refresh endpoints mirror the existing
 refresh.py SSE pattern.
 """
 
+import datetime
 import json
+import logging
+from typing import Literal
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from backend.app.core import crcl_alerts, crcl_collect, crcl_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/crcl", tags=["crcl"])
 
 EVENTS_PATH = crcl_db.PROJECT_ROOT / "data" / "crcl_events.json"
 FUNDAMENTALS_PATH = crcl_alerts.FUNDAMENTALS_PATH
+
+
+# --- Schema for the hand-maintained events JSON (G22) -------------------
+# Enum sets mirror the documented values in data/crcl_events.json (_说明).
+EventCategory = Literal["财报", "监管", "宏观", "里程碑", "合作", "检查点"]
+EventStatus = Literal["已发生", "进行中", "待观察", "待验证", "计划"]
+
+
+class CrclEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    date: datetime.date            # rejects 2026/08/05, 2026-13-01, etc.
+    category: EventCategory
+    title: str
+    detail: str = ""
+    source: str = ""
+    status: EventStatus
+
+
+class CrclEventsFile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    updated_at: datetime.date | None = None
+    events: list[CrclEvent] = []
 
 
 @router.get("/overview")
@@ -64,20 +92,43 @@ def metrics(keys: str | None = None):
 def events():
     """宏观事件与里程碑时间线（手工维护的 JSON 文件）。"""
     try:
-        data = json.loads(EVENTS_PATH.read_text(encoding="utf-8"))
-    except Exception as e:  # noqa: BLE001
-        return {"updated_at": None, "events": [], "error": str(e)}
-    evts = sorted(data.get("events", []), key=lambda x: x.get("date", ""))
-    return {"updated_at": data.get("updated_at"), "events": evts}
+        raw = json.loads(EVENTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error("[crcl] events 文件读取/解析失败: %s", e)
+        return {"updated_at": None, "events": [], "error": f"文件读取/解析失败: {e}"}
+    try:
+        CrclEventsFile.model_validate(raw)
+    except ValidationError as e:
+        detail = crcl_alerts.format_validation_error(e)
+        logger.error("[crcl] events schema 校验失败: %s", detail)
+        return {
+            "updated_at": None,
+            "events": [],
+            "error": f"数据校验失败: {detail}",
+            "errors": crcl_alerts.validation_error_details(e),
+        }
+    evts = sorted(raw.get("events", []), key=lambda x: x.get("date", ""))
+    return {"updated_at": raw.get("updated_at"), "events": evts}
 
 
 @router.get("/fundamentals")
 def fundamentals():
     """季报拆解与标志位（手工维护的 JSON 文件）。"""
     try:
-        return json.loads(FUNDAMENTALS_PATH.read_text(encoding="utf-8"))
-    except Exception as e:  # noqa: BLE001
-        return {"error": str(e)}
+        raw = json.loads(FUNDAMENTALS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error("[crcl] fundamentals 文件读取/解析失败: %s", e)
+        return {"error": f"文件读取/解析失败: {e}"}
+    try:
+        crcl_alerts.FundamentalsFile.model_validate(raw)
+    except ValidationError as e:
+        detail = crcl_alerts.format_validation_error(e)
+        logger.error("[crcl] fundamentals schema 校验失败: %s", detail)
+        return {
+            "error": f"数据校验失败: {detail}",
+            "errors": crcl_alerts.validation_error_details(e),
+        }
+    return raw
 
 
 @router.get("/alerts")

@@ -157,11 +157,11 @@
 - files: scripts/01_fetch_data.py, 02_compute_derived.py, _pipeline.py, backend/tests/
 - reviewer: — · commit: — · evidence: —
 
-### G22 · 手工 JSON schema 校验 · ⬜
+### G22 · 手工 JSON schema 校验 · ✅
 - findings: A-M4 (`crcl.py:63-80`,`crcl_alerts.py`)
-- 根治: 加载时 pydantic/jsonschema 校验字段类型/日期格式/枚举，失败定位到字段；告警取值前数值化 + 相邻季校验。新增测试。
-- files: backend/app/api/v1/crcl.py, core/crcl_alerts.py, backend/tests/
-- reviewer: — · commit: — · evidence: —
+- 根治: 加载时 pydantic 校验字段类型/日期格式/枚举，失败明确报错并记日志（不再静默透传/伪装"评估异常"）；告警取值前数值化 + `_eval_y_nonreserve_stagnant` 相邻季校验。新增测试。
+- files: backend/app/api/v1/crcl.py, backend/app/core/crcl_alerts.py, backend/tests/test_crcl_json_schema.py
+- reviewer: 编排者 test-gate（提交前 test_crcl_json_schema.py + test_crcl_alerts.py 全过；G22 仅新增测试、未改既有测试）；因预算未派独立 reviewer 子 Agent（可后补一次读 diff 复核）· commit: 本批次提交 · evidence: test_crcl_json_schema.py 通过；既有 test_crcl_alerts.py 未回归
 
 ### G23 · 信号鲁棒性（缺失≠中性 + 跨期对齐 + 迟滞）· ⬜
 - findings: A-H1 (`signals.py:112`,`cycle_inventory.py:45`) + A-H2 (`signals.py:112`,`real_estate.py:137`) + A-H3 (`cycle_debt.py:97,111-127`) + A-M5 (`cycle_credit.py:48-54`)
