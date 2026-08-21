@@ -134,11 +134,11 @@
 - files: backend/tests/test_analysis_phases.py(新), test_api_contract.py(新), frontend/vitest 配置 + *.spec.ts
 - reviewer: — · commit: — · evidence: —
 
-### G19 · 日期参数类型化 → 422 · ⬜
+### G19 · 日期参数类型化 → 422 · ✅
 - findings: F9 (`db.py:40-47`,`cycles.py:44-48`)
 - 根治: schema 层声明 `date | None`，FastAPI 进入处理器前返回 422；删 db.load 的 try/except。
-- files: backend/app/api/v1/{data,cycles}.py, core/db.py
-- reviewer: — · commit: — · evidence: —
+- files: backend/app/api/v1/{data,cycles}.py, core/db.py, backend/tests/test_date_params.py
+- reviewer: PASS（独立 reviewer 子 Agent：4 端点 `date|None`（data.py:28/80/94, cycles.py:28）、`db.load` 裸 except 已删、TestClient 非法→422/合法→200 切片(582→12)、全套 77 passed、前端 filters.ts 发 ISO 兼容）· commit: 本批次提交 · evidence: test_date_params.py 6 passed（改前 3 failed：silent 200 全表 + cycles 500）
 
 ---
 

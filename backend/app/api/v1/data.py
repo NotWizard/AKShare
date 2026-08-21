@@ -1,5 +1,7 @@
 """Derived-table slices + generic table slice — replaces db.load calls."""
 
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.core import db
@@ -23,8 +25,8 @@ router = APIRouter(tags=["data"])
 
 @router.get("/derived/monthly", response_model=DerivedFrame)
 def derived_monthly(
-    start: str | None = Query(None),
-    end: str | None = Query(None),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
     cols: str | None = Query(None, description="comma-separated column subset"),
     align_start: bool = Query(
         False,
@@ -74,7 +76,10 @@ def derived_monthly(
 
 
 @router.get("/derived/quarterly", response_model=DerivedFrame)
-def derived_quarterly(start: str | None = None, end: str | None = None):
+def derived_quarterly(
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+):
     df = db.load("derived_quarterly", start, end)
     return DerivedFrame(
         table="derived_quarterly",
@@ -84,7 +89,11 @@ def derived_quarterly(start: str | None = None, end: str | None = None):
 
 
 @router.get("/table/{name}", response_model=DerivedFrame)
-def raw_table(name: str, start: str | None = None, end: str | None = None):
+def raw_table(
+    name: str,
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+):
     """Generic slice of any table (e.g. house_price, leverage)."""
     if name not in _ALLOWED_TABLES:
         raise HTTPException(404, f"unknown table: {name}")

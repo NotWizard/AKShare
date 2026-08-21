@@ -1,5 +1,7 @@
 """Cycle classification endpoints — thin wrappers over analysis/* (unchanged)."""
 
+from datetime import date
+
 from fastapi import APIRouter, HTTPException, Query
 
 from analysis.cycle_credit import classify_credit
@@ -23,8 +25,8 @@ _VALUE_COL = {
 @router.get("/{name}", response_model=CycleFrame)
 def get_cycle(
     name: str,
-    start: str | None = Query(None),
-    end: str | None = Query(None),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
 ):
     name = name.lower()
     classifiers = {

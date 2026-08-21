@@ -30,19 +30,23 @@ def _load_full(table: str) -> pd.DataFrame:
 
 
 def load(table: str, start_date=None, end_date=None) -> pd.DataFrame:
-    """Return *table* as a DataFrame, optionally sliced by date range."""
+    """Return *table* as a DataFrame, optionally sliced by date range.
+
+    ``start_date``/``end_date`` are validated at the API boundary — the
+    endpoints type them as ``datetime.date`` so FastAPI returns 422 on
+    malformed input before this runs. They therefore arrive here as valid
+    ``date``/``None`` (or valid ISO strings from internal callers) and are
+    converted directly. No defensive ``except`` that would silently drop the
+    filter and return the full table on bad input.
+    """
     df = _load_full(table)
     if start_date is None and end_date is None:
         return df
     if "date" not in df.columns:
         return df
     out = df
-    try:
-        if start_date is not None:
-            out = out[out["date"] >= pd.Timestamp(start_date)]
-        if end_date is not None:
-            out = out[out["date"] <= pd.Timestamp(end_date)]
-    except (ValueError, TypeError):
-        # Invalid date string → skip the filter, return full table
-        pass
+    if start_date is not None:
+        out = out[out["date"] >= pd.Timestamp(start_date)]
+    if end_date is not None:
+        out = out[out["date"] <= pd.Timestamp(end_date)]
     return out
