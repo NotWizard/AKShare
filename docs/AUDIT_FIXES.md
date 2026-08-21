@@ -57,12 +57,12 @@
 - files: scripts/01_fetch_data.py, backend/app/api/v1/sources.py, backend/app/core/refresh.py, backend/tests/
 - reviewer: — · commit: — · evidence: —
 
-### G07 · 前端图表渲染重构（去响应式代理+停止卸载）· ⬜
+### G07 · 前端图表渲染重构（去响应式代理+停止卸载）· ✅
 - findings: FE-C1 (各页 buildXxx 模板表达式 + `ref<Rec[]>`) + FE-H1 (`GraphCard.vue:14-20`)
 - 症状: option 在模板构建 + 数据深层响应式 → 全量重建、deep-watch 遍历、notMerge 重建；刷新时 6 图白屏、缩放/图例全丢。
-- 根治: `shallowRef`+`markRaw` 数据与 option；builder 移入 `computed`；`GraphCard` 改覆盖层（图表常驻）；`EChart` notMerge:false。
-- files: frontend/src/pages/*.vue, components/charts/EChart.vue, components/layout/GraphCard.vue
-- reviewer: — · commit: — · evidence: —
+- 根治: `shallowRef`+`markRaw` 数据与 option；builder 移入 `computed`；`GraphCard` 改覆盖层（图表常驻）；`EChart` notMerge:false + lazyUpdate。
+- files: frontend/src/pages/*.vue（8）, components/charts/EChart.vue, components/layout/GraphCard.vue
+- reviewer: PASS-WITH-FOLLOWUP（独立 reviewer 子 Agent：typecheck 0、10 文件 pattern 一致、notMerge 覆盖经 vue-echarts 源码确认、缩放/图例保留；**发现回归**：象限/散点图 notMerge:false 在相位集收窄时残留 ghost 系列）→ 编排者按处方补 `EChart` `notMerge` prop 并对 quadOpt/clockOpt 置 true，`vue-tsc --noEmit` EXIT=0 复核（运行期视觉未经浏览器确认，逻辑经审）· commit: 本批次提交 · evidence: typecheck EXIT=0；notMerge 覆盖 spread 顺序确认
 
 ---
 

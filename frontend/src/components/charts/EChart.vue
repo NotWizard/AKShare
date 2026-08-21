@@ -7,6 +7,7 @@ import {
   MarkAreaComponent, MarkLineComponent, DataZoomComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { computed, markRaw } from 'vue'
 
 // RadarChart + RadarComponent are NOT registered here — they're lazy-loaded
 // only by RealEstate.vue (the only page using radar), keeping them out of the
@@ -19,12 +20,25 @@ use([
   MarkAreaComponent, MarkLineComponent, DataZoomComponent,
 ])
 
-defineProps<{ option: Record<string, any>; height?: string }>()
+const props = defineProps<{ option: Record<string, any>; height?: string; notMerge?: boolean }>()
+
+// markRaw → vue-echarts deep-watches `option`; wrapping it keeps Vue from
+// traversing/proxying the (up to ~3000-point) series graph on every tick.
+// notMerge:false → ECharts merges each rebuilt option into the SAME instance
+// instead of tearing the coordinate system down, so the dataZoom range and
+// legend selection survive data refreshes. lazyUpdate batches the redraw.
+// notMerge=true is required for charts whose series COUNT varies with the data
+// (per-phase scatter/quadrant): merge-by-index would leave ghost series when the
+// visible phase set shrinks. Those charts have value axes / no dataZoom, so a
+// full rebuild loses no interaction state.
+const rawOption = computed(() => markRaw(props.option))
+const updateOptions = computed(() => ({ notMerge: props.notMerge ?? false, lazyUpdate: true }))
 </script>
 
 <template>
   <VChart
-    :option="option"
+    :option="rawOption"
+    :update-options="updateOptions"
     :style="{ height: height ?? '320px', width: '100%' }"
     autoresize
   />

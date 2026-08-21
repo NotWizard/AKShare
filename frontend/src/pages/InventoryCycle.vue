@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watchEffect } from 'vue'
+import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
@@ -13,9 +13,9 @@ const filters = useFiltersStore()
 const refresh = useRefreshStore()
 type Rec = Record<string, string | number | null>
 // Per-chart groups so 财新 PMI (2012) doesn't truncate 官方 PMI + IP (2008).
-const ipDm = ref<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
-const pmiDm = ref<Rec[]>([])     // date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
-const cycle = ref<CycleFrame | null>(null)
+const ipDm = shallowRef<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
+const pmiDm = shallowRef<Rec[]>([])     // date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
+const cycle = shallowRef<CycleFrame | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 let reqId = 0
@@ -30,10 +30,16 @@ async function load() {
       api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    ipDm.value = ip.records; pmiDm.value = cx.records; cycle.value = c
+    ipDm.value = markRaw(ip.records); pmiDm.value = markRaw(cx.records); cycle.value = markRaw(c)
   } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+
+// Options built in computeds (not the template) → one markRaw'd object per
+// rebuild that ECharts merges into the live instance (preserves zoom/legend).
+const ipOpt = computed(() => markRaw(buildDualAxisLine(ipDm.value, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')))
+const quadOpt = computed(() => markRaw(buildScatterQuadrant(cycle.value?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)))
+const pmiOpt = computed(() => markRaw(buildMultiLine(pmiDm.value, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)))
 </script>
 
 <template>
@@ -45,14 +51,14 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <span class="w-2 h-2 rounded-full" :style="{ background: phaseColor(cycle.latest_phase) }" />
       <span class="text-xs text-text-2">当前：<b class="text-text">{{ phaseLabel(cycle.latest_phase) }}</b></span>
     </div>
-    <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading" :error="error">
-      <EChart :option="buildDualAxisLine(ipDm, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')" height="320px" />
+    <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="ipOpt" height="320px" />
     </GraphCard>
-    <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading" :error="error">
-      <EChart :option="buildScatterQuadrant(cycle?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)" height="360px" />
+    <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="quadOpt" :not-merge="true" height="360px" />
     </GraphCard>
-    <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading" :error="error">
-      <EChart :option="buildMultiLine(pmiDm, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)" height="300px" />
+    <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="pmiOpt" height="300px" />
     </GraphCard>
   </div>
 </template>

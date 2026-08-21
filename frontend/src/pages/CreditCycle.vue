@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watchEffect } from 'vue'
+import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
@@ -15,12 +15,12 @@ const refresh = useRefreshStore()
 // Per-chart column groups, each with its own align_start so a late-starting
 // column (社融存量 2016) doesn't truncate an early one (M2 1991).
 type Rec = Record<string, string | number | null>
-const m2Dm = ref<Rec[]>([])       // date,m2_yoy        → 1991-12
-const m1m2Dm = ref<Rec[]>([])     // date,m1_yoy,m2_yoy → 1991-12
-const spreadDm = ref<Rec[]>([])   // date,m2_m1_spread  → 1991-12
-const sfDm = ref<Rec[]>([])       // date,total,sf_stock_yoy → 2016-01
-const ncDm = ref<Rec[]>([])       // date,new_rmb_loan,loan_yoy → 2009-01
-const credit = ref<CycleFrame | null>(null)
+const m2Dm = shallowRef<Rec[]>([])       // date,m2_yoy        → 1991-12
+const m1m2Dm = shallowRef<Rec[]>([])     // date,m1_yoy,m2_yoy → 1991-12
+const spreadDm = shallowRef<Rec[]>([])   // date,m2_m1_spread  → 1991-12
+const sfDm = shallowRef<Rec[]>([])       // date,total,sf_stock_yoy → 2016-01
+const ncDm = shallowRef<Rec[]>([])       // date,new_rmb_loan,loan_yoy → 2009-01
+const credit = shallowRef<CycleFrame | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 let reqId = 0
@@ -39,11 +39,20 @@ async function load() {
       api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined),
     ])
     if (mine !== reqId) return
-    m2Dm.value = m2.records; m1m2Dm.value = m12.records; spreadDm.value = sp.records; sfDm.value = sf.records; ncDm.value = nc.records; credit.value = cc
+    m2Dm.value = markRaw(m2.records); m1m2Dm.value = markRaw(m12.records); spreadDm.value = markRaw(sp.records); sfDm.value = markRaw(sf.records); ncDm.value = markRaw(nc.records); credit.value = markRaw(cc)
   } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
 }
 
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+
+// Options are built in computeds (not the template) so each rebuild yields one
+// markRaw'd object that ECharts merges into the live instance (preserves zoom).
+const m2Opt = computed(() => markRaw(buildCreditM2Chart(m2Dm.value, credit.value?.series ?? [])))
+const m1m2Opt = computed(() => markRaw(buildDualAxisLine(m1m2Dm.value, 'm1_yoy', 'm2_yoy')))
+const spreadOpt = computed(() => markRaw(buildSpreadChart(spreadDm.value, 'm2_m1_spread')))
+const impulseOpt = computed(() => markRaw(buildCreditImpulseChart(credit.value?.series ?? [])))
+const sfOpt = computed(() => markRaw(buildBarLineCombo(sfDm.value, 'total', 'sf_stock_yoy', '社融增量', '存量增速', '亿', '%')))
+const ncOpt = computed(() => markRaw(buildBarLineCombo(ncDm.value, 'new_rmb_loan', 'loan_yoy', '新增贷款', '同比', '亿', '%')))
 </script>
 
 <template>
@@ -61,28 +70,28 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <span v-if="credit.latest_value != null" class="text-xs text-text-3">M2 同比 {{ credit.latest_value.toFixed(1) }}%</span>
     </div>
 
-    <GraphCard title="M2 同比与趋势" tip="M2（广义货币）同比增速 vs 12 月均线趋势；背景色为信用周期宽松/紧缩阶段。1992–1996 仅年度结存。" :loading="loading" :error="error">
-      <EChart :option="buildCreditM2Chart(m2Dm, credit?.series ?? [])" height="360px" />
+    <GraphCard title="M2 同比与趋势" tip="M2（广义货币）同比增速 vs 12 月均线趋势；背景色为信用周期宽松/紧缩阶段。1992–1996 仅年度结存。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="m2Opt" height="360px" />
     </GraphCard>
 
-    <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱；M1 反映企业活期存款与资金活化。" :loading="loading" :error="error">
-      <EChart :option="buildDualAxisLine(m1m2Dm, 'm1_yoy', 'm2_yoy')" height="300px" />
+    <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱；M1 反映企业活期存款与资金活化。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="m1m2Opt" height="300px" />
     </GraphCard>
 
-    <GraphCard title="M2−M1 剪刀差" tip="M2 同比减 M1 同比（百分点）。>0 资金活化偏弱（定期化）；0 线为增速持平。" :loading="loading" :error="error">
-      <EChart :option="buildSpreadChart(spreadDm, 'm2_m1_spread')" height="260px" />
+    <GraphCard title="M2−M1 剪刀差" tip="M2 同比减 M1 同比（百分点）。>0 资金活化偏弱（定期化）；0 线为增速持平。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="spreadOpt" height="260px" />
     </GraphCard>
 
-    <GraphCard title="信贷脉冲（社融增量）" tip="社融增量代理信贷脉冲；柱高扩张=信用扩张。" :loading="loading" :error="error">
-      <EChart :option="buildCreditImpulseChart(credit?.series ?? [])" height="260px" />
+    <GraphCard title="信贷脉冲（社融增量）" tip="社融增量代理信贷脉冲；柱高扩张=信用扩张。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="impulseOpt" height="260px" />
     </GraphCard>
 
-    <GraphCard title="社会融资规模：增量与存量增速" tip="社融增量（柱，当月新增）+ 社融存量同比增速（线）；央行核心宽信用指标。" :loading="loading" :error="error">
-      <EChart :option="buildBarLineCombo(sfDm, 'total', 'sf_stock_yoy', '社融增量', '存量增速', '亿', '%')" height="300px" />
+    <GraphCard title="社会融资规模：增量与存量增速" tip="社融增量（柱，当月新增）+ 社融存量同比增速（线）；央行核心宽信用指标。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="sfOpt" height="300px" />
     </GraphCard>
 
-    <GraphCard title="新增人民币贷款与同比" tip="新增人民币贷款（柱，当月值）+ 同比增速（线）；实体融资需求强度。" :loading="loading" :error="error">
-      <EChart :option="buildBarLineCombo(ncDm, 'new_rmb_loan', 'loan_yoy', '新增贷款', '同比', '亿', '%')" height="300px" />
+    <GraphCard title="新增人民币贷款与同比" tip="新增人民币贷款（柱，当月值）+ 同比增速（线）；实体融资需求强度。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="ncOpt" height="300px" />
     </GraphCard>
   </div>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // CRCL 监控 — 投资论点追踪页。五区：KPI / 指标图表 / 宏观事件时间线 / 告警面板 / 更新日志。
 // 数据：自动采集入 data/crcl_monitor.db（启动 + 手动 SSE 刷新）；事件与季报拆解为手工维护 JSON。
-import { ref, computed, onMounted } from 'vue'
+import { ref, shallowRef, markRaw, computed, onMounted } from 'vue'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import MetricTile from '@/components/layout/MetricTile.vue'
@@ -11,7 +11,7 @@ import { api, BASE } from '@/api/client'
 import type { CrclOverview, CrclMetric, CrclPoint, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from '@/api/types'
 
 const overview = ref<CrclOverview | null>(null)
-const metrics = ref<Record<string, CrclMetric>>({})
+const metrics = shallowRef<Record<string, CrclMetric>>({})
 const events = ref<CrclEvent[]>([])
 const eventsUpdatedAt = ref<string | null>(null)
 const rules = ref<CrclAlertRule[]>([])
@@ -138,7 +138,7 @@ function lineOption(m: CrclMetric | undefined, opts: { area?: boolean; unit?: st
   const dates = m.points.map((p) => p.date)
   const div = opts.divisor ?? 1
   const vals = m.points.map((p) => +(p.value / div).toFixed(4))
-  return applyTheme({
+  return markRaw(applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: {
       type: 'value', ...baseAxis({ name: opts.unit ?? m.unit, scale: true }),
@@ -159,7 +159,7 @@ function lineOption(m: CrclMetric | undefined, opts: { area?: boolean; unit?: st
         },
       } : {}),
     }],
-  })
+  }))
 }
 
 const priceOpt = computed(() => lineOption(metrics.value.crcl_close, { unit: 'USD' }))
@@ -175,7 +175,7 @@ const treasuryOpt = computed(() => {
     name, type: 'line', symbol: 'none', data,
     itemStyle: { color }, lineStyle: { color, width: 1.8 },
   })
-  return applyTheme({
+  return markRaw(applyTheme({
     legend: { show: true },
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
@@ -184,7 +184,7 @@ const treasuryOpt = computed(() => {
       mk('6M', dates.map((d) => v6.get(d) ?? null), PALETTE1),
       mk('1Y', dates.map((d) => v12.get(d) ?? null), PALETTE2),
     ],
-  })
+  }))
 })
 const PALETTE1 = '#22d3ee'
 const PALETTE2 = '#f59e0b'
@@ -230,7 +230,7 @@ async function load() {
     ])
     if (mine !== reqId) return
     overview.value = ov
-    metrics.value = mt.metrics
+    metrics.value = markRaw(mt.metrics)
     events.value = ev.events
     eventsUpdatedAt.value = ev.updated_at
     rules.value = al.rules
@@ -357,19 +357,19 @@ onMounted(load)
 
     <!-- ② 图表 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-      <GraphCard title="CRCL 收盘价" height="280px" :loading="loading" :error="error"
+      <GraphCard title="CRCL 收盘价" height="280px" :loading="loading" :error="error" @retry="load"
         :tip="`IPO 以来日线收盘价。\n\n取数：AKShare stock_us_daily('CRCL')（主源）→ yfinance history（备用源），日频。`">
         <EChart v-if="priceOpt" :option="priceOpt" height="280px" />
       </GraphCard>
-      <GraphCard title="USDC 流通量" height="280px" :loading="loading" :error="error"
+      <GraphCard title="USDC 流通量" height="280px" :loading="loading" :error="error" @retry="load"
         :tip="`2018 年至今完整历史。同比增速是黄色警报规则 y_usdc_growth 的输入（阈值 15%）。\n\n取数：DefiLlama，日频。`">
         <EChart v-if="usdcOpt" :option="usdcOpt" height="280px" />
       </GraphCard>
-      <GraphCard title="稳定币总市值（行业水位）" height="280px" :loading="loading" :error="error"
+      <GraphCard title="稳定币总市值（行业水位）" height="280px" :loading="loading" :error="error" @retry="load"
         :tip="`全部稳定币合计市值——决定 Circle 增长的行业水位。\n\n取数：DefiLlama stablecoincharts/all，日频。`">
         <EChart v-if="totalOpt" :option="totalOpt" height="280px" />
       </GraphCard>
-      <GraphCard title="短端美债收益率（储备收入之锚）" height="280px" :loading="loading" :error="error"
+      <GraphCard title="短端美债收益率（储备收入之锚）" height="280px" :loading="loading" :error="error" @retry="load"
         :tip="`Circle 储备收益锚定短端美债。每 25bp 降息 ≈ 蒸发约 $1.8 亿年化收入（按 $73B 流通量估算）。\n\n取数：Treasury.gov 年度 CSV（daily_treasury_yield_curve），日频，回填 2 年。`">
         <EChart v-if="treasuryOpt" :option="treasuryOpt" height="280px" />
       </GraphCard>
@@ -377,7 +377,7 @@ onMounted(load)
 
     <!-- ③ 告警规则状态 -->
     <div class="mb-5">
-      <GraphCard title="告警规则状态" :loading="loading" :error="error"
+      <GraphCard title="告警规则状态" :loading="loading" :error="error" @retry="load"
         :tip="`规则来自 docs/CRCL监控体系.md 决策规则。每次采集后自动评估，状态变化写入告警历史。数据驱动规则用采集数据；判定规则用 data/crcl_fundamentals.json 的标志位与季报数据（手工维护）。`">
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
           <div v-for="r in rules" :key="r.rule"
@@ -401,7 +401,7 @@ onMounted(load)
 
     <!-- ④ 宏观事件与里程碑 -->
     <div class="mb-5">
-      <GraphCard title="宏观事件与里程碑" :loading="loading" :error="error"
+      <GraphCard title="宏观事件与里程碑" :loading="loading" :error="error" @retry="load"
         :tip="`手工维护：编辑 data/crcl_events.json 后刷新页面即可。FOMC 具体日期以 Fed 官方日历为准（标注待核实的条目请核实）。`">
         <div class="text-[10px] text-text-3 mb-3">文件更新于 {{ eventsUpdatedAt ?? '—' }} · 共 {{ events.length }} 条</div>
         <div class="space-y-2.5">

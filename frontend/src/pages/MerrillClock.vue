@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watchEffect } from 'vue'
+import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
 import { api } from '@/api/client'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
@@ -13,11 +13,11 @@ const filters = useFiltersStore()
 const refresh = useRefreshStore()
 const loading = ref(true)
 const error = ref<string | null>(null)
-const merrill = ref<CycleFrame | null>(null)
+const merrill = shallowRef<CycleFrame | null>(null)
 // 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
 type Rec = Record<string, string | number | null>
-const cpiPpi = ref<Rec[]>([])   // cpi_yoy,ppi_yoy
-const cpiMom = ref<Rec[]>([])   // cpi_mom,ppi_mom (环比呼应图)
+const cpiPpi = shallowRef<Rec[]>([])   // cpi_yoy,ppi_yoy
+const cpiMom = shallowRef<Rec[]>([])   // cpi_mom,ppi_mom (环比呼应图)
 let reqId = 0
 async function load() {
   const mine = ++reqId
@@ -30,12 +30,18 @@ async function load() {
       api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_mom,ppi_mom', true),
     ])
     if (mine !== reqId) return
-    merrill.value = r; cpiPpi.value = cp.records; cpiMom.value = cm.records
+    merrill.value = markRaw(r); cpiPpi.value = markRaw(cp.records); cpiMom.value = markRaw(cm.records)
   }
   catch (e) { if (mine === reqId) error.value = (e as Error).message }
   finally { if (mine === reqId) loading.value = false }
 }
 watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+
+// Options built in computeds (not the template) → one markRaw'd object per
+// rebuild that ECharts merges into the live instance (preserves zoom/legend).
+const clockOpt = computed(() => markRaw(buildScatterQuadrant(merrill.value?.series ?? [], 'gdp_yoy', 'cpi_yoy', 'GDP同比(%)', 'CPI同比(%)', 2, 0)))
+const cpiPpiOpt = computed(() => markRaw(buildDualAxisLine(cpiPpi.value, 'cpi_yoy', 'ppi_yoy')))
+const cpiMomOpt = computed(() => markRaw(buildDualAxisLine(cpiMom.value, 'cpi_mom', 'ppi_mom')))
 </script>
 
 <template>
@@ -47,14 +53,14 @@ watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefre
       <span class="w-2 h-2 rounded-full" :style="{ background: phaseColor(merrill.latest_phase) }" />
       <span class="text-xs text-text-2">当前：<b class="text-text">{{ phaseLabel(merrill.latest_phase) }}</b></span>
     </div>
-    <GraphCard title="美林投资时钟" tip="横轴 GDP 同比、纵轴 CPI 同比；点的颜色为投资时钟阶段。" :loading="loading" :error="error">
-      <EChart :option="buildScatterQuadrant(merrill?.series ?? [], 'gdp_yoy', 'cpi_yoy', 'GDP同比(%)', 'CPI同比(%)', 2, 0)" height="420px" />
+    <GraphCard title="美林投资时钟" tip="横轴 GDP 同比、纵轴 CPI 同比；点的颜色为投资时钟阶段。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="clockOpt" :not-merge="true" height="420px" />
     </GraphCard>
-    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading" :error="error">
-      <EChart :option="buildDualAxisLine(cpiPpi, 'cpi_yoy', 'ppi_yoy')" height="300px" />
+    <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="cpiPpiOpt" height="300px" />
     </GraphCard>
-    <GraphCard title="CPI vs PPI 环比" tip="居民消费价格 vs 工业生产者出厂价格环比（月度高频先行、0 上下波动），与同比图呼应。PPI 环比为同比推导值（东财无免费直接源）。" :loading="loading" :error="error">
-      <EChart :option="buildDualAxisLine(cpiMom, 'cpi_mom', 'ppi_mom')" height="260px" />
+    <GraphCard title="CPI vs PPI 环比" tip="居民消费价格 vs 工业生产者出厂价格环比（月度高频先行、0 上下波动），与同比图呼应。PPI 环比为同比推导值（东财无免费直接源）。" :loading="loading" :error="error" @retry="load">
+      <EChart :option="cpiMomOpt" height="260px" />
     </GraphCard>
   </div>
 </template>
