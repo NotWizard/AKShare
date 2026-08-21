@@ -43,12 +43,12 @@
 - files: backend/app/main.py, backend/app/core/serial.py, crcl_db.py, backend/tests/test_json_safety.py
 - reviewer: PASS（独立 reviewer 子 Agent：SafeJSONResponse 递归 null 化 + 注册 default_response_class；nan 路由 500→200；df/snapshot ±inf/nan→None；真实 crcl_monitor.db checksum 不变；全套 85 passed。残留 upsert_points/SSE 经传输层兜底，判定可延后）· commit: 本批次提交 · evidence: test_json_safety.py 3 passed（改前 3 failed：500 + inf 泄漏 + NaN 持久化）
 
-### G05 · FastAPI 托管 dist + run_app.sh 加固 · ⬜
+### G05 · FastAPI 托管 dist + run_app.sh 加固 · ✅
 - findings: O-C2 (`run_app.sh:42-47,55,59-65`) + O-H1 (`run_app.sh:22`) + O-M1 (`run_app.sh:24`) + F(static mount)
 - 症状: cleanup 链在 set -e 下断裂、kill 不杀孙进程、vite preview 端口静默漂移、就绪失败仍报成功、dist 只在缺失时重建 → 用户看到旧构建。
-- 根治: `StaticFiles` 挂 dist（单进程单端口，移除 vite preview）；cleanup 用进程组；vite `strictPort`；就绪超时 exit 1；`npm ci`；dist 按指纹重建。
-- files: backend/app/main.py, run_app.sh, frontend/vite.config.ts
-- reviewer: — · commit: — · evidence: —
+- 根治: SPA 由 FastAPI 提供（`/assets` 挂载 + 404 兜底回退，优于字面 `StaticFiles(/)`——不 shadow 任何路由）；`run_app.sh` 单进程 uvicorn、指纹重建 dist、`npm ci`、就绪失败 exit1、cleanup set +e；vite `strictPort`。
+- files: backend/app/main.py, run_app.sh, frontend/vite.config.ts, backend/tests/test_static_serving.py
+- reviewer: PASS（独立 reviewer 子 Agent：live TestClient `/api/未命中`→JSON 404 非 HTML 壳、deep-link→index、`/assets` 命中/缺失正确、路径穿越守护成立；run_app.sh 确单进程无 vite preview、指纹重建、就绪失败 exit1 无假报、cleanup set +e；10 例 passed，另 2 failed 属 G03）· commit: 本批次提交 · evidence: test_static_serving.py（10 例 passed）· 3 项非阻断 follow-up：①fingerprint 未含 build-config(vite/tsconfig/tailwind)②test docstring 仍述旧设计③main.py 注释措辞
 
 ### G06 · 健康端点说真话 + 采集非零退出 + 日志 · ⬜
 - findings: O-C1/B1 (`refresh.py:97`,`sources.py`) + P-H2 (`01_fetch_data.py:1119`)

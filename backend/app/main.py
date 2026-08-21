@@ -5,6 +5,7 @@ OpenAPI at:  http://localhost:8000/openapi.json  (consumed by frontend codegen)
 """
 
 import json
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -19,7 +20,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.v1 import router as v1_router
 from backend.app.core.db import _load_full
@@ -94,3 +96,57 @@ app.include_router(v1_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Serve the built Vue SPA from FastAPI — single-process deployment.
+#
+# A catch-all mount/route at "/" registered here would shadow EVERY route added
+# after import (Starlette matches in insertion order) — including routes tests
+# attach post-import. So instead we serve the SPA without any catch-all in the
+# route table:
+#   1. Hashed, immutable bundles are served by a plain StaticFiles mount at the
+#      "/assets" sub-path (correct content-types + caching, cannot shadow /api).
+#   2. index.html + SPA deep-link fallback are served by a 404 exception handler
+#      that runs ONLY after normal routing fails, so it never shadows a real or
+#      dynamically-added route. It returns index.html for unknown GET/HEAD
+#      NON-API paths (client-side routing) while /api/* and missing assets keep
+#      their genuine JSON 404 — never a misleading HTML shell.
+#
+# NOTE: resolve dist from parents[2] (backend/app/main.py → repo root), NOT the
+# module-level _PROJECT_ROOT, which is one level too shallow for this file.
+# ---------------------------------------------------------------------------
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_INDEX_HTML = _FRONTEND_DIST / "index.html"
+
+
+def _mount_spa() -> None:
+    assets_dir = _FRONTEND_DIST / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    dist_root = _FRONTEND_DIST.resolve()
+
+    @app.exception_handler(404)
+    async def _spa_fallback(request, exc):
+        path = request.url.path
+        if request.method in ("GET", "HEAD") and not path.startswith(("/api/", "/assets/")):
+            rel = path.lstrip("/")
+            if rel:
+                # Serve a real root-level file (e.g. /manifest.webmanifest) when
+                # present; the resolve()+parents guard blocks path traversal.
+                candidate = (_FRONTEND_DIST / rel).resolve()
+                if candidate.is_file() and dist_root in candidate.parents:
+                    return FileResponse(candidate)
+            return FileResponse(_INDEX_HTML)  # SPA shell for client-side routes
+        return JSONResponse({"detail": getattr(exc, "detail", "Not Found")}, status_code=404)
+
+
+if _INDEX_HTML.is_file():
+    _mount_spa()
+else:
+    logging.getLogger(__name__).warning(
+        "frontend/dist/index.html not found at %s — serving API only (SPA "
+        "disabled). Build it with `npm run build` in frontend/ to serve the UI.",
+        _INDEX_HTML,
+    )
