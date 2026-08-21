@@ -9,6 +9,7 @@
 变更：
   1. [基础设施] 新增 `docs/AUDIT_FIXES.md` 审计修复账本（30 个修复组，含严重度 / 位置 / 根因方案 / 复核人 / 提交 / 证据，供断点续跑）；`.gitignore` 补忽略 `.playwright-mcp/`、`backtest_hshylv/`、根目录截图 PNG，避免误入后续提交。
   2. [G19｜F9 High] 日期参数类型化：`/derived/monthly`、`/derived/quarterly`、`/table/{name}`、`/cycles/{name}` 的 `start`/`end` 声明为 `date | None`，非法日期在进入处理器前即返回 422；删除 `db.load` 静默的 `try/except`。修复此前非法 `start` 在月度端点静默返回全表（口径错误）、在周期端点抛 500 的不一致。新增 `test_date_params.py`（6 例，改前 3 例失败）。
+  3. [G04｜F5 High] JSON 非有限值安全：新增全局 `SafeJSONResponse`（`default_response_class`），递归将 `NaN`/`±Inf` 转 `null`；`serial` 改用 `isfinite` 兼顾 ±inf；`crcl_db.set_snapshot` 落库前清洗，避免 `NaN` 字面量写入 SQLite。修复此前无 `response_model` 的端点（全部 `crcl/*`、`real-estate`）遇 yfinance `NaN` 直接 HTTP 500 且坏值持久化到库。新增 `test_json_safety.py`（3 例，改前失败）。
 
 ### Code-audit fix batch (targeting v1.1.0)
 
@@ -17,6 +18,7 @@ Summary: Based on the Aug-2026 five-module audit, fixing ~40 findings one featur
 Changes:
   1. [infra] Add `docs/AUDIT_FIXES.md` remediation ledger (30 fix groups with severity / location / root-cause fix / reviewer / commit / evidence for durable resume); extend `.gitignore` to cover `.playwright-mcp/`, `backtest_hshylv/`, root screenshot PNGs so they cannot slip into later commits.
   2. [G19｜F9 High] Typed date params: `start`/`end` on `/derived/monthly`, `/derived/quarterly`, `/table/{name}`, `/cycles/{name}` are now `date | None`, so a malformed date returns 422 before the handler runs; removed `db.load`'s silent `try/except`. Fixes the inconsistency where a bad `start` silently returned the full table (wrong scope) on the monthly endpoint and 500'd on the cycles endpoint. Adds `test_date_params.py` (6 cases, 3 failed pre-fix).
+  3. [G04｜F5 High] JSON non-finite safety: a global `SafeJSONResponse` (`default_response_class`) recursively converts `NaN`/`±Inf` to `null`; `serial` now uses `isfinite` to also catch ±inf; `crcl_db.set_snapshot` sanitizes before persistence so no `NaN` literal reaches SQLite. Fixes response_model-less endpoints (all `crcl/*`, `real-estate`) hard-500'ing on a yfinance `NaN` with the poison persisted. Adds `test_json_safety.py` (3 cases, failed pre-fix).
 
 ### M3：信号历史表 + Overview 相位翻转高亮
 

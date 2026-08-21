@@ -36,12 +36,12 @@
 - files: backend/app/core/cache.py, db.py, analysis/signals.py, backend/tests/
 - reviewer: — · commit: — · evidence: —
 
-### G04 · NaN/Inf JSON 安全（SafeJSONResponse）· ⬜
+### G04 · NaN/Inf JSON 安全（SafeJSONResponse）· ✅
 - findings: F5 (`crcl.py` 全端点,`real_estate.py:29`,`serial.py:20-25`)
 - 症状: NaN/Inf → HTTP 500（实测），坏值持久化进 DB，overview 页持续 500。
 - 根治: `default_response_class=SafeJSONResponse`(allow_nan=False + 非有限→null)；`serial` 用 isfinite；落库前清洗。新增测试。
-- files: backend/app/main.py, backend/app/core/serial.py, crcl_db.py, backend/tests/
-- reviewer: — · commit: — · evidence: —
+- files: backend/app/main.py, backend/app/core/serial.py, crcl_db.py, backend/tests/test_json_safety.py
+- reviewer: PASS（独立 reviewer 子 Agent：SafeJSONResponse 递归 null 化 + 注册 default_response_class；nan 路由 500→200；df/snapshot ±inf/nan→None；真实 crcl_monitor.db checksum 不变；全套 85 passed。残留 upsert_points/SSE 经传输层兜底，判定可延后）· commit: 本批次提交 · evidence: test_json_safety.py 3 passed（改前 3 failed：500 + inf 泄漏 + NaN 持久化）
 
 ### G05 · FastAPI 托管 dist + run_app.sh 加固 · ⬜
 - findings: O-C2 (`run_app.sh:42-47,55,59-65`) + O-H1 (`run_app.sh:22`) + O-M1 (`run_app.sh:24`) + F(static mount)

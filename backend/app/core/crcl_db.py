@@ -11,6 +11,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.app.core.serial import _json_safe
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CRCL_DB_PATH = PROJECT_ROOT / "data" / "crcl_monitor.db"
 _lock = threading.Lock()
@@ -93,10 +95,13 @@ def all_metrics() -> list[str]:
 
 
 def set_snapshot(key: str, value: dict) -> None:
+    # Sanitize non-finite floats (nan/±inf) BEFORE persisting: json.dumps
+    # defaults to allow_nan=True and would write a bare `NaN`/`Infinity`
+    # literal into SQLite, which then poisons every /crcl/overview read.
     with _lock, _conn() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO snapshot (key, value, updated_at) VALUES (?, ?, ?)",
-            (key, json.dumps(value, ensure_ascii=False), _now()),
+            (key, json.dumps(_json_safe(value), ensure_ascii=False), _now()),
         )
 
 
