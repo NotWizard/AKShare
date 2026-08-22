@@ -37,16 +37,22 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 | W4 · G13+G14+G15+G25 | `6f2a99c` | useAsyncData/PageState、client 重试去重、轮询生命周期、F10、CRCL store、a11y |
 | W5 · G09+G10+G24rest | `592ac03` | 异步 SSE、有界执行器、CRCL 单飞、WAL 连接工厂、F11、F12 |
 
-### ⚠️ 必须优先处理的遗留（来自 fixer 自查，按危害排序）
-1. **WAL 与整库交换相互作用（数据丢失风险，W5 自报，最高优先）**：启用 WAL 后，`scripts/_pipeline.py` 的 `shutil.copy2(live→staging)` **不会带走 `-wal` 边车**，因此交换瞬间尚未 checkpoint 的提交可能丢失；且交换时若残留陈旧 `-wal`，理论上会被恢复到新文件上。当前后端连接都短命、关闭即 checkpoint 并删除 `-wal`，窗口在亚毫秒级，但**正确修法在 `_pipeline.py`**（W5 无权改）：交换前后做 `wal_checkpoint(TRUNCATE)` + 清理边车，或用 `VACUUM INTO` 生成 staging 副本。
-2. **F13-rest 未修**：`core/commentary.py:~244` 仍是宽 `except Exception: → {"status":"empty"}`，把编程错误伪装成"暂无评论"（该文件当时由 W4 占用）。
-3. **两个写入方绕过连接工厂**：`core/commentary.py`、`core/signal_history.py` 仍用裸 `sqlite3.connect`，享受到 WAL（文件属性）但**没有 `busy_timeout`**，应改走 `db.connect()`。
-4. **前端类型残留**：`frontend/src/api/types.ts:33` 仍声明已被删除的 `RefreshResult.detail`（F12 把它换成了 `error_id`）。
-5. `data/macro_data.db` 现为 `journal_mode=wal`（跑测试经新工厂读真实库的持久副作用）；`integrity_check ok`、无 `-wal/-shm` 残留、该文件已 gitignore。
-6. 次要：`max_points=1500` 默认会静默抽稀长序列；`启动面板.command` 仍写 `:5173` 双进程（README 已改单进程 `:8000`）；`scipy`/`statsmodels` 全仓零 import（已钉版并在 requirements 注释标注为待删候选）。
+### ⚠️ 遗留处理进展（来自 fixer 自查，按危害排序）
+1. ✅ **已修 `e4823d2`** — WAL 与整库交换相互作用（数据丢失风险）：`_pipeline.py` 新增 `_checkpoint_wal()`（`PRAGMA wal_checkpoint(TRUNCATE)`）+ `_drop_wal_sidecars()`；复制前 checkpoint 活库、交换前 checkpoint staging、交换后清旧 inode 边车。fail→pass 实测：仅 stash `_pipeline.py` → 2 failed，恢复 → 2 passed（`test_pipeline_wal_swap.py`）。
+2. ✅ **已修 `b55b391`** — `core/commentary.py` 三个早退分支（生成中/已在生成/生成失败）补 schema 必需的 `text=""`。此前缺该字段 → FastAPI 响应校验抛错 → 端点 500，把"模型未配置"伪装成服务器崩溃。fail→pass：3 failed → 3 passed。
+3. ✅ **已修 `b55b391`** — `frontend/src/design/phases.ts` 补 `insufficient_data`→「数据不足」（该相位现会真实出现在 `/cycles` 与 `signal_history`）。
+4. ✅ **已修 `b55b391`** — `frontend/src/api/types.ts` 的 `RefreshResult.detail` 改为 `error_id`（后端 F12 已移除 detail）。
+5. ⬜ **未修** — F13-rest：`core/commentary.py:~244` 仍是宽 `except Exception: → {"status":"empty"}`，把编程错误伪装成"暂无评论"（`signal_history` 的同类问题已在 `2e437dc` 修掉，此处照抄即可）。
+6. ⬜ **未修** — `core/commentary.py`、`core/signal_history.py` 仍用裸 `sqlite3.connect`，享受 WAL（文件属性）但**没有 `busy_timeout`**，应改走 `db.connect()`。
+7. ⬜ **未修** — `SignalSummary` schema 过滤掉 G23 新增的 `as_of`/`included`/`excluded`/`stale`/`composite_raw`，故 API 层看不到 coverage/as-of（需在 `backend/app/schemas/signals.py` 加 5 个可选字段）。
+8. ⬜ **未修（次要）** — `启动面板.command` 仍写 `:5173` 双进程（README 已改单进程 `:8000`）；`max_points=1500` 默认会静默抽稀长序列；`scipy`/`statsmodels` 全仓零 import（已钉版并注释为待删候选）。
+9. 说明：`data/macro_data.db` 现为 `journal_mode=wal`（跑测试经新工厂读真实库的持久副作用）；`integrity_check ok`、无 `-wal/-shm` 残留、该文件已 gitignore。
+
+### 当前实测门禁（2026-08-22，22 次提交后）
+`pytest -q` = **222 passed / 0 failed**（基线 63，新增 159 条，每组均有改前失败证据）；`vue-tsc --noEmit` 退出码 **0**；`scripts/_pipeline_test.py` 全过；工作树干净（仅 `.scratch/` 被忽略）。
 
 ### 仍未开工（按此顺序）
-**G08**（变更端点鉴权：本地 token + 变更语义收回 POST）→ **G16+G18**（CI + fixture DB + 契约/前端测试，需工作树干净时一起做）→ `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*`）→ **G26/G28/G29/G30** → 发布（bump v1.1.0 → 用户确认 → push → `gh release`）。
+**G08**（变更端点鉴权：本地 token + 变更语义收回 POST——当前 localhost CSRF 可触发全量采集与付费 LLM 调用）→ **G16+G18**（CI + fixture DB + 契约/前端测试）→ `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*`）→ 上面第 5-8 条遗留 → **G26/G28/G29/G30** → 发布（bump v1.1.0 → 用户确认 → push → `gh release`）。
 发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
 
 ---
