@@ -76,7 +76,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Frontend  (Vue 3 + Vite + TS + ECharts + Pinia, :5173)     │
+│  Frontend  (Vue 3 + Vite + TS + ECharts + Pinia, build)     │
 │  pages/ (6 视图) ─ router ─ stores (filters/refresh)         │
 │  components/charts/ (EChart + option builders)  design/      │
 │  api/ (typed client ← OpenAPI)                               │
@@ -101,6 +101,7 @@
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
 - `frontend/` — Vue 3 SPA：6 页视图、Pinia 全局联动、ECharts 图表组件
+- **单进程托管**：`frontend/dist` 由 FastAPI 在 `:8000` 上挂载（`/assets` + 404 回落到 `index.html`），`run_app.sh` 不再起 `vite preview`；`:5173` 只在 `npm run dev` 热重载时存在
 - `analysis/`、`scripts/_pipeline.py`、`scripts/01_fetch_data.py`、`02_compute_derived.py` — **核心保值，原样复用**
 
 ---
@@ -126,7 +127,8 @@ AKShare/
 │   │   ├── core/                # db(lru_cache) · cache(clear_all) · refresh(子进程+SSE) · serial
 │   │   └── deps.py
 │   ├── tests/test_golden.py     # golden test：API 输出 == db.load
-│   └── pyproject.toml           # 后端依赖（fastapi/uvicorn/pydantic/httpx + analysis 依赖）
+│   └── pyproject.toml           # 后端最小依赖（fastapi/uvicorn/pydantic/httpx）+ pytest 配置
+│                                #   分析依赖不在此重述，以根 requirements.txt/.lock 为准
 │
 ├── frontend/                    # Vue 3 SPA
 │   ├── src/
@@ -146,7 +148,7 @@ AKShare/
 │
 ├── scripts/                     # 采集与衍生计算（后端复用）
 │   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
-│   ├── _pipeline_test.py        # 管道离线测试（15/15）
+│   ├── _pipeline_test.py        # 管道自查脚本（27 项 check；无 test_* 函数，pytest 不收集）
 │   ├── 01_fetch_data.py         # 宏观数据采集（16 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
@@ -154,15 +156,18 @@ AKShare/
 │   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary + signal_history
 │   ├── backups/                 # 采集前自动备份（留 10 份）
 │   ├── vintages/                # 提交前审计快照（留 12 份，供 scripts/diff_vintage.py 比对）
+│   ├── logs/                    # 运行日志：fetch.log（采集，轮转）· api.log（uvicorn，超 5MB 转存 .1）
 │   └── last_run.json            # 上次采集审计 manifest
 │
-├── shared/openapi.json          # OpenAPI 契约（供前端 codegen）
+├── shared/openapi.json          # OpenAPI 契约快照（**已陈旧**：缺 8 个 /crcl/* 路由，需重新导出）
 ├── docs/architecture-upgrade.md # 架构升级方案文档
 ├── docs/data-sources-guide.md   # 数据源现状与实测记录
 ├── docs/data-supplement-runbook.md # 数据补充运行手册（发布窗口+手动触发+校验）
-├── run_app.sh                   # 一键启动（FastAPI:8000 + Vue:5173）
+├── run_app.sh                   # 一键启动（单进程 FastAPI:8000，同时托管 API 与 Vue 构建产物）
 ├── 启动面板.command             # macOS 双击入口（委托 run_app.sh）
-├── requirements.txt             # analysis/scripts 依赖（akshare/pandas/numpy/scipy/statsmodels）
+├── requirements.txt             # 直接依赖（人读，akshare 精确锁定）
+├── requirements.lock            # 逐包精确锁（63 包传递闭包，源自 .venv312 实测）
+├── .env.example                 # 环境变量模板（复制为 .env；.env 已 gitignored）
 ├── changeLog.md                 # 变更日志
 ├── CLAUDE.md / AGENTS.md        # 开发规范
 └── README.md                    # 本文件
@@ -174,7 +179,9 @@ AKShare/
 
 ### 环境要求
 
-- Python 3.12+（当前 `.venv312` 为 Python 3.14.6，akshare 1.18.x 实测正常；macOS 需 `DYLD_LIBRARY_PATH` 处理 expat，启动脚本已内置）
+- Python 3.12+。**权威环境是 `./.venv312`（实测 Python 3.12.14，`pyvenv.cfg` 记 3.12.13）**；仓库里还有一个 `./.venv` 是 Python 3.11.14，违反 `backend/pyproject.toml` 的 `requires-python >= 3.12`，且装的是另一个 akshare 版本，**已陈旧、不受支持，勿使用**（未删除，属本机环境）
+- 依赖：`requirements.txt`（人读直接依赖，akshare 锁定 `==1.18.64`）+ `requirements.lock`（逐包精确锁）
+- macOS 需 `DYLD_LIBRARY_PATH` 处理 expat，启动脚本已内置
 - Node 20+（前端构建）
 - 网络连接（首次采集数据时需要；NBS 2026-03 改版曾封禁旧接口，akshare ≥1.18 已适配新接口，详见 [`docs/data-sources-guide.md`](docs/data-sources-guide.md) §十一）
 
@@ -184,9 +191,17 @@ AKShare/
 ./run_app.sh          # 或双击 启动面板.command
 ```
 
-`run_app.sh` 自动完成：激活 `.venv312` → 首次构建前端（`npm install && npm run build`）→ 后端依赖自检 → 启动 FastAPI(:8000) + Vue preview(:5173) → trap 退出清理。
+`run_app.sh` 自动完成：解析解释器（`PYTHON`/`VENV` 覆盖 → `.venv312` → `.venv` → `python3`，都不可用则打印 bootstrap 指引并退出 1）→ 前端指纹比对，有变更才 `npm ci && npm run build` → 后端/采集依赖自检（按 `requirements.txt` 固定版本）→ **单进程** 启动 FastAPI(:8000) 并轮询 `/health`（30s 未就绪即打印日志尾部并退出 1）→ trap 退出清理。
 
-浏览器打开：**http://localhost:5173**（API 文档：http://localhost:8000/docs）
+浏览器打开：**http://localhost:8000** —— API 与 UI 同一个端口（API 文档 http://localhost:8000/docs，OpenAPI `http://localhost:8000/openapi.json`）。已不再起 `vite preview`，没有 `:5173`。
+
+后端日志：`data/logs/api.log`（追加写，超 5MB 转存 `api.log.1`）。
+
+指定别的解释器：
+
+```bash
+PYTHON=/path/to/python ./run_app.sh     # 或 VENV=/path/to/venv ./run_app.sh
+```
 
 ### 开发模式（热重载）
 
@@ -280,7 +295,9 @@ scripts/schedule/schedule_uninstall.sh  # 卸载
 
 ## 后端 API
 
-FastAPI（`:8000`），OpenAPI 文档 `http://localhost:8000/docs`，契约导出至 `shared/openapi.json`。
+FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://localhost:8000/docs`。
+
+> ⚠️ `shared/openapi.json` 是**手工导出的陈旧快照**：只有 14 条路径，缺全部 8 条 `/crcl/*`（overview / metrics / events / fundamentals / alerts / logs / refresh / refresh/stream）。以运行中的 `http://localhost:8000/openapi.json` 为准；改契约后需重新导出该文件。
 
 | 方法 路径 | 作用 |
 |---|---|
@@ -349,9 +366,12 @@ font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe 
 ## 测试与质量
 
 - **后端 golden test**（`backend/tests/test_golden.py`，6/6）：`/derived/monthly` 与 `db.load` 逐字节一致 + 各周期/signals/refresh 端点
-- **管道测试**（`scripts/_pipeline_test.py`，15/15）：闸门全分支 + 暂存继承 + 崩溃安全 + 原子切换
-- **前端类型**：`vue-tsc --noEmit` 0 error
-- **契约守门**：OpenAPI → 前端 TS codegen（`npm run gen:api`），防类型漂移
+- **后端全量**：`cd backend && ../.venv312/bin/python -m pytest -q`
+- **管道自查**（`scripts/_pipeline_test.py`，27 项 check）：闸门全分支 + 暂存继承 + 崩溃安全 + 原子切换。
+  ⚠️ 它**不是** pytest 用例——文件里没有 `test_*` 函数，`pytest --collect-only scripts/` 收集为 0，必须手动跑：
+  `.venv312/bin/python scripts/_pipeline_test.py`（全通过时打印 `✅ ALL CHECKS PASSED`，失败非零退出）
+- **前端类型**：`vue-tsc --noEmit` 0 error（`npm run build` 已内置）
+- **契约守门（当前未生效）**：`npm run gen:api` 只从 `shared/openapi.json` 生成 `src/api/schema.d.ts`，但该快照缺 8 条 `/crcl/*`、且 `schema.d.ts` 从未生成过——前端实际用的是手写的 `src/api/types.ts`。要真正防类型漂移，需先重新导出 openapi.json 再跑 codegen 并改用生成的类型
 
 ---
 

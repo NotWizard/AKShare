@@ -1,5 +1,46 @@
-akshare>=1.14.0
-pandas>=1.5
-numpy>=1.24
-scipy>=1.10
-statsmodels>=0.14
+# ============================================================================
+#  直接依赖（人读清单）——本仓依赖的唯一权威来源。
+#  逐包精确复现请用 requirements.lock（全量传递闭包，每包 ==）。
+#  backend/pyproject.toml 不再另列一份分析依赖，只保留后端说明与 pytest 配置。
+#
+#  权威解释器：./.venv312（实测 Python 3.12.14，pyvenv.cfg 记 3.12.13）。
+#  ./.venv 是遗留环境（Python 3.11.14，违反 backend/pyproject.toml 的
+#  requires-python >= 3.12，且 akshare 为 1.18.67 与 data/last_run.json 不符），
+#  已陈旧/不受支持，勿用于采集或启动；run_app.sh 优先选 .venv312。
+#
+#  为什么不再用宽松下界：旧版声明 pandas>=1.5 / numpy>=1.24 / scipy>=1.10，
+#  跨了两个 pandas 大版本、一个 numpy 大版本；按下界解出来的组合根本跑不通本仓代码。
+#  下面每个下界都 == 当前实测在用版本，上界拦住大版本跳跃。
+#
+#  安装：  .venv312/bin/python -m pip install -r requirements.txt
+#  复现：  .venv312/bin/python -m pip install -r requirements.lock
+#  说明：  两份文件都不带 --hash。生成哈希必须联网向 PyPI 取每个 wheel/sdist 的
+#          摘要，本仓当前为离线环境，无法生成；宁缺勿伪造。补哈希请在有网环境执行
+#          `pip hash` 或 `uv pip compile --generate-hashes`。
+# ============================================================================
+
+# ---- 采集（scripts/01_fetch_data.py · scripts/dual_sources.py）----
+# akshare 精确锁定（== 而非 >=）：它是爬虫库，minor 升级会静默改列名/接口路径，
+# 随后被管道 validate 闸门拒收，属真实的数据完整性风险。1.18.64 == data/last_run.json
+# 记录的采集版本。升级前必须先跑回归比对：
+#   .venv312/bin/python scripts/diff_vintage.py    # 与 data/vintages/ 快照逐表比对
+#   .venv312/bin/python scripts/dual_sources.py    # 双源交叉校验
+# 通过后再同步更新本行、requirements.lock 与 changeLog.md。
+akshare==1.18.64
+requests>=2.34.2,<3          # scripts/01_fetch_data.py · crcl_collect.py 直连数据源
+yfinance>=1.4.1,<2           # crcl_collect.py 备用行情/估值源（惰性 import，缺失则降级）
+
+# ---- 分析核心（analysis/）----
+pandas>=3.0.3,<4
+numpy>=2.4.6,<3
+scipy>=1.17.1,<2             # 注：当前代码未直接 import，保留历史声明，未擅自删除
+statsmodels>=0.14.6,<0.15    # 同上
+
+# ---- 后端 API（backend/）----
+fastapi>=0.137.1,<0.140
+uvicorn[standard]>=0.49.0,<0.50
+pydantic>=2.13.4,<3
+httpx>=0.28.1,<0.29          # 生产代码与 TestClient 共用
+
+# ---- 测试 ----
+pytest>=9.1.0,<10

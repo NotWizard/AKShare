@@ -1,23 +1,34 @@
+# ============================================================================
+#  依赖的权威来源是仓库根目录的 requirements.txt（人读直接依赖）
+#  + requirements.lock（逐包精确锁）。本文件不再平行重述一份分析依赖：
+#  旧版把 akshare/pandas/numpy/scipy/statsmodels 抄了第二遍，两处下界各自漂移，
+#  是 O-H2 的成因。安装请一律：
+#      .venv312/bin/python -m pip install -r ../requirements.txt   # 或 ../requirements.lock
+#
+#  本文件现在只承担两件事：后端自身可运行的最小依赖声明，以及 pytest 配置。
+#  下面 4 个下界与实测在用版本对齐（fastapi 0.137.1 / uvicorn 0.49.0 /
+#  pydantic 2.13.4 / httpx 0.28.1），确保不会被解析成一个跑不通的组合。
+#
+#  requires-python：权威解释器是 ../.venv312（Python 3.12.14）。
+#  仓库里另一个 ../.venv 是 Python 3.11.14，违反下面这条约束，属陈旧环境、不受支持。
+# ============================================================================
 [project]
 name = "macro-backend"
 version = "1.0.0"
 description = "FastAPI serving the (unchanged) macro analysis core"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "pydantic>=2.0",
-    "httpx>=0.27",          # for TestClient
-    # analysis core deps (inherited, restated for backend isolation):
-    "akshare>=1.14.0",
-    "pandas>=1.5",
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "statsmodels>=0.14",
+    "fastapi>=0.137.1,<0.140",
+    "uvicorn[standard]>=0.49.0,<0.50",
+    "pydantic>=2.13.4,<3",
+    "httpx>=0.28.1,<0.29",   # 生产代码与 TestClient 共用
+    # 分析核心依赖（akshare/pandas/numpy/scipy/statsmodels）刻意不在此重复声明，
+    # 见上方说明：以 ../requirements.txt + ../requirements.lock 为准。
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov"]
+# pytest 下界对齐实测 9.1.0；pytest-cov 当前并未装进 .venv312（装它需要联网）。
+dev = ["pytest>=9.1.0,<10", "pytest-cov"]
 
 [tool.pytest.ini_options]
 pythonpath = [".."]   # repo root, so `import analysis` / `import backend` work
