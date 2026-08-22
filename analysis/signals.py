@@ -188,7 +188,7 @@ def _sub_signal(
     row = df.iloc[-1] if df is not None and len(df) else None
     phase = str(row[phase_col]) if row is not None else INSUFFICIENT_DATA
     included = phase in _SCORE_MAPS[name]
-    date = row["date"] if row is not None else None
+    date = row["date"] if row is not None and pd.notna(row["date"]) else None
 
     out = {
         "date": _fmt(date, date_fmt),
@@ -199,6 +199,9 @@ def _sub_signal(
         "weight": 1.0 if included else 0.0,
         "stale": False,
         "stale_months": None,
+        # Private alignment reference (popped before returning): only a USABLE
+        # observation may define the common as-of frontier.
+        "_date": date if included else None,
     }
     out.update({c: _num(row, c) for c in numeric_cols})
     out.update({c: (str(row[c]) if row is not None else None) for c in phase_cols})
@@ -306,11 +309,8 @@ def _compute_signals_versioned(db_path: str, version: tuple) -> Dict:
         ),
     }
 
-    # Common as-of = the newest observation any framework has. Kept out of the
-    # public dicts (leading underscore) — it is only the alignment reference.
-    for name, sub in subs.items():
-        df = frames[name]
-        sub["_date"] = df.iloc[-1]["date"] if len(df) and sub["included"] else None
+    # Common as-of = the newest USABLE observation any framework has (each
+    # sub-signal carries its own date in the private "_date" key).
     dates = [s["_date"] for s in subs.values() if s["_date"] is not None]
     frontier = max(dates) if dates else None
     _apply_staleness(subs, frontier)

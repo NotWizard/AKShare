@@ -26,20 +26,28 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 后续仍未开工（按此顺序）：**G08**（变更端点鉴权，需 W5 落地后再动 main.py/api）→ **G16+G18**（CI + fixture DB + 契约/前端测试，必须在工作树干净时一起做：CI 没有 fixture DB 必红，而 conftest.py 会被 pytest 收集从而干扰在飞 Agent 的验证）→ `shared/openapi.json` 重导（依赖 W5 定稿）→ **G26/G28/G29/G30** → 发布。
 发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名（故意推迟，因在飞提交都指向现文件名）；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
 
-### 实测状态快照（2026-08-22 01:30，工作树含 5 组未提交产出）
-`cd backend && ../.venv312/bin/python -m pytest -q` → **22 failed, 122 passed**。
-**22 个失败全部落在 `tests/test_signal_robustness.py` 一个文件内**（已用 `grep '^FAILED' | sed 's/::.*//' | uniq -c` 核实）——那是 W2 按 test-first 先写下的用例，`analysis/*.py` 的修复尚未落笔，故失败是**预期的"改前失败"**，不是回归。
-其余 122 passed 覆盖了全部 120 条基线用例，说明 **W3/W4/W5/W6 已写入的改动均未造成回归**。
-resume 时**不要**因为这 22 红去回退任何东西：正确动作是让 W2 的 `analysis/*.py` 修复补齐（或重新派一个只做 G23+G03b 的 fixer，让这 22 条转绿）。
+### 第二波已全部落地（2026-08-22）
+5 组均已按组提交，工作树已清空。全套 `pytest -q` = **217 passed / 0 failed**；`vue-tsc --noEmit` 退出码 0；`scripts/_pipeline_test.py` 全过。
 
-各组完成度（按工作树文件判断，均**尚未**收到 fixer 完成回执，故都还不可提交）：
-- W2：仅有测试文件，`analysis/*.py` 未改 → **未完成**
-- W3：`01_fetch_data.py`/`_pipeline.py` 已改，`02_compute_derived.py` 未改 → **未完成**
-- W4：15 个前端文件已改 + PageState/useAsyncData 新增，但 `CrclMonitor.vue`(G15) 与 `core/commentary.py`(F10) 未改 → **未完成**
-- W5：8 个后端文件已改（crcl/refresh/crcl_collect/crcl_db/db/locking/main/schemas），新测试未写 → **未完成**
-- W6：`requirements.txt`/`requirements.lock`/`pyproject.toml`/`run_app.sh`/`.env.example` 已就位，`README.md` 未改 → **未完成**
+| 组 | 提交 | 覆盖 |
+|---|---|---|
+| W6 · G17+G27 | `bfeb45d` + `ba45b91` | akshare 精确锁 / requirements.lock / 解释器解析 / data/logs / .env.example / README 纠错 |
+| W2 · G23+G03b | `6d3c248` | as-of 对齐、缺失≠看空、债务净部门、信贷迟滞、cycles+real-estate 版本键、F15 |
+| W3 · G11+G12+G20+G21 | `df0c565` | 可执行超时、house_price 多粒度闸门、派生口径/look-ahead、SQLite 约束去重 |
+| W4 · G13+G14+G15+G25 | `6f2a99c` | useAsyncData/PageState、client 重试去重、轮询生命周期、F10、CRCL store、a11y |
+| W5 · G09+G10+G24rest | `592ac03` | 异步 SSE、有界执行器、CRCL 单飞、WAL 连接工厂、F11、F12 |
 
-**不要提交半成品组**：一组只落一半（例如 W3 缺 `02_compute_derived.py`）比留在工作树里更糟。逐组等齐后再按组测试+提交。
+### ⚠️ 必须优先处理的遗留（来自 fixer 自查，按危害排序）
+1. **WAL 与整库交换相互作用（数据丢失风险，W5 自报，最高优先）**：启用 WAL 后，`scripts/_pipeline.py` 的 `shutil.copy2(live→staging)` **不会带走 `-wal` 边车**，因此交换瞬间尚未 checkpoint 的提交可能丢失；且交换时若残留陈旧 `-wal`，理论上会被恢复到新文件上。当前后端连接都短命、关闭即 checkpoint 并删除 `-wal`，窗口在亚毫秒级，但**正确修法在 `_pipeline.py`**（W5 无权改）：交换前后做 `wal_checkpoint(TRUNCATE)` + 清理边车，或用 `VACUUM INTO` 生成 staging 副本。
+2. **F13-rest 未修**：`core/commentary.py:~244` 仍是宽 `except Exception: → {"status":"empty"}`，把编程错误伪装成"暂无评论"（该文件当时由 W4 占用）。
+3. **两个写入方绕过连接工厂**：`core/commentary.py`、`core/signal_history.py` 仍用裸 `sqlite3.connect`，享受到 WAL（文件属性）但**没有 `busy_timeout`**，应改走 `db.connect()`。
+4. **前端类型残留**：`frontend/src/api/types.ts:33` 仍声明已被删除的 `RefreshResult.detail`（F12 把它换成了 `error_id`）。
+5. `data/macro_data.db` 现为 `journal_mode=wal`（跑测试经新工厂读真实库的持久副作用）；`integrity_check ok`、无 `-wal/-shm` 残留、该文件已 gitignore。
+6. 次要：`max_points=1500` 默认会静默抽稀长序列；`启动面板.command` 仍写 `:5173` 双进程（README 已改单进程 `:8000`）；`scipy`/`statsmodels` 全仓零 import（已钉版并在 requirements 注释标注为待删候选）。
+
+### 仍未开工（按此顺序）
+**G08**（变更端点鉴权：本地 token + 变更语义收回 POST）→ **G16+G18**（CI + fixture DB + 契约/前端测试，需工作树干净时一起做）→ `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*`）→ **G26/G28/G29/G30** → 发布（bump v1.1.0 → 用户确认 → push → `gh release`）。
+发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
 
 ---
 

@@ -20,6 +20,11 @@ export default {
         text: '#f1f5f9',
         'text-2': '#94a3b8',
         'text-3': '#8294a8',
+        // Dimmest text tier that still passes WCAG AA (≥4.5:1) at 10–11px:
+        // measured in-app at 4.83:1 on #1a2332 (card) and 5.43:1 on #111827
+        // (surface). Use this INSTEAD of opacity-dimmed text like
+        // text-text-3/60 (2.73:1) or text-text-3/70 (3.21:1), which fail AA.
+        'text-4': '#7f90a4',
       },
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'SF Pro Display', 'Segoe UI', 'Noto Sans SC', 'PingFang SC', 'sans-serif'],

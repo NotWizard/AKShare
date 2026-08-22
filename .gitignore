@@ -49,6 +49,9 @@ frontend/dist/
 # Worktrees
 .worktrees/
 
+# 子 Agent 验证用临时草稿目录（不入库）
+.scratch/
+
 # Scratch / untracked artifacts (audit O-M4/O-M5: screenshots, external MCP output,
 # orphaned backtest analysis unrelated to the macro platform)
 .playwright-mcp/
