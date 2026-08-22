@@ -260,15 +260,48 @@ def snapshot_vintage(db_path=DB_PATH, vintage_dir=VINTAGE_DIR):
     return dst
 
 
+def _checkpoint_wal(path):
+    """把仍留在 `-wal` 边车里的已提交事务落进主库文件。
+
+    后端连接工厂已启用 `journal_mode=WAL`（A-M1 修复），而本模块用
+    `shutil.copy2` + `os.replace` 搬整个库文件——**copy2 不会带走 `-wal`**。
+    因此若不先 checkpoint：复制出的 staging 会丢掉尚未落盘的那部分提交；
+    交换后若还留着旧 inode 的 `-wal`，SQLite 理论上会把它恢复到新文件上。
+    非 WAL / 只读 / 损坏库一律静默跳过（行为与启用 WAL 前一致）。
+    """
+    import sqlite3
+
+    path = Path(path)
+    if not path.exists():
+        return
+    try:
+        conn = sqlite3.connect(path)
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        pass
+
+
+def _drop_wal_sidecars(path):
+    """删除属于已被替换 inode 的 `-wal`/`-shm` 残留（见 _checkpoint_wal）。"""
+    for suffix in ("-wal", "-shm"):
+        Path(str(path) + suffix).unlink(missing_ok=True)
+
+
 def open_staging(db_path=DB_PATH, staging_path=STAGING_PATH):
     """Copy the live DB → staging (so old good data is already present inside
     staging). If the live DB is absent, staging is removed so fetchers start
     fresh. Returns the staging path."""
     db_path, staging_path = Path(db_path), Path(staging_path)
     if db_path.exists():
+        _checkpoint_wal(db_path)   # 否则 copy2 丢掉仍在 -wal 中的已提交事务
         shutil.copy2(db_path, staging_path)
+        _drop_wal_sidecars(staging_path)
     elif staging_path.exists():
         staging_path.unlink()
+        _drop_wal_sidecars(staging_path)
     return staging_path
 
 
@@ -285,7 +318,10 @@ def commit_staging(staging_path=STAGING_PATH, db_path=DB_PATH, vintage_dir=VINTA
     except Exception as e:  # 快照失败（如 ENOSPC）不丢整轮成果：照常提交
         print(f"  ⚠️ vintage 快照失败（跳过快照，照常提交）: {e}")
         vintage = None
+    _checkpoint_wal(staging_path)      # staging 自己的 -wal 必须先落盘
+    _drop_wal_sidecars(staging_path)
     os.replace(staging_path, db_path)  # atomic overwrite
+    _drop_wal_sidecars(db_path)        # 旧 inode 的边车不能留给新文件
     return vintage
 
 
