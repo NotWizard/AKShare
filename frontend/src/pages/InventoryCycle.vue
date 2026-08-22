@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildDualAxisLine, buildScatterQuadrant, buildMultiLine } from '@/components/charts/options'
@@ -12,28 +13,21 @@ import type { CycleFrame } from '@/api/types'
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
 type Rec = Record<string, string | number | null>
+
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [ip, cx, c] = await Promise.all([
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true, { signal }),
+    api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+  ])
+  return { ip: markRaw(ip.records), pmi: markRaw(cx.records), cycle: markRaw(c) }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
 // Per-chart groups so 财新 PMI (2012) doesn't truncate 官方 PMI + IP (2008).
-const ipDm = shallowRef<Rec[]>([])      // date,pmi_official,ip_yoy → 2008-02
-const pmiDm = shallowRef<Rec[]>([])     // date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
-const cycle = shallowRef<CycleFrame | null>(null)
-const loading = ref(true)
-const error = ref<string | null>(null)
-let reqId = 0
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [ip, cx, c] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,ip_yoy', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc', true),
-      api.getCycle('inventory', filters.start ?? undefined, filters.end ?? undefined),
-    ])
-    if (mine !== reqId) return
-    ipDm.value = markRaw(ip.records); pmiDm.value = markRaw(cx.records); cycle.value = markRaw(c)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+const ipDm = computed<Rec[]>(() => data.value?.ip ?? [])      // date,pmi_official,ip_yoy → 2008-02
+const pmiDm = computed<Rec[]>(() => data.value?.pmi ?? [])    // date,pmi_official,pmi_caixin,pmi_non_mfg,pmi_caixin_svc → 2012-04
+const cycle = computed<CycleFrame | null>(() => data.value?.cycle ?? null)
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).

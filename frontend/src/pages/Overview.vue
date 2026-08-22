@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import MetricTile from '@/components/layout/MetricTile.vue'
 import CommentaryCard from '@/components/layout/CommentaryCard.vue'
+import PageState from '@/components/layout/PageState.vue'
 import ChartTip from '@/components/controls/ChartTip.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import type { SignalHistoryRow, SignalSummary } from '@/api/types'
@@ -12,14 +14,32 @@ import type { SignalHistoryRow, SignalSummary } from '@/api/types'
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
 
-const kpiDm = ref<Rec[]>([])        // latest-first for KPI latest(); no align
-const signals = ref<SignalSummary | null>(null)
-const history = ref<SignalHistoryRow[]>([])   // newest first
+const KPI_COLS = 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'
+
+// One fetcher, one state machine, one abort signal — PageState renders the
+// error branch, so it can no longer be assigned and forgotten.
+const { state, data, error, retry, loading } = useAsyncData(async (signal) => {
+  const st = filters.start ?? undefined, en = filters.end ?? undefined
+  const [kpi, s, h] = await Promise.all([
+    api.getDerivedMonthly(st, en, KPI_COLS, undefined, { signal }),
+    api.getSignals({ signal }),
+    api.getSignalHistory(undefined, { signal }),
+  ])
+  return {
+    kpi: kpi.records.slice().reverse() as Rec[],   // latest first for latest()
+    signals: s as SignalSummary,
+    history: h.items as SignalHistoryRow[],
+  }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
+const kpiDm = computed<Rec[]>(() => data.value?.kpi ?? [])
+const signals = computed<SignalSummary | null>(() => data.value?.signals ?? null)
+const history = computed<SignalHistoryRow[]>(() => data.value?.history ?? [])
+// Backend answered, but there is genuinely nothing to show yet (fresh DB) —
+// deliberately distinct from an unreachable backend.
+const isEmpty = computed(() => !kpiDm.value.length && !signals.value)
 const onlyFlips = ref(false)
-let reqId = 0
 
 function latest(col: string): number | null {
   for (const r of kpiDm.value) {           // kpiDm is latest-first
@@ -28,27 +48,6 @@ function latest(col: string): number | null {
   }
   return null
 }
-
-const A = (s?: string, e?: string) => [s, e] as const
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  const st = filters.start ?? undefined, en = filters.end ?? undefined
-  try {
-    const [kpi, s, h] = await Promise.all([
-      api.getDerivedMonthly(st, en, 'date,m2_yoy,cpi_yoy,pmi_official,pmi_caixin,m2_m1_spread,m0_yoy'),
-      api.getSignals(),
-      api.getSignalHistory(),
-    ])
-    if (mine !== reqId) return
-    kpiDm.value = kpi.records.slice().reverse()  // latest first
-    signals.value = s
-    history.value = h.items
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
-void A
 
 const FRAMEWORKS = ['merrill', 'credit', 'inventory', 'debt'] as const
 type Fw = typeof FRAMEWORKS[number]
@@ -104,51 +103,66 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
       <p class="text-xs text-text-3 mt-1">关键宏观指标 + 综合信号</p>
     </header>
 
-    <div class="grid grid-cols-5 gap-3">
-      <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" :tip="t.tip" />
-      <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent :tip="signalTip" />
-    </div>
-    <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
+    <!-- 取数状态由 PageState 统一渲染：后端不可达 ≠ 数据库暂无数据 -->
+    <PageState
+      :state="state"
+      :error="error"
+      :has-data="data != null"
+      :empty="isEmpty"
+      empty-title="数据库暂无宏观数据"
+      empty-hint="后端已连接，但 derived_monthly / signals 还没有记录。点击顶部「🔄 刷新数据」执行一次采集。"
+      min-height="320px"
+      @retry="retry"
+    >
+      <div class="space-y-5">
+        <div class="grid grid-cols-5 gap-3">
+          <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" :tip="t.tip" />
+          <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent :digits="0" :tip="signalTip" />
+        </div>
+        <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
 
-    <CommentaryCard />
+        <CommentaryCard />
 
-    <div v-if="signals?.cross_lags" class="text-xs text-text-2 space-y-1 px-4 py-3 rounded-lg bg-card border border-border">
-      <div class="text-text-3 uppercase tracking-wide">跨指标领先</div>
-      <div>M1 → PPI 领先约 <b class="text-text">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('m1_ppi_max_corr') }}）</div>
-      <div>剪刀差 → CPI 领先约 <b class="text-text">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('spread_cpi_max_corr') }}）</div>
-    </div>
+        <div v-if="signals?.cross_lags" class="text-xs text-text-2 space-y-1 px-4 py-3 rounded-lg bg-card border border-border">
+          <div class="text-text-3 uppercase tracking-wide">跨指标领先</div>
+          <div>M1 → PPI 领先约 <b class="text-text">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('m1_ppi_max_corr') }}）</div>
+          <div>剪刀差 → CPI 领先约 <b class="text-text">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('spread_cpi_max_corr') }}）</div>
+        </div>
 
-    <section class="bg-card border border-border rounded-2xl p-5">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-text">信号与相位历史<ChartTip :text="historyTip" /></h3>
-        <label class="flex items-center gap-1.5 text-xs text-text-2 cursor-pointer">
-          <input v-model="onlyFlips" type="checkbox" class="accent-warn"> 仅看翻转
-        </label>
+        <section class="bg-card border border-border rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text">信号与相位历史<ChartTip :text="historyTip" /></h3>
+            <label class="flex items-center gap-1.5 text-xs text-text-2 cursor-pointer">
+              <input v-model="onlyFlips" type="checkbox" class="accent-warn"> 仅看翻转
+            </label>
+          </div>
+          <ol role="list" class="space-y-1">
+            <li v-for="r in historyRows" :key="r.ts"
+                class="grid grid-cols-[5.5rem_2.5rem_1fr] items-center gap-3 px-2 py-1.5 rounded-lg"
+                :class="r.flips.length ? 'ring-1 ring-warn/40 bg-warn/5' : ''"
+                :tabindex="r.flips.length ? 0 : undefined"
+                :aria-label="rowAria(r)">
+              <span class="text-xs text-text-3">{{ r.ts.slice(0, 10) }}</span>
+              <span class="text-xs font-bold text-center"
+                    :class="r.composite > 0 ? 'text-up' : r.composite < 0 ? 'text-down' : 'text-text-2'">
+                {{ r.composite > 0 ? '+' : '' }}{{ r.composite }}
+              </span>
+              <span class="flex flex-wrap gap-1">
+                <span v-for="f in FRAMEWORKS" :key="f"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-surface text-[11px] text-text-2"
+                      :class="isFlipped(r, f) ? 'border-warn/60 text-text' : 'border-border'">
+                  <span class="w-1.5 h-1.5 rounded-full" :style="{ background: phaseColor(r[f]) }" />
+                  {{ FW[f] }}·{{ phaseLabel(r[f]) }}
+                </span>
+              </span>
+            </li>
+          </ol>
+          <!-- reachable only when the fetch SUCCEEDED, so "暂无历史" is now true -->
+          <p v-if="!loading && !historyRows.length" class="text-xs text-text-3">
+            {{ history.length ? '暂无翻转行——取消「仅看翻转」可查看全部快照。' : '暂无历史快照——每次成功刷新后记录一条。' }}
+          </p>
+        </section>
       </div>
-      <ol role="list" class="space-y-1">
-        <li v-for="r in historyRows" :key="r.ts"
-            class="grid grid-cols-[5.5rem_2.5rem_1fr] items-center gap-3 px-2 py-1.5 rounded-lg"
-            :class="r.flips.length ? 'ring-1 ring-warn/40 bg-warn/5' : ''"
-            :tabindex="r.flips.length ? 0 : undefined"
-            :aria-label="rowAria(r)">
-          <span class="text-xs text-text-3">{{ r.ts.slice(0, 10) }}</span>
-          <span class="text-xs font-bold text-center"
-                :class="r.composite > 0 ? 'text-up' : r.composite < 0 ? 'text-down' : 'text-text-2'">
-            {{ r.composite > 0 ? '+' : '' }}{{ r.composite }}
-          </span>
-          <span class="flex flex-wrap gap-1">
-            <span v-for="f in FRAMEWORKS" :key="f"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-surface text-[11px] text-text-2"
-                  :class="isFlipped(r, f) ? 'border-warn/60 text-text' : 'border-border'">
-              <span class="w-1.5 h-1.5 rounded-full" :style="{ background: phaseColor(r[f]) }" />
-              {{ FW[f] }}·{{ phaseLabel(r[f]) }}
-            </span>
-          </span>
-        </li>
-      </ol>
-      <p v-if="!loading && !historyRows.length" class="text-xs text-text-3">
-        {{ history.length ? '暂无翻转行——取消「仅看翻转」可查看全部快照。' : '暂无历史——每次成功刷新后记录一条快照。' }}
-      </p>
-    </section>
+    </PageState>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildMultiLine } from '@/components/charts/options'
@@ -10,22 +11,14 @@ import GraphCard from '@/components/layout/GraphCard.vue'
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
-const dm = shallowRef<Rec[]>([])
-let reqId = 0
 
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const d = await api.getTable('demographics', filters.start ?? undefined, filters.end ?? undefined)
-    if (mine !== reqId) return
-    dm.value = markRaw(d.records)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const d = await api.getTable('demographics', filters.start ?? undefined, filters.end ?? undefined, { signal })
+  return markRaw(d.records) as Rec[]
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
+const dm = computed<Rec[]>(() => data.value ?? [])
 
 function latest(col: string): number | null {
   // dm 按日期升序, 从后往前取第一个有值行 = 最新一年

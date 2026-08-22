@@ -8,16 +8,18 @@ export interface TileDelta {
   dir?: 'up' | 'down' | 'flat'
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   label: string
   value: number | null
   suffix?: string
   accent?: boolean
   tip?: string
   deltas?: TileDelta[]
-}>()
+  /** Decimals in the animated value: 0 for counts, 2 for per-share numbers. */
+  digits?: number
+}>(), { digits: 1 })
 
-const display = useCountUp(toRef(() => props.value))
+const display = useCountUp(toRef(() => props.value), 600, props.digits)
 </script>
 
 <template>

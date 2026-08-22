@@ -1,34 +1,29 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildMultiLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 
+type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
+
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [f, x] = await Promise.all([
+    api.getTable('fiscal', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+    api.getTable('external_demand', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+  ])
+  return { fiscal: markRaw(f.records), ext: markRaw(x.records) }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
 // 两张原始表直通 /table/{name}（不进 derived/signals），前端直读
-const fiscal = shallowRef<Record<string, string | number | null>[]>([])
-const ext = shallowRef<Record<string, string | number | null>[]>([])
-let reqId = 0
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [f, x] = await Promise.all([
-      api.getTable('fiscal', filters.start ?? undefined, filters.end ?? undefined),
-      api.getTable('external_demand', filters.start ?? undefined, filters.end ?? undefined),
-    ])
-    if (mine !== reqId) return
-    fiscal.value = markRaw(f.records); ext.value = markRaw(x.records)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+const fiscal = computed<Rec[]>(() => data.value?.fiscal ?? [])
+const ext = computed<Rec[]>(() => data.value?.ext ?? [])
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).

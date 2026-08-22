@@ -97,6 +97,20 @@ const applyDateFormat = (merged: Record<string, any>) => {
   else fmt(xa)
 }
 
+// Downsample long line series: real series carry ~3187 points into charts a few
+// hundred px tall, where LTTB keeps the visual shape at a fraction of the draw
+// cost. Centralised here so no builder has to remember it (an explicit
+// `sampling` on a series still wins).
+const applySampling = (merged: Record<string, any>) => {
+  const series = merged.series
+  if (!Array.isArray(series)) return
+  for (const s of series) {
+    // stacked series are skipped: LTTB may keep different x positions per series,
+    // which would misalign the stack.
+    if (s && s.type === 'line' && s.sampling === undefined && !s.stack) s.sampling = 'lttb'
+  }
+}
+
 // Chart "layout" defaults merged into every chart option (≈ _apply_layout).
 // tooltip / legend are deep-merged so a builder that sets its own tooltip
 // (e.g. scatter trigger:'item') keeps the theme's colors/confine.
@@ -145,5 +159,6 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
     }
   }
   applyDateFormat(merged)
+  applySampling(merged)
   return merged
 }

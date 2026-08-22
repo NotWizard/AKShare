@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildStackedArea, buildMultiLine } from '@/components/charts/options'
@@ -11,33 +12,27 @@ import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
+type Rec = Record<string, string | number | null>
+
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [q, rt, c, dqy] = await Promise.all([
+    api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true, { signal }),
+    api.getCycle('debt', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+    api.getDerivedQuarterly(filters.start ?? undefined, filters.end ?? undefined, { signal }),
+  ])
+  return { dq: markRaw(q.records), rate: markRaw(rt.records), cycle: markRaw(c), dqi: markRaw(dqy.records) }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
 // Read the leverage table DIRECTLY (quarterly, non-null). derived_quarterly's
 // leverage columns are now populated (02_compute_derived anchors on leverage
 // quarterly freq + GDP merge_asof ffill); the debt page reads leverage raw for
 // directness and to avoid the ffill step-shape in GDP-derived series.
-const dq = shallowRef<Record<string, string | number | null>[]>([])
-const rateDm = shallowRef<Record<string, string | number | null>[]>([])  // lpr_1y,lpr_5y,real_rate,bond_10y
-const dqi = shallowRef<Record<string, string | number | null>[]>([])     // derived_quarterly: household,hh_debt_to_income
-const cycle = shallowRef<CycleFrame | null>(null)
-let reqId = 0
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [q, rt, c, dqy] = await Promise.all([
-      api.getTable('leverage', filters.start ?? undefined, filters.end ?? undefined),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_1y,lpr_5y,real_rate,bond_10y', true),
-      api.getCycle('debt', filters.start ?? undefined, filters.end ?? undefined),
-      api.getDerivedQuarterly(filters.start ?? undefined, filters.end ?? undefined),
-    ])
-    if (mine !== reqId) return
-    dq.value = markRaw(q.records); rateDm.value = markRaw(rt.records); cycle.value = markRaw(c); dqi.value = markRaw(dqy.records)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+const dq = computed<Rec[]>(() => data.value?.dq ?? [])
+const rateDm = computed<Rec[]>(() => data.value?.rate ?? [])  // lpr_1y,lpr_5y,real_rate,bond_10y
+const dqi = computed<Rec[]>(() => data.value?.dqi ?? [])      // derived_quarterly: household,hh_debt_to_income
+const cycle = computed<CycleFrame | null>(() => data.value?.cycle ?? null)
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).

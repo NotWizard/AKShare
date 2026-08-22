@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onScopeDispose, useId } from 'vue'
 
 defineProps<{ text: string }>()
 
 const visible = ref(false)
 const pop = ref<HTMLElement | null>(null)
 const style = ref<Record<string, string>>({})
+// Stable id so the trigger can point at the Teleported popup via
+// aria-describedby — without it the whole data-lineage text (the only place the
+// derivation is documented) is unreachable for screen readers.
+const popId = `chart-tip-${useId()}`
 
 // Teleport to <body> so NO ancestor's overflow can ever clip the popup, and
 // position via the icon's viewport rect with flip/clamp — always visible.
 async function show(e: MouseEvent | FocusEvent) {
   const target = e.currentTarget as HTMLElement
   const r = target.getBoundingClientRect()
+  clearHide()
   visible.value = true
   await nextTick()
   const ph = pop.value?.offsetHeight ?? 100
@@ -27,23 +32,42 @@ async function show(e: MouseEvent | FocusEvent) {
 
   style.value = { top: `${top}px`, left: `${left}px`, width: `${pw}px` }
 }
-function hide() { visible.value = false }
+
+// The popup is pointer-interactive (text must be selectable), but it lives in
+// <body> — so leaving the icon starts a short grace period that entering the
+// popup cancels. blur / Escape close immediately.
+let hideTimer: ReturnType<typeof setTimeout> | null = null
+function clearHide() {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
+}
+function scheduleHide() {
+  clearHide()
+  hideTimer = setTimeout(() => { visible.value = false; hideTimer = null }, 150)
+}
+function hide() {
+  clearHide()
+  visible.value = false
+}
+onScopeDispose(clearHide)
 </script>
 
 <template>
   <span
-    class="inline-flex items-center align-middle ml-1 text-text-3 text-xs cursor-help select-none"
+    class="inline-flex items-center align-middle ml-1 text-text-3 text-xs cursor-help select-none rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
     tabindex="0"
     role="button"
     aria-label="查看图表说明"
+    :aria-expanded="visible"
+    :aria-describedby="visible ? popId : undefined"
     @mouseenter="show"
-    @mouseleave="hide"
+    @mouseleave="scheduleHide"
     @focus="show"
     @blur="hide"
-    @keydown.escape="hide"
+    @keydown.escape.stop="hide"
   >ⓘ
     <Teleport to="body">
-      <div v-if="visible && text" ref="pop" class="chart-tip-pop" :style="style">{{ text }}</div>
+      <div v-if="visible && text" :id="popId" ref="pop" role="tooltip" class="chart-tip-pop" :style="style"
+           @mouseenter="clearHide" @mouseleave="hide">{{ text }}</div>
     </Teleport>
   </span>
 </template>
@@ -62,6 +86,8 @@ function hide() { visible.value = false }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   white-space: pre-line;
   word-break: break-word;
-  pointer-events: none;
+  /* selectable: the tooltip documents 取数 lineage users need to read/copy */
+  pointer-events: auto;
+  user-select: text;
 }
 </style>

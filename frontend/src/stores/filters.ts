@@ -15,8 +15,11 @@ export const useFiltersStore = defineStore('filters', () => {
     if (p === 'ALL') { start.value = null; end.value = null; return }
     const now = new Date()
     const years = p === '5Y' ? 5 : p === '10Y' ? 10 : 20
-    const s = new Date(now.getFullYear() - years, now.getMonth(), 1)
-    start.value = s.toISOString().slice(0, 10)
+    // Build from LOCAL parts: toISOString() shifts local midnight into UTC, so in
+    // Asia/Shanghai (+08) a 5Y preset used to yield 2021-06-30 for 2026-07.
+    const y = now.getFullYear() - years
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    start.value = `${y}-${m}-01`
     end.value = null
   }
 

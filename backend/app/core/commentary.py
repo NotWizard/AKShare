@@ -35,10 +35,12 @@ BASE_URL = os.getenv("COMMENTARY_BASE_URL", "")
 API_KEY = os.getenv("COMMENTARY_API_KEY", "")
 MODEL = os.getenv("COMMENTARY_MODEL", "")
 
-# Lock so concurrent generate() calls (startup + manual + refresh) never race.
+# Single-flight generation lock. Busy-ness is derived from the lock itself
+# (_gen_lock.locked()) — a separate flag (the old threading.Event `_busy`) could
+# be left set forever when thread A's `finally: clear()` raced thread B's `set()`
+# after a failed acquire, pinning get_current() on status="generating" with an
+# empty text (and thus an endless 2s poll loop in the UI).
 _gen_lock = threading.Lock()
-# Marks an in-flight generation so GET can return status="generating".
-_busy = threading.Event()
 # Set True after _ensure_table first succeeds; get_current skips the per-poll
 # CREATE TABLE IF NOT EXISTS + commit (table provably exists for process lifetime).
 _table_ready = False
@@ -160,19 +162,17 @@ def generate(blocking: bool = True) -> dict:
     blocking=False → fire-and-forget on a worker thread (startup/refresh).
     """
     if not blocking:
-        t = threading.Thread(target=_generate_impl, kwargs={"_mark_done": True}, daemon=True)
+        t = threading.Thread(target=_generate_impl, daemon=True)
         t.start()
         return {"status": "generating", "msg": "评论生成中…"}
     return _generate_impl()
 
 
-def _generate_impl(_mark_done: bool = False) -> dict:
+def _generate_impl() -> dict:
     if not _gen_lock.acquire(blocking=False):
-        # Another generation is in flight — don't stack a second one.
-        if _mark_done:
-            _busy.set()
+        # Another generation is in flight — don't stack a second one. The lock
+        # being held IS the busy signal, so there is nothing to flag here.
         return {"status": "generating", "msg": "已有生成在进行中…"}
-    _busy.set()
     try:
         snapshot = build_snapshot()
         text, model_name = call_model(snapshot)
@@ -181,7 +181,6 @@ def _generate_impl(_mark_done: bool = False) -> dict:
     except Exception as e:
         return {"status": "error", "msg": f"生成失败：{type(e).__name__}: {e}"}
     finally:
-        _busy.clear()
         _gen_lock.release()
 
 
@@ -231,18 +230,32 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict:
 
 
 def get_current() -> dict:
-    """Return the latest commentary row, or a generating/empty status."""
-    if _busy.is_set():
-        return {"status": "generating", "msg": "评论生成中…", "text": ""}
+    """Return the latest commentary row, or a generating/empty status.
+
+    While a generation is in flight we return the PREVIOUS row with
+    ``regenerating: True`` — blanking the text out (the old behaviour) threw away
+    a perfectly good comment for the whole model call, and combined with the UI
+    poll it rendered an empty card for minutes.
+    """
+    row = None
     try:
         conn = _connect()
         if not _table_ready:
             _ensure_table(conn)
         row = _latest_row(conn)
         conn.close()
-        return _row_to_dict(row)
     except Exception:
         return {"status": "empty", "msg": "暂无评论", "text": ""}
+    if _gen_lock.locked():
+        if row is None:
+            return {"status": "generating", "msg": "评论生成中…", "text": "", "regenerating": False}
+        return {
+            **_row_to_dict(row),
+            "status": "generating",
+            "msg": "评论重新生成中…（以下为上一版）",
+            "regenerating": True,
+        }
+    return _row_to_dict(row)
 
 
 def mark_stale_and_regenerate() -> dict:

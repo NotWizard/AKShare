@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildScatterQuadrant, buildDualAxisLine } from '@/components/charts/options'
@@ -11,31 +12,22 @@ import type { CycleFrame } from '@/api/types'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
-const merrill = shallowRef<CycleFrame | null>(null)
 // 通胀原料曲线（美林纵轴 CPI 的主轴 + 短周期先行）
 type Rec = Record<string, string | number | null>
-const cpiPpi = shallowRef<Rec[]>([])   // cpi_yoy,ppi_yoy
-const cpiMom = shallowRef<Rec[]>([])   // cpi_mom,ppi_mom (环比呼应图)
-let reqId = 0
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [r, cp, cm] = await Promise.all([
-      api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,ppi_yoy', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_mom,ppi_mom', true),
-    ])
-    if (mine !== reqId) return
-    merrill.value = markRaw(r); cpiPpi.value = markRaw(cp.records); cpiMom.value = markRaw(cm.records)
-  }
-  catch (e) { if (mine === reqId) error.value = (e as Error).message }
-  finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [r, cp, cm] = await Promise.all([
+    api.getCycle('merrill', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_yoy,ppi_yoy', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,cpi_mom,ppi_mom', true, { signal }),
+  ])
+  return { merrill: markRaw(r), cpiPpi: markRaw(cp.records), cpiMom: markRaw(cm.records) }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
+const merrill = computed<CycleFrame | null>(() => data.value?.merrill ?? null)
+const cpiPpi = computed<Rec[]>(() => data.value?.cpiPpi ?? [])   // cpi_yoy,ppi_yoy
+const cpiMom = computed<Rec[]>(() => data.value?.cpiMom ?? [])   // cpi_mom,ppi_mom (环比呼应图)
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).

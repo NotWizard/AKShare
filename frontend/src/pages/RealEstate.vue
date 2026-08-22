@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import EChart from '@/components/charts/EChart.vue'
@@ -15,32 +16,25 @@ import { RadarChart } from 'echarts/charts'
 import { RadarComponent } from 'echarts/components'
 echartsUse([RadarChart, RadarComponent])
 
+type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
-const loading = ref(true)
-const error = ref<string | null>(null)
-const hp = shallowRef<Record<string, string | number | null>[]>([])
-const rate = shallowRef<Record<string, string | number | null>[]>([])   // lpr_5y, real_rate → 房贷锚
-const assessment = ref<Record<string, any>>({})
 
 const CITIES = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '天津']
-let reqId = 0
 
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [h, a, r] = await Promise.all([
-      api.getTable('house_price', filters.start ?? undefined, filters.end ?? undefined),
-      api.getRealEstate(CITIES),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_5y,real_rate', true),
-    ])
-    if (mine !== reqId) return
-    hp.value = markRaw(h.records); assessment.value = a; rate.value = markRaw(r.records)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [h, a, r] = await Promise.all([
+    api.getTable('house_price', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+    api.getRealEstate(CITIES, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,lpr_5y,real_rate', true, { signal }),
+  ])
+  return { hp: markRaw(h.records), assessment: a as Record<string, any>, rate: markRaw(r.records) }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
+
+const hp = computed<Rec[]>(() => data.value?.hp ?? [])
+const rate = computed<Rec[]>(() => data.value?.rate ?? [])   // lpr_5y, real_rate → 房贷锚
+const assessment = computed<Record<string, any>>(() => data.value?.assessment ?? {})
 
 // pivot house_price rows → series per city (new_yoy)
 const priceOpt = computed(() => {

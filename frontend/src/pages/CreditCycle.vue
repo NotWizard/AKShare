@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, shallowRef, markRaw, computed, watchEffect } from 'vue'
+import { markRaw, computed } from 'vue'
 import { api } from '@/api/client'
+import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
 import { buildCreditM2Chart, buildCreditImpulseChart, buildBarLineCombo, buildDualAxisLine, buildSpreadChart } from '@/components/charts/options'
@@ -15,35 +16,29 @@ const refresh = useRefreshStore()
 // Per-chart column groups, each with its own align_start so a late-starting
 // column (社融存量 2016) doesn't truncate an early one (M2 1991).
 type Rec = Record<string, string | number | null>
-const m2Dm = shallowRef<Rec[]>([])       // date,m2_yoy        → 1991-12
-const m1m2Dm = shallowRef<Rec[]>([])     // date,m1_yoy,m2_yoy → 1991-12
-const spreadDm = shallowRef<Rec[]>([])   // date,m2_m1_spread  → 1991-12
-const sfDm = shallowRef<Rec[]>([])       // date,total,sf_stock_yoy → 2016-01
-const ncDm = shallowRef<Rec[]>([])       // date,new_rmb_loan,loan_yoy → 2009-01
-const credit = shallowRef<CycleFrame | null>(null)
-const loading = ref(true)
-const error = ref<string | null>(null)
-let reqId = 0
 
-async function load() {
-  const mine = ++reqId
-  loading.value = true
-  error.value = null
-  try {
-    const [m2, m12, sp, sf, nc, cc] = await Promise.all([
-      api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_yoy', true),
-      api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m1_yoy,m2_yoy', true),
-      api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_m1_spread', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,total,sf_stock_yoy', true),
-      api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,new_rmb_loan,loan_yoy', true),
-      api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined),
-    ])
-    if (mine !== reqId) return
-    m2Dm.value = markRaw(m2.records); m1m2Dm.value = markRaw(m12.records); spreadDm.value = markRaw(sp.records); sfDm.value = markRaw(sf.records); ncDm.value = markRaw(nc.records); credit.value = markRaw(cc)
-  } catch (e) { if (mine === reqId) error.value = (e as Error).message } finally { if (mine === reqId) loading.value = false }
-}
+// useAsyncData owns loading/error/abort; `load` is still the retry handler.
+const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
+  const [m2, m12, sp, sf, nc, cc] = await Promise.all([
+    api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_yoy', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m1_yoy,m2_yoy', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_m1_spread', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,total,sf_stock_yoy', true, { signal }),
+    api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,new_rmb_loan,loan_yoy', true, { signal }),
+    api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined, { signal }),
+  ])
+  return {
+    m2: markRaw(m2.records), m1m2: markRaw(m12.records), spread: markRaw(sp.records),
+    sf: markRaw(sf.records), nc: markRaw(nc.records), credit: markRaw(cc),
+  }
+}, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
 
-watchEffect(() => { void filters.start; void filters.end; void refresh.lastRefreshedAt; load() })
+const m2Dm = computed<Rec[]>(() => data.value?.m2 ?? [])           // date,m2_yoy        → 1991-12
+const m1m2Dm = computed<Rec[]>(() => data.value?.m1m2 ?? [])       // date,m1_yoy,m2_yoy → 1991-12
+const spreadDm = computed<Rec[]>(() => data.value?.spread ?? [])   // date,m2_m1_spread  → 1991-12
+const sfDm = computed<Rec[]>(() => data.value?.sf ?? [])           // date,total,sf_stock_yoy → 2016-01
+const ncDm = computed<Rec[]>(() => data.value?.nc ?? [])           // date,new_rmb_loan,loan_yoy → 2009-01
+const credit = computed<CycleFrame | null>(() => data.value?.credit ?? null)
 
 // Options are built in computeds (not the template) so each rebuild yields one
 // markRaw'd object that ECharts merges into the live instance (preserves zoom).

@@ -12,4 +12,5 @@
   --text: #f1f5f9;
   --text-2: #94a3b8;
   --text-3: #8294a8;
+  --text-4: #7f90a4; /* dimmest tier that still passes WCAG AA at 10px */
 }

@@ -1,48 +1,196 @@
 // API client — typed wrappers over the FastAPI endpoints. Types mirror the
 // Pydantic schemas (single source of truth via shared/openapi.json codegen; P0
 // ships hand-written types, `npm run gen:api` regenerates from OpenAPI).
+//
+// Transport contract (see docs/AUDIT_FIXES.md FE-M2/M3/M6):
+//   · every call accepts an optional caller `signal`; it is merged with the
+//     timeout via AbortSignal.any so the deadline covers the BODY download too
+//     (the old clearTimeout-after-headers left slow bodies unbounded);
+//   · idempotent GETs retry with bounded exponential backoff on transport
+//     errors / 408 / 429 / 5xx — POSTs never retry;
+//   · identical signal-less GETs are deduped in flight and cached for a short
+//     TTL, invalidated by invalidateCache() on every successful data refresh;
+//   · failures throw ApiError with a machine-readable `kind` so the UI can name
+//     the category instead of dumping `500 {"detail":...}` at the user.
 import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth, CrclOverview, CrclMetric, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from './types'
 
 export const BASE = '/api/v1'
 
-async function getJSON<T>(path: string): Promise<T> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30s timeout
-  try {
-    const resp = await fetch(`${BASE}${path}`, { signal: controller.signal })
-    clearTimeout(timeoutId)
-    if (!resp.ok) {
-      const body = (await resp.text()).slice(0, 200)
-      throw new Error(`${resp.status} ${body}`)
-    }
-    return resp.json()
-  } catch (e) {
-    clearTimeout(timeoutId)
-    if ((e as Error).name === 'AbortError') {
-      throw new Error('请求超时（30s）')
-    }
-    throw e
+const DEFAULT_TIMEOUT_MS = 30_000
+const DEFAULT_TTL_MS = 15_000     // short enough that a re-navigation is "the same screen"
+const MAX_RETRIES = 2             // → at most 3 attempts, GET only
+const RETRY_BASE_MS = 300         // 300ms, 900ms (×3 exponential)
+const RETRY_STATUS = new Set([408, 429, 500, 502, 503, 504])
+
+/** Error category the UI can turn into a sentence (never a raw HTTP dump). */
+export type ApiErrorKind =
+  | 'unreachable'   // transport failed: backend down / DNS / offline
+  | 'timeout'       // our own deadline fired
+  | 'aborted'       // the caller aborted (route change, newer request)
+  | 'server'        // 5xx or an unparseable body
+  | 'client'        // 4xx (bad params, 404 …)
+
+export class ApiError extends Error {
+  readonly kind: ApiErrorKind
+  readonly status: number | null
+  readonly detail: string
+  /** Safe to re-issue: transport hiccup or a transient server status. */
+  readonly retriable: boolean
+
+  constructor(kind: ApiErrorKind, message: string, status: number | null = null, detail = '') {
+    super(message)
+    this.name = 'ApiError'
+    this.kind = kind
+    this.status = status
+    this.detail = detail
+    this.retriable = kind === 'unreachable' || (status !== null && RETRY_STATUS.has(status))
   }
 }
 
-async function postJSON<T>(path: string): Promise<T> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30s timeout
+export interface ReqOpts {
+  /** Caller lifetime — merged with the timeout; aborting frees the connection. */
+  signal?: AbortSignal
+  timeoutMs?: number
+  /** 0 disables the response cache for this call (polling endpoints). */
+  ttlMs?: number
+  retries?: number
+}
+
+// ── error mapping ───────────────────────────────────────────────────────────
+const HTTP_LABEL: Record<number, string> = {
+  404: '接口不存在（404）',
+  408: '后端处理超时（408）',
+  422: '请求参数不合法（422）',
+  429: '请求过于频繁（429）',
+  500: '服务端内部错误（500）',
+  502: '网关错误（502）',
+  503: '服务暂不可用（503）',
+  504: '网关超时（504）',
+}
+
+/** Pull FastAPI's `{"detail": ...}` out of the body so the UI can show it separately. */
+function bodyDetail(body: string): string {
+  const raw = body.slice(0, 400)
   try {
-    const resp = await fetch(`${BASE}${path}`, { method: 'POST', signal: controller.signal })
-    clearTimeout(timeoutId)
-    if (!resp.ok) {
-      const body = (await resp.text()).slice(0, 200)
-      throw new Error(`${resp.status} ${body}`)
+    const parsed = JSON.parse(raw) as { detail?: unknown }
+    if (parsed && typeof parsed === 'object' && 'detail' in parsed) {
+      return typeof parsed.detail === 'string' ? parsed.detail : JSON.stringify(parsed.detail)
     }
-    return resp.json()
-  } catch (e) {
-    clearTimeout(timeoutId)
-    if ((e as Error).name === 'AbortError') {
-      throw new Error('请求超时（30s）')
-    }
-    throw e
+  } catch { /* not JSON — fall through to the raw text */ }
+  return raw
+}
+
+function httpError(status: number, body: string): ApiError {
+  const kind: ApiErrorKind = status >= 500 ? 'server' : 'client'
+  const label = HTTP_LABEL[status] ?? `请求失败（HTTP ${status}）`
+  return new ApiError(kind, label, status, bodyDetail(body))
+}
+
+/** Classify a thrown fetch/JSON failure. `external` decides abort vs timeout. */
+function transportError(e: unknown, external: AbortSignal | undefined, timeoutMs: number): ApiError {
+  if (e instanceof ApiError) return e
+  const err = e as { name?: string; message?: string }
+  if (err?.name === 'AbortError' || err?.name === 'TimeoutError') {
+    if (external?.aborted) return new ApiError('aborted', '请求已取消')
+    return new ApiError('timeout', `请求超时（${Math.round(timeoutMs / 1000)}s）`, null, err.message ?? '')
   }
+  if (err?.name === 'SyntaxError') {
+    return new ApiError('server', '响应解析失败（非 JSON）', null, err.message ?? '')
+  }
+  return new ApiError('unreachable', '后端未连接', null, err?.message ?? String(e))
+}
+
+// ── single attempt ──────────────────────────────────────────────────────────
+async function attempt<T>(path: string, method: 'GET' | 'POST', opts: ReqOpts): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const external = opts.signal
+  // One merged signal for headers AND body: the deadline no longer stops at the
+  // response headers, and a caller abort tears the connection down immediately.
+  const signal = external
+    ? AbortSignal.any([AbortSignal.timeout(timeoutMs), external])
+    : AbortSignal.timeout(timeoutMs)
+  try {
+    const resp = await fetch(`${BASE}${path}`, { method, signal })
+    if (!resp.ok) throw httpError(resp.status, await resp.text().catch(() => ''))
+    return (await resp.json()) as T
+  } catch (e) {
+    throw transportError(e, external, timeoutMs)
+  }
+}
+
+/** Backoff wait that ends early when the caller aborts (no dangling timer). */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
+
+/** GET with bounded exponential-backoff retry. Only ever used for GET. */
+async function getWithRetry<T>(path: string, opts: ReqOpts): Promise<T> {
+  const attempts = (opts.retries ?? MAX_RETRIES) + 1
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt<T>(path, 'GET', opts)
+    } catch (e) {
+      const err = e as ApiError
+      const last = i >= attempts - 1
+      if (last || !err.retriable || opts.signal?.aborted) throw err
+      await sleep(RETRY_BASE_MS * 3 ** i, opts.signal)
+      if (opts.signal?.aborted) throw new ApiError('aborted', '请求已取消')
+    }
+  }
+}
+
+// ── dedupe + TTL cache (GET only) ───────────────────────────────────────────
+const cache = new Map<string, { at: number; data: unknown }>()
+const inflight = new Map<string, Promise<unknown>>()
+
+/**
+ * Drop every cached response. Called whenever the dataset changes
+ * (stores/refresh.ts bumps lastRefreshedAt / crclRefreshedAt), so the TTL never
+ * hides fresh data.
+ */
+export function invalidateCache(): void {
+  cache.clear()
+}
+
+async function getJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  const ttl = opts.ttlMs ?? DEFAULT_TTL_MS
+  if (ttl > 0) {
+    const hit = cache.get(path)
+    if (hit && Date.now() - hit.at < ttl) return hit.data as T
+  }
+  // Dedupe is restricted to signal-less callers: a shared promise would let one
+  // consumer's abort reject an unrelated consumer. Signal-carrying callers
+  // (pages, via useAsyncData) own their request and cancel only their own.
+  if (opts.signal) {
+    const data = await getWithRetry<T>(path, opts)
+    if (ttl > 0) cache.set(path, { at: Date.now(), data })
+    return data
+  }
+  const running = inflight.get(path)
+  if (running) return running as Promise<T>
+  const p = getWithRetry<T>(path, opts)
+    .then((data) => {
+      if (ttl > 0) cache.set(path, { at: Date.now(), data })
+      return data
+    })
+    .finally(() => {
+      if (inflight.get(path) === p) inflight.delete(path)
+    })
+  inflight.set(path, p)
+  return p as Promise<T>
+}
+
+// POST is never retried, never cached, never deduped (not idempotent).
+function postJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  return attempt<T>(path, 'POST', opts)
 }
 
 // build "?a=..&b=.." from defined pairs (URLSearchParams drops undefined
@@ -53,37 +201,40 @@ function qs(pairs: Array<[string, string | undefined]>): string {
   return q.toString() ? '?' + q.toString() : ''
 }
 
+// Polling / status endpoints must never read a cached body.
+const NO_CACHE: ReqOpts = { ttlMs: 0 }
+
 export const api = {
-  getDerivedMonthly: (start?: string, end?: string, cols?: string, alignStart?: boolean) =>
-    getJSON<DerivedFrame>(`/derived/monthly${qs([['start', start], ['end', end], ['cols', cols], ['align_start', alignStart ? 'true' : undefined]])}`),
-  getDerivedQuarterly: (start?: string, end?: string) =>
-    getJSON<DerivedFrame>(`/derived/quarterly${qs([['start', start], ['end', end]])}`),
-  getTable: (name: string, start?: string, end?: string) =>
-    getJSON<DerivedFrame>(`/table/${name}${qs([['start', start], ['end', end]])}`),
-  getCycle: (name: string, start?: string, end?: string) =>
-    getJSON<CycleFrame>(`/cycles/${name}${qs([['start', start], ['end', end]])}`),
-  getSignals: () => getJSON<SignalSummary>('/signals'),
-  getSignalHistory: (limit?: number) =>
-    getJSON<SignalHistory>(`/signals/history${qs([['limit', limit?.toString()]])}`),
+  getDerivedMonthly: (start?: string, end?: string, cols?: string, alignStart?: boolean, opts?: ReqOpts) =>
+    getJSON<DerivedFrame>(`/derived/monthly${qs([['start', start], ['end', end], ['cols', cols], ['align_start', alignStart ? 'true' : undefined]])}`, opts),
+  getDerivedQuarterly: (start?: string, end?: string, opts?: ReqOpts) =>
+    getJSON<DerivedFrame>(`/derived/quarterly${qs([['start', start], ['end', end]])}`, opts),
+  getTable: (name: string, start?: string, end?: string, opts?: ReqOpts) =>
+    getJSON<DerivedFrame>(`/table/${name}${qs([['start', start], ['end', end]])}`, opts),
+  getCycle: (name: string, start?: string, end?: string, opts?: ReqOpts) =>
+    getJSON<CycleFrame>(`/cycles/${name}${qs([['start', start], ['end', end]])}`, opts),
+  getSignals: (opts?: ReqOpts) => getJSON<SignalSummary>('/signals', opts),
+  getSignalHistory: (limit?: number, opts?: ReqOpts) =>
+    getJSON<SignalHistory>(`/signals/history${qs([['limit', limit?.toString()]])}`, opts),
   // cities as repeated query params (?cities=北京&cities=上海) — robust vs proxies.
-  getRealEstate: (cities?: string[]) => {
-    if (!cities?.length) return getJSON<RealEstateResponse>('/real-estate')
+  getRealEstate: (cities?: string[], opts?: ReqOpts) => {
+    if (!cities?.length) return getJSON<RealEstateResponse>('/real-estate', opts)
     const q = new URLSearchParams()
     for (const c of cities) q.append('cities', c)
-    return getJSON<RealEstateResponse>(`/real-estate?${q.toString()}`)
+    return getJSON<RealEstateResponse>(`/real-estate?${q.toString()}`, opts)
   },
-  getRefreshStatus: () => getJSON<RefreshResult>('/refresh/status'),
-  triggerRefresh: (full?: boolean) =>
-    postJSON<RefreshResult>(`/refresh${qs([['full', full ? '1' : undefined]])}`),
-  getSourcesHealth: () => getJSON<SourcesHealth>('/sources/health'),
-  getCommentary: () => getJSON<Commentary>('/commentary'),
-  regenerateCommentary: () => postJSON<Commentary>('/commentary/regenerate'),
+  getRefreshStatus: (opts?: ReqOpts) => getJSON<RefreshResult>('/refresh/status', { ...NO_CACHE, ...opts }),
+  triggerRefresh: (full?: boolean, opts?: ReqOpts) =>
+    postJSON<RefreshResult>(`/refresh${qs([['full', full ? '1' : undefined]])}`, opts),
+  getSourcesHealth: (opts?: ReqOpts) => getJSON<SourcesHealth>('/sources/health', opts),
+  getCommentary: (opts?: ReqOpts) => getJSON<Commentary>('/commentary', { ...NO_CACHE, ...opts }),
+  regenerateCommentary: (opts?: ReqOpts) => postJSON<Commentary>('/commentary/regenerate', opts),
   // CRCL 监控
-  getCrclOverview: () => getJSON<CrclOverview>('/crcl/overview'),
-  getCrclMetrics: (keys?: string) =>
-    getJSON<{ metrics: Record<string, CrclMetric> }>(`/crcl/metrics${qs([['keys', keys]])}`),
-  getCrclEvents: () => getJSON<{ updated_at: string | null; events: CrclEvent[] }>('/crcl/events'),
-  getCrclAlerts: () => getJSON<{ rules: CrclAlertRule[]; history: CrclLogRow[] }>('/crcl/alerts'),
-  getCrclLogs: (limit = 60) => getJSON<{ logs: CrclLogRow[] }>(`/crcl/logs?limit=${limit}`),
-  getCrclFundamentals: () => getJSON<CrclFundamentals>('/crcl/fundamentals'),
+  getCrclOverview: (opts?: ReqOpts) => getJSON<CrclOverview>('/crcl/overview', opts),
+  getCrclMetrics: (keys?: string, opts?: ReqOpts) =>
+    getJSON<{ metrics: Record<string, CrclMetric> }>(`/crcl/metrics${qs([['keys', keys]])}`, opts),
+  getCrclEvents: (opts?: ReqOpts) => getJSON<{ updated_at: string | null; events: CrclEvent[] }>('/crcl/events', opts),
+  getCrclAlerts: (opts?: ReqOpts) => getJSON<{ rules: CrclAlertRule[]; history: CrclLogRow[] }>('/crcl/alerts', opts),
+  getCrclLogs: (limit = 60, opts?: ReqOpts) => getJSON<{ logs: CrclLogRow[] }>(`/crcl/logs?limit=${limit}`, opts),
+  getCrclFundamentals: (opts?: ReqOpts) => getJSON<CrclFundamentals>('/crcl/fundamentals', opts),
 }

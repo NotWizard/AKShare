@@ -1,7 +1,12 @@
 // Animated count-up for numeric KPI tiles (micro-interaction, no heavy dep).
 import { ref, watch, onScopeDispose, type Ref } from 'vue'
 
-export function useCountUp(source: Ref<number | null | undefined>, duration = 600) {
+/**
+ * @param digits decimals to render. Must match the tile's real precision:
+ *   toFixed(1) turned EPS 0.18 into "0.2" (next to a raw 0.26 consensus) and
+ *   integer counts into "2.0". Pass 0 for counts, 2 for per-share numbers.
+ */
+export function useCountUp(source: Ref<number | null | undefined>, duration = 600, digits = 1) {
   const display = ref<string>('—')
   let raf = 0
 
@@ -14,7 +19,7 @@ export function useCountUp(source: Ref<number | null | undefined>, duration = 60
       const t = Math.min(1, (now - start) / duration)
       const eased = 1 - Math.pow(1 - t, 3)   // easeOutCubic
       const val = from + (target - from) * eased
-      display.value = val.toFixed(1)
+      display.value = val.toFixed(digits)
       if (t < 1) raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
