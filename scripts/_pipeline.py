@@ -51,6 +51,13 @@ SHRINK_FLOOR = 0.8
 #   ranges    : column → (lo, hi) value domain; validate() rejects when >10% of
 #               non-null values fall outside (blocks unit/scale errors, absorbs
 #               isolated revisions). Bounds calibrated on live DB min–max 2026-08-09.
+#   key       : the table's GRAIN — the column tuple that uniquely identifies a
+#               row (default ["date"]). validate() rejects duplicate keys, the
+#               shrink guard counts distinct keys (not distinct dates), and
+#               save_to_db materialises it as a UNIQUE INDEX after every load.
+#   min_groups: for multi-series tables (key longer than ["date"]) the minimum
+#               number of distinct series, so losing whole series is rejected
+#               even on a first/cold load where no previous count exists.
 TABLE_SPECS = {
     "money_supply":     dict(min_rows=400, required=["m2_yoy"],
                              ranges=dict(m2_yoy=(0, 45))),
@@ -69,7 +76,12 @@ TABLE_SPECS = {
                              ranges=dict(total=(-5000, 100000))),
     "lpr":              dict(min_rows=100, required=["lpr_1y"]),
     "industrial":       dict(min_rows=100, required=["ip_yoy"]),
-    "house_price":      dict(min_rows=500, required=["date"]),
+    # 10-城市面板：粒度是 (date, city)，不是 date。只按 date 防缩水会漏掉「7 个城市
+    # 失败但日期集不变」的坍塌（行数 1860→558 仍过 min_rows 且日期数不降），
+    # if_exists="replace" 会因此删掉另外 7 城全部历史。min_groups 对齐
+    # fetch_house_price 里硬编码的 10 城清单（新增城市时同步上调）。
+    "house_price":      dict(min_rows=500, required=["date", "new_yoy"],
+                             key=["date", "city"], min_groups=10),
     "household_income": dict(min_rows=8),                 # annual data, naturally sparse
     "new_credit":       dict(min_rows=100, required=["new_rmb_loan"]),
     "bond_yield":       dict(min_rows=100,  required=["y_10y"],
@@ -96,26 +108,70 @@ def iso_ts():
 
 
 # ── count helpers (grain-aware) ───────────────────────────────────────────────
-def table_distinct_dates(conn, table):
-    """Distinct date count in a table (0 if absent / no date col). Used as the
-    grain-fair basis for the shrink guard — robust against raw tables that carry
-    duplicate dates (e.g. lpr). Table names are hardcoded constants from the
-    fetchers, so direct interpolation is safe."""
+def spec_key(table):
+    """The table's grain — the column tuple that uniquely identifies a row.
+    Defaults to ["date"]; multi-series tables declare their own (house_price →
+    ["date", "city"])."""
+    return list(TABLE_SPECS.get(table, {}).get("key", ["date"]))
+
+
+def table_distinct_keys(conn, table, key=None):
+    """Distinct GRAIN-KEY count in a table (0 if absent / key cols missing).
+
+    Used as the grain-fair basis for the shrink guard: robust against raw tables
+    that carry duplicate dates by design (house_price: 10 cities per date) as
+    well as by accident (lpr). Table/column names are hardcoded constants from
+    the fetchers and TABLE_SPECS, so direct interpolation is safe."""
+    key = spec_key(table) if key is None else list(key)
     try:
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info([{table}])").fetchall()]
-        date_col = next((c for c in cols if c.lower() == "date"), None)
-        if not date_col:
+        cols = {r[1].lower(): r[1] for r in conn.execute(f"PRAGMA table_info([{table}])").fetchall()}
+        have = [cols[c.lower()] for c in key if c.lower() in cols]
+        if not have:
             return 0
+        cols_sql = ", ".join(f"[{c}]" for c in have)
         return conn.execute(
-            f"SELECT COUNT(*) FROM (SELECT DISTINCT [{date_col}] FROM [{table}])"
+            f"SELECT COUNT(*) FROM (SELECT DISTINCT {cols_sql} FROM [{table}])"
         ).fetchone()[0]
     except sqlite3.Error:
         return 0
 
 
+def table_distinct_dates(conn, table):
+    """Distinct date count in a table (0 if absent / no date col)."""
+    return table_distinct_keys(conn, table, key=["date"])
+
+
+def enforce_indexes(conn, table, key=None):
+    """Materialise the table's grain as a real DB constraint after a load.
+
+    ``to_sql(if_exists="replace")`` DROPs and re-CREATEs the table, which also
+    drops every index on it — that is why the live DB had 0 indexes, no UNIQUE
+    key and silently accumulated duplicate dates (lpr 1536 rows / 154 dates).
+    Re-creating the unique index right after each load is what makes it survive
+    the replace, and it turns "duplicate rows" from a silent data defect into an
+    IntegrityError at write time. A secondary date index is added for
+    multi-series tables (the unique index already covers date-keyed ones).
+
+    Returns the unique index name, or None when the key columns are absent."""
+    key = spec_key(table) if key is None else list(key)
+    cols = {r[1].lower(): r[1] for r in conn.execute(f"PRAGMA table_info([{table}])").fetchall()}
+    have = [cols[c.lower()] for c in key if c.lower() in cols]
+    if not have:
+        return None
+    cols_sql = ", ".join(f"[{c}]" for c in have)
+    name = "ux_" + table + "_" + "_".join(c.lower() for c in have)
+    conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS [{name}] ON [{table}] ({cols_sql})")
+    if len(have) > 1 and "date" in cols:
+        conn.execute(f"CREATE INDEX IF NOT EXISTS [ix_{table}_date] ON [{table}] ([date])")
+    return name
+
+
 # ── validation gate ──────────────────────────────────────────────────────────
 def validate(df, table, prev_distinct_dates=0):
-    """Return (ok, reason). A fetched df must clear every check to replace a table."""
+    """Return (ok, reason). A fetched df must clear every check to replace a table.
+
+    ``prev_distinct_dates`` is the previously-good table's distinct GRAIN-KEY
+    count (== distinct dates for date-keyed tables; see table_distinct_keys)."""
     spec = TABLE_SPECS.get(table, {})
     min_rows = spec.get("min_rows", 1)
     required = spec.get("required", [])
@@ -138,12 +194,32 @@ def validate(df, table, prev_distinct_dates=0):
         s = df[c].dropna()
         if len(s) and ((s < lo) | (s > hi)).mean() > 0.10:
             return False, f"column {c!r}: >10% of non-null values outside [{lo}, {hi}]"
-    # shrink guard: detect distinct-date erosion vs the previously-good table
-    if prev_distinct_dates and "date" in df.columns:
-        new_dates = df["date"].nunique()
-        if new_dates < prev_distinct_dates * SHRINK_FLOOR:
+    # grain gate: the declared key must be unique. Duplicate keys are how the
+    # live DB ended up with lpr 1536 rows / 154 dates and pmi 2 rows for
+    # 2012-05 with different caixin values, which then forced order-dependent
+    # drop_duplicates(keep="last") on every reader. Reject at the gate instead.
+    key = [c for c in spec_key(table) if c in df.columns]
+    if key:
+        dups = int(df.duplicated(subset=key).sum())
+        if dups:
+            first = df[df.duplicated(subset=key, keep=False)][key].head(1).to_dict("records")
+            return False, f"{dups} duplicate rows on key {key} (e.g. {first}) — grain violation"
+    # series gate: a multi-series table must not silently lose whole series
+    # (house_price: 3 of 10 cities still clears min_rows and leaves the date set
+    # intact, while replace-write would delete the other 7 cities' history)
+    group_cols = key[1:]
+    min_groups = spec.get("min_groups", 0)
+    if group_cols and min_groups:
+        n_groups = len(df.drop_duplicates(subset=group_cols))
+        if n_groups < min_groups:
+            return False, (f"only {n_groups} distinct {group_cols} < min_groups {min_groups} "
+                           "(partial series set)")
+    # shrink guard: detect grain-key erosion vs the previously-good table
+    if prev_distinct_dates and key:
+        new_keys = len(df.drop_duplicates(subset=key))
+        if new_keys < prev_distinct_dates * SHRINK_FLOOR:
             return False, (
-                f"distinct dates {new_dates} < prev {prev_distinct_dates}×{SHRINK_FLOOR} "
+                f"distinct {key} {new_keys} < prev {prev_distinct_dates}×{SHRINK_FLOOR} "
                 "(partial/eroded fetch)"
             )
     return True, "pass"

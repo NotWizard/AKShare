@@ -10,6 +10,7 @@ import logging
 import sqlite3
 import os
 import sys
+import threading
 import time
 import warnings
 from datetime import date, datetime
@@ -35,7 +36,8 @@ from _pipeline import (  # noqa: E402
     discard_staging,
     write_manifest,
     run_derived,
-    table_distinct_dates,
+    enforce_indexes,
+    table_distinct_keys,
     validate,
 )
 from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
@@ -96,11 +98,18 @@ def save_to_db(df, table_name, conn, if_exists="replace"):
     """Validation-gated write to the STAGING connection.
 
     A fetched df must clear validate() (non-empty, min_rows, required cols not
-    all-NaN, no distinct-date erosion) before it may replace the table. On any
-    failure the previously-good staging table is kept and the outcome recorded
-    in _MANIFEST — bad data never overwrites good data.
+    all-NaN, unique grain key, no series loss, no grain-key erosion) before it
+    may replace the table. On any failure the previously-good staging table is
+    kept and the outcome recorded in _MANIFEST — bad data never overwrites good
+    data.
+
+    After a successful load the table's grain is re-materialised as a UNIQUE
+    index: ``to_sql(if_exists="replace")`` drops the table (and therefore every
+    index on it), which is why the live DB had 0 indexes and no uniqueness
+    constraint at all. The index is created BEFORE the manifest says "updated"
+    so a constraint failure is reported as a fetch failure, never as success.
     """
-    prev = table_distinct_dates(conn, table_name)
+    prev = table_distinct_keys(conn, table_name)
     ok, reason = validate(df, table_name, prev)
     if not ok:
         _MANIFEST["tables"][table_name] = {
@@ -108,16 +117,163 @@ def save_to_db(df, table_name, conn, if_exists="replace"):
             "reason": reason,
             "prev_distinct_dates": prev,
         }
-        log(f"  ⏭️  {table_name}: kept previous (prev {prev} dates) — {reason}")
+        log(f"  ⏭️  {table_name}: kept previous (prev {prev} keys) — {reason}")
         return
     df.to_sql(table_name, conn, if_exists=if_exists, index=False)
+    index = enforce_indexes(conn, table_name)
     _MANIFEST["tables"][table_name] = {
         "status": "updated",
         "new_rows": int(len(df)),
         "prev_distinct_dates": prev,
+        "unique_index": index,
         "checks": "pass",
     }
-    log(f"  ✅ {table_name}: {len(df)} rows → staging (prev {prev} dates)")
+    log(f"  ✅ {table_name}: {len(df)} rows → staging (prev {prev} keys)")
+
+
+# ─────────────────────────────────────────────
+# 0. 墙钟护栏（P-H1：每表硬超时 + 有界重试 + 整轮截止）
+# ─────────────────────────────────────────────
+# 为什么必须由调用方设界：ak.macro_china_* / ak.stock_us_daily 内部是裸
+# requests.get(url)，没有任何 timeout 参数可传，一个被黑洞的主机能让整轮采集
+# 永久挂住（launchd 因此不再启动下一次实例 → 调度静默死亡）。
+# 单位秒；可用环境变量按机器/网络调整（默认值按现网单表耗时留足余量）。
+FETCH_TIMEOUT_S = float(os.getenv("FETCH_TIMEOUT_S", "120"))
+# 单表覆盖：内部还要串/并发多次 HTTP 的表给更宽预算
+# （bond_yield 21 年×每年 30s、house_price 10 城、demographics 4 次 World Bank×60s）
+TABLE_TIMEOUT_S = {
+    "bond_yield": 240.0,
+    "house_price": 240.0,
+    "demographics": 300.0,
+    "fiscal": 180.0,
+    "household_income": 180.0,
+    "external_demand": 180.0,
+}
+# 整轮墙钟上限：无论多少表挂住，进程一定会结束（API 侧另有 REFRESH_TIMEOUT_S=300
+# 的父进程超时；这里是给 launchd/cron 无父进程场景的自守）
+FETCH_RUN_BUDGET_S = float(os.getenv("FETCH_RUN_BUDGET_S", "1500"))
+FETCH_ATTEMPTS = 2          # 首次 + 1 次重试（瞬时网络抖动/WAF 偶发 403）
+FETCH_BACKOFF_S = 5.0       # 指数退避基数：5s → 10s → …
+FETCH_GAP_S = 1.5           # 表间小停顿，避免连续 16 次请求触发 WAF 限流
+
+
+class FetchTimeout(Exception):
+    """A fetcher outlived its per-table wall-clock budget."""
+
+
+def plan_timeout(name, remaining_s, default_s=None, overrides=None):
+    """Per-table wall-clock budget, clamped by what is left of the run budget.
+    Returns <= 0 when the overall deadline is already blown (caller must then
+    record the table as failed instead of starting it)."""
+    default_s = FETCH_TIMEOUT_S if default_s is None else default_s
+    overrides = TABLE_TIMEOUT_S if overrides is None else overrides
+    return min(overrides.get(name, default_s), max(0.0, remaining_s))
+
+
+def _call_with_timeout(fn, timeout_s, name="fetch"):
+    """Run fn() in a DAEMON thread and enforce a hard wall-clock ceiling.
+
+    Why a thread: akshare exposes no timeout parameter, so "stop waiting for it"
+    is the only bound a caller can enforce.
+
+    Why a raw daemon thread and NOT ThreadPoolExecutor: the executor registers
+    an atexit hook that JOINS its workers at interpreter shutdown, so a single
+    hung fetcher would block process exit forever — re-creating the exact
+    "process never ends, schedule dies" bug this guard exists to remove. Daemon
+    threads are killed when the process exits.
+
+    Documented ceiling: CPython cannot kill a thread. A hung fetcher keeps
+    running (blocked in socket recv) until the process exits, holding one socket
+    and its frame; the run does NOT wait for it. Its only dangerous side effect
+    is a late write into the staging DB, which the caller disarms by interrupting
+    and closing the sqlite handle it was given (see _close_conn).
+    """
+    box = {}
+
+    def _target():
+        try:
+            box["value"] = fn()
+        except BaseException as e:      # noqa: BLE001 — re-raised in the caller
+            box["error"] = e
+
+    th = threading.Thread(target=_target, name=f"fetch-{name}", daemon=True)
+    th.start()
+    th.join(timeout_s)
+    if th.is_alive():
+        raise FetchTimeout(f"exceeded {timeout_s:.0f}s wall clock (thread abandoned)")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def _close_conn(conn, abandoned=False):
+    """Close a per-table staging connection; never raise.
+
+    When the fetcher was ABANDONED on timeout its thread may still be alive and
+    still holding this handle. interrupt() (documented as safe to call from
+    another thread) aborts any in-flight statement and close() invalidates the
+    handle, so the zombie's later to_sql raises inside the dead thread instead of
+    writing to the DB — which matters because after commit_staging() the staging
+    path and the LIVE DB are the same inode.
+    """
+    try:
+        conn.interrupt() if abandoned else conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _soft_empty(name):
+    """True when the gate rejected this table because the fetcher handed it an
+    EMPTY frame — i.e. the fetcher swallowed its own network error and raised
+    nothing. That is the dominant transient failure (SSL / WAF / geo-block), so
+    it is worth one retry. Deterministic rejections (min_rows / ranges / shrink /
+    duplicate keys) are NOT retried: identical input fails identically."""
+    entry = _MANIFEST.get("tables", {}).get(name) or {}
+    return entry.get("status") == "kept_previous" and entry.get("reason") == "empty result"
+
+
+def run_fetcher(name, f, conn_factory, timeout_s, attempts=FETCH_ATTEMPTS,
+                backoff_s=FETCH_BACKOFF_S, sleep=time.sleep):
+    """Run one fetcher under a hard timeout with bounded exponential backoff.
+
+    Returns (ok, err) with the pre-existing meaning of ok: "no exception and no
+    timeout reached the driver" (gate rejections stay ok=True and are reported
+    through _MANIFEST['tables'][name], which the backend turns into a warning).
+
+    Every attempt gets a FRESH sqlite connection so a timed-out attempt's
+    abandoned thread can have its handle disarmed independently of the next one.
+    """
+    err = None
+    for attempt in range(1, attempts + 1):
+        conn = conn_factory()
+        abandoned = False
+        try:
+            _call_with_timeout(lambda: f(conn), timeout_s, name)
+        except FetchTimeout as e:
+            abandoned, err = True, f"FetchTimeout: {e}"
+            logger.error("table %s attempt %d/%d timed out (%.0fs budget)",
+                         name, attempt, attempts, timeout_s)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            logger.warning("table %s attempt %d/%d failed: %s", name, attempt, attempts, err)
+        else:
+            if not _soft_empty(name):
+                return True, None
+            err = "gate: empty result (fetcher swallowed its own error)"
+            logger.warning("table %s attempt %d/%d: %s", name, attempt, attempts, err)
+        finally:
+            _close_conn(conn, abandoned=abandoned)
+        if attempt < attempts:
+            wait = backoff_s * (2 ** (attempt - 1))
+            log(f"  ⏳ {name}: 第 {attempt} 次失败，{wait:.0f}s 后重试 ({err})")
+            sleep(wait)
+    # last attempt was a soft gate rejection → keep the legacy ok=True contract
+    # (the kept_previous entry already drives the exit code and the health lamp)
+    return (True, None) if err and err.startswith("gate:") else (False, err)
 
 
 # ─────────────────────────────────────────────
@@ -308,6 +464,27 @@ def fetch_ppi(conn):
 # ─────────────────────────────────────────────
 # 5. PMI (官方 + 财新 + 非制造业)
 # ─────────────────────────────────────────────
+def _pmi_monthly(release_dates, values, col):
+    """One row per month for one PMI source, keeping the LAST release in that month.
+
+    每个源都是「发布日一行」：同一个月内可能有初值+终值两次发布（财新/Markit
+    flash & final），%Y-%m-01 把它们压成同一个 date。直接 outer merge 会做笛卡尔
+    积——现网 pmi 表 321 行 / 248 个月（2012-05 两行、caixin 49.3 与 48.7），读侧
+    只能靠顺序相关的 drop_duplicates 兜。按真实发布日排序后取当月最后一次发布
+    （终值/修订值）为权威值，结果与源顺序无关。
+    """
+    release = pd.to_datetime(release_dates)
+    out = pd.DataFrame({
+        "date": release.dt.strftime("%Y-%m-01"),
+        "_release": release,
+        col: pd.to_numeric(values, errors="coerce"),
+    }).dropna(subset=[col])
+    return (out.sort_values("_release")
+               .drop_duplicates(subset=["date"], keep="last")
+               .drop(columns=["_release"])
+               .sort_values("date").reset_index(drop=True))
+
+
 def fetch_pmi(conn):
     log("采集: PMI (官方/非制造业=东财, 财新/财新服务=akshare) ...")
     # 官方 + 非制造业 PMI: 东财 RPT_ECONOMY_PMI（当前；akshare macro_china_pmi_yearly
@@ -320,16 +497,10 @@ def fetch_pmi(conn):
     # akshare 官方/非制造业 = 全历史(2005+)底；东财(2008+ 更当前) 覆盖近期，
     # 合并避免切源丢掉 2008 前历史（审查发现的回归）。
     df_off = ak.macro_china_pmi_yearly()
-    off_ak = pd.DataFrame({
-        "date": pd.to_datetime(df_off["日期"]).dt.strftime("%Y-%m-01"),
-        "pmi_official": pd.to_numeric(df_off["今值"], errors="coerce"),
-    }).dropna(subset=["pmi_official"])
+    off_ak = _pmi_monthly(df_off["日期"], df_off["今值"], "pmi_official")
     try:
         df_non = ak.macro_china_non_man_pmi()
-        non_ak = pd.DataFrame({
-            "date": pd.to_datetime(df_non["日期"]).dt.strftime("%Y-%m-01"),
-            "pmi_non_mfg": pd.to_numeric(df_non["今值"], errors="coerce"),
-        }).dropna(subset=["pmi_non_mfg"])
+        non_ak = _pmi_monthly(df_non["日期"], df_non["今值"], "pmi_non_mfg")
     except Exception:
         non_ak = pd.DataFrame(columns=["date", "pmi_non_mfg"])
 
@@ -337,32 +508,24 @@ def fetch_pmi(conn):
         log("  ⚠️ 东财 PMI 无数据，官方/非制造业仅用 akshare")
         off, non = off_ak, non_ak
     else:
-        em2 = pd.DataFrame({
-            "date": pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01"),
-            "pmi_official": pd.to_numeric(em["pmi_official"], errors="coerce"),
-            "pmi_non_mfg": pd.to_numeric(em["pmi_non_mfg"], errors="coerce"),
-        }).dropna(subset=["pmi_official"])
+        em2 = em.assign(pmi_official=pd.to_numeric(em["pmi_official"], errors="coerce")) \
+                .dropna(subset=["pmi_official"])
+        em_off = _pmi_monthly(em2["date"], em2["pmi_official"], "pmi_official")
+        em_non = _pmi_monthly(em2["date"], em2["pmi_non_mfg"], "pmi_non_mfg")
         # 东财优先(更当前), akshare 补东财没有的早期月份
-        off = em2[["date", "pmi_official"]].merge(off_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        off = em_off.merge(off_ak, on="date", how="outer", suffixes=("_em", "_ak"))
         off["pmi_official"] = off["pmi_official_em"].combine_first(off["pmi_official_ak"])
         off = off[["date", "pmi_official"]].dropna(subset=["pmi_official"])
-        non = em2[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"]).merge(
-            non_ak, on="date", how="outer", suffixes=("_em", "_ak"))
+        non = em_non.merge(non_ak, on="date", how="outer", suffixes=("_em", "_ak"))
         non["pmi_non_mfg"] = non["pmi_non_mfg_em"].combine_first(non["pmi_non_mfg_ak"])
         non = non[["date", "pmi_non_mfg"]].dropna(subset=["pmi_non_mfg"])
 
-    cx = pd.DataFrame({
-        "date": pd.to_datetime(df_cx["日期"]).dt.strftime("%Y-%m-01"),
-        "pmi_caixin": pd.to_numeric(df_cx["今值"], errors="coerce"),
-    }).dropna(subset=["pmi_caixin"])
+    cx = _pmi_monthly(df_cx["日期"], df_cx["今值"], "pmi_caixin")
 
     # 财新服务业 PMI（东财无财新口径，仍用 akshare）
     try:
         df_svc = ak.macro_china_cx_services_pmi_yearly()
-        svc = pd.DataFrame({
-            "date": pd.to_datetime(df_svc["日期"]).dt.strftime("%Y-%m-01"),
-            "pmi_caixin_svc": pd.to_numeric(df_svc["今值"], errors="coerce"),
-        }).dropna(subset=["pmi_caixin_svc"])
+        svc = _pmi_monthly(df_svc["日期"], df_svc["今值"], "pmi_caixin_svc")
     except Exception:
         svc = pd.DataFrame(columns=["date", "pmi_caixin_svc"])
 
@@ -550,13 +713,24 @@ def fetch_lpr(conn):
     log("采集: LPR 利率 ...")
     try:
         df = ak.macro_china_lpr()
+        trade_date = pd.to_datetime(df["TRADE_DATE"])
         result = pd.DataFrame({
-            "date": pd.to_datetime(df["TRADE_DATE"]).dt.strftime("%Y-%m-01"),
+            "trade_date": trade_date,
+            "date": trade_date.dt.strftime("%Y-%m-01"),
             "lpr_1y": pd.to_numeric(df["LPR1Y"], errors="coerce"),
             "lpr_5y": pd.to_numeric(df["LPR5Y"], errors="coerce"),
         })
         # 只保留有 LPR 数据的行 (2019年8月起)
-        result = result.dropna(subset=["lpr_1y"]).sort_values("date").reset_index(drop=True)
+        result = result.dropna(subset=["lpr_1y"])
+        # 源是「每个报价日一行」，%Y-%m-01 会把同月多个报价日压成同一个 date：
+        # 旧代码因此写出 1536 行 / 154 个月（2019-08 一个月 13 行），读侧只能靠
+        # 顺序相关的 drop_duplicates(keep="last") 兜，且会挑中改革前的 4.31 而不是
+        # 8/20 新报价 4.25。按真实报价日排序后取当月最后一次报价（月末实际生效值）
+        # 才是权威值，且结果与源顺序无关。
+        result = (result.sort_values("trade_date")
+                        .drop_duplicates(subset=["date"], keep="last")
+                        .drop(columns=["trade_date"])
+                        .sort_values("date").reset_index(drop=True))
     except Exception as e:
         log(f"  ⚠️ LPR 数据采集失败 (SSL问题): {e}")
         result = pd.DataFrame()
@@ -706,6 +880,12 @@ def fetch_household_income(conn):
         # income_per_capita(元) * population_10k(万人) / 10000 = 亿元
         merged["income_abs"] = merged["income_per_capita"] * merged["population_10k"] / 10000.0
         merged = merged.dropna(subset=["income_abs"]).reset_index(drop=True)
+        # 可得日期（防前视）：date 是「参考年」，但参考年 Y 的年度居民收入/人口要到
+        # 次年 1 月《国民经济运行情况》才发布。若下游按 date 做 backward merge_asof，
+        # 会把还没发布的值回填进参考年当年各季度（约 12 个月前视，直接污染
+        # hh_debt_to_income / hh_income_share）。这里显式标注最早可得日 = Y+1-01-01
+        # （季度锚点最早为 Y+1-03-01，故按月初标注已足够消除前视）。
+        merged["available_from"] = (merged["date"].str[:4].astype(int) + 1).astype(str) + "-01-01"
     save_to_db(merged, "household_income", conn)
     return merged
 
@@ -1028,8 +1208,13 @@ def compute_exit_code(manifest: dict) -> int:
     ``manifest['tables']`` is unambiguously a REAL fetch/validate failure this
     run — never an in-window skip.
 
-    Returns 2 (partial failure) when any attempted table ended ``kept_previous``,
+    Returns 3 when the derived recompute failed (the run was DISCARDED — the live
+    DB still holds the previous consistent snapshot, so nothing landed at all),
+    2 (partial failure) when any attempted table ended ``kept_previous``,
     else 0 (fully clean)."""
+    derived = manifest.get("derived")
+    if isinstance(derived, str) and derived.startswith("failed"):
+        return 3
     tables = manifest.get("tables", {}) or {}
     failed = [t for t, v in tables.items()
               if isinstance(v, dict) and v.get("status") == "kept_previous"]
@@ -1088,23 +1273,31 @@ def main():
     backup_db()
     # ② copy live → staging (old good data already present inside staging)
     staging = open_staging()
-    conn = sqlite3.connect(staging)
+
+    def _staging_conn():
+        # check_same_thread=False: the fetcher body runs inside the per-table
+        # timeout worker thread (see _call_with_timeout). Each attempt gets its
+        # OWN handle so an abandoned attempt can be disarmed independently.
+        return sqlite3.connect(staging, check_same_thread=False)
 
     ts = iso_ts()
     _MANIFEST = {"ts": ts, "akshare": getattr(ak, "__version__", "?"), "tables": {}, "sources": []}
 
-    for name, f in selected:
+    run_deadline = time.time() + FETCH_RUN_BUDGET_S
+    for i, (name, f) in enumerate(selected):
         t0 = time.time()
-        ok, err = True, None
-        try:
-            f(conn)
-        except Exception as e:
-            ok, err = False, f"{type(e).__name__}: {e}"
-            log(f"  ❌ {f.__name__} 异常: {e}")
-            _MANIFEST["tables"].setdefault(
-                name, {"status": "kept_previous", "reason": f"{type(e).__name__}: {e}"}
-            )
-        # ok 仅表示 fetcher 是否抛异常；验证闸门拒收走 kept_previous warning（后端推导）
+        budget = plan_timeout(name, run_deadline - t0)
+        if budget <= 0:
+            # 整轮墙钟耗尽：剩余表记为失败并停止，进程一定结束，且退出码反映缺口
+            ok, err = False, f"run budget {FETCH_RUN_BUDGET_S:.0f}s exhausted before start"
+            log(f"  ⛔ {name}: {err}")
+            logger.error("run budget exhausted, skipping table %s", name)
+        else:
+            ok, err = run_fetcher(name, f, _staging_conn, budget)
+        if not ok:
+            log(f"  ❌ fetch_{name} 失败: {err}")
+            _MANIFEST["tables"].setdefault(name, {"status": "kept_previous", "reason": err})
+        # ok 仅表示 fetcher 是否抛异常/超时；验证闸门拒收走 kept_previous warning（后端推导）
         prev = prev_sources.get(name, {})
         _MANIFEST["sources"].append({
             "table": name,
@@ -1115,6 +1308,11 @@ def main():
             "consecutive_failures": 0 if ok else prev.get("consecutive_failures", 0) + 1,
             "last_success": ts if ok else prev.get("last_success"),
         })
+        # 表间小停顿：连续 16 次抓取容易触发源站 WAF 限流（最后一张表不必等）
+        if i < len(selected) - 1 and time.time() < run_deadline:
+            time.sleep(FETCH_GAP_S)
+
+    conn = sqlite3.connect(staging)
 
     # sources 最终按 fetchers 顺序：本次抓取的 + 窗口外沿用上次整条的
     fetched = {s["table"]: s for s in _MANIFEST["sources"]}
@@ -1141,8 +1339,18 @@ def main():
         run_derived(conn)
         _MANIFEST["derived"] = "recomputed"
     except Exception as e:
-        log(f"  ⚠️ 衍生计算失败 (保留旧衍生表): {e}")
+        # 衍生失败绝不能提交：raw 已更新而 derived 仍是旧的 → 库内自相矛盾的快照，
+        # 而信号/相位正是从 derived 算出来的。丢弃 staging，保留上一份一致快照。
+        log(f"  ❌ 衍生计算失败，丢弃本轮 staging（保留上一份一致快照）: {e}")
+        logger.error("derived recompute failed, staging DISCARDED (live DB unchanged): %s", e)
         _MANIFEST["derived"] = f"failed: {e}"
+        conn.close()
+        discard_staging()
+        write_manifest(_MANIFEST)     # 审计留痕：本轮为何没有落库
+        log("=" * 50)
+        log("采集中止 (staging discarded): live DB 未改动")
+        log("=" * 50)
+        return compute_exit_code(_MANIFEST)
 
     conn.commit()
     conn.close()

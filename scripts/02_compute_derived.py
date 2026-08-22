@@ -11,12 +11,31 @@ import sys
 import pandas as pd
 import numpy as np
 
+# allow `import _pipeline` whether run as a script or loaded via importlib
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _pipeline import enforce_indexes  # noqa: E402
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
 
 def log(msg):
     from datetime import datetime
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+def _monthly(df, cols):
+    """Reindex a monthly frame onto a CONTINUOUS month-start index.
+
+    pct_change(n) / shift(n) are ROW offsets, not calendar offsets: on a frame
+    that was merely sort_values("date"), one missing month silently turns a
+    12-month change into an 11- or 13-month change — a plausible-looking wrong
+    number. asfreq("MS") inserts the missing months as NaN rows, so a 12-row
+    offset IS 12 calendar months and a gap propagates as NaN instead.
+    """
+    out = (df[["date"] + cols].dropna(subset=["date"])
+           .drop_duplicates(subset=["date"], keep="last")
+           .set_index("date").sort_index())
+    return out.asfreq("MS")
 
 
 def load_table(conn, table):
@@ -124,14 +143,18 @@ def compute_derived(conn):
     if not social_fin.empty:
         sf = social_fin.copy()
         sf["date"] = pd.to_datetime(sf["date"])
-        sf = sf.sort_values("date")
-        # 累计社融 → 滚动12月存量估算
-        sf["total_12m"] = sf["total"].rolling(12, min_periods=1).sum()
-        sf["sf_stock_yoy"] = sf["total_12m"].pct_change(12) * 100  # 同比增速
-        sf["sf_impulse"] = (sf["total"] - sf["total"].shift(12))  # 信贷脉冲（简化）
+        sf_cols = ["total"] + (["rmb_loan"] if "rmb_loan" in sf.columns else [])
+        # 连续月度轴：pct_change(12)/shift(12) 才是真正的「12 个日历月」
+        sfm = _monthly(sf, sf_cols)
+        # 累计社融 → 滚动12月存量估算。min_periods=12（不是 1）：不足 12 个月的
+        # 部分和拿去做同比，等于「12 个月之和 ÷ 1 个月之值」，头部约 12 个点会给出
+        # 几千的假同比却被当作真实同比展示。窗口不满 → NaN。
+        sfm["total_12m"] = sfm["total"].rolling(12, min_periods=12).sum()
+        sfm["sf_stock_yoy"] = sfm["total_12m"].pct_change(12) * 100  # 同比增速
+        sfm["sf_impulse"] = sfm["total"] - sfm["total"].shift(12)    # 信贷脉冲（简化）
 
         monthly = monthly.merge(
-            sf[["date", "total", "rmb_loan", "sf_stock_yoy", "sf_impulse"]],
+            sfm.reset_index()[["date"] + sf_cols + ["sf_stock_yoy", "sf_impulse"]],
             on="date", how="left"
         )
 
@@ -139,14 +162,14 @@ def compute_derived(conn):
     if not new_credit.empty:
         nc = new_credit.copy()
         nc["date"] = pd.to_datetime(nc["date"])
-        nc = nc.sort_values("date")
+        ncm = _monthly(nc, ["new_rmb_loan"])
         # 新增贷款同比增速（作为信用脉冲的替代）
-        nc["loan_yoy"] = nc["new_rmb_loan"].pct_change(12) * 100
-        # 新增贷款 12 月滚动累计
-        nc["loan_12m"] = nc["new_rmb_loan"].rolling(12, min_periods=1).sum()
-        nc["loan_stock_yoy"] = nc["loan_12m"].pct_change(12) * 100
+        ncm["loan_yoy"] = ncm["new_rmb_loan"].pct_change(12) * 100
+        # 新增贷款 12 月滚动累计（同 total_12m：窗口必须满 12 个月）
+        ncm["loan_12m"] = ncm["new_rmb_loan"].rolling(12, min_periods=12).sum()
+        ncm["loan_stock_yoy"] = ncm["loan_12m"].pct_change(12) * 100
         monthly = monthly.merge(
-            nc[["date", "new_rmb_loan", "loan_yoy", "loan_stock_yoy"]],
+            ncm.reset_index()[["date", "new_rmb_loan", "loan_yoy", "loan_stock_yoy"]],
             on="date", how="left"
         )
 
@@ -167,6 +190,9 @@ def compute_derived(conn):
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-%d")
 
     monthly.to_sql("derived_monthly", conn, if_exists="replace", index=False)
+    # to_sql(replace) 会 DROP 表并连带丢掉索引 → 每次写完重建 date 唯一索引，
+    # 既让约束"活过" replace，也把意外的重复日期变成写入期报错而非静默落库。
+    enforce_indexes(conn, "derived_monthly", ["date"])
     log(f"  ✅ derived_monthly: {len(monthly)} rows, {len(monthly.columns)} columns")
 
     # ─── 构建季度衍生表 ───
@@ -179,10 +205,16 @@ def compute_derived(conn):
         lev = lev.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
         quarterly = lev[["date", "household", "non_fin_corp", "gov_total",
                          "gov_central", "gov_local", "real_economy"]].copy()
-        # 杠杆率变化速度 (年度变化 = 当前 - 4 季度前)
-        quarterly["household_change"] = quarterly["household"] - quarterly["household"].shift(4)
-        quarterly["gov_change"] = quarterly["gov_total"] - quarterly["gov_total"].shift(4)
-        quarterly["corp_change"] = quarterly["non_fin_corp"] - quarterly["non_fin_corp"].shift(4)
+        # 杠杆率变化速度 (年度变化 = 当前 - 4 季度前)。shift(4)/diff(4) 是行偏移：
+        # 序列缺一个季度就会把 3 季或 5 季前的值当成「4 季前」。先重排到连续季度
+        # PeriodIndex 再 diff(4)，缺失季度自然变成 NaN 而不是错位的差值。
+        q_idx = pd.PeriodIndex(quarterly["date"], freq="Q")
+        chg_cols = ["household", "gov_total", "non_fin_corp"]
+        qv = (quarterly.assign(_q=q_idx).groupby("_q")[chg_cols].last()
+              .reindex(pd.period_range(q_idx.min(), q_idx.max(), freq="Q")))
+        for src, dst in (("household", "household_change"), ("gov_total", "gov_change"),
+                         ("non_fin_corp", "corp_change")):
+            quarterly[dst] = qv[src].diff(4).reindex(q_idx).to_numpy()
 
     # GDP 年频 → 经 merge_asof(backward) + ffill 填充到各季度（年 GDP 作为该年各季分母，
     # 与 cycle_debt 的 backward-fill 约定一致）。
@@ -199,7 +231,12 @@ def compute_derived(conn):
             quarterly = pd.merge_asof(quarterly, g, on="date", direction="backward")
             quarterly["gdp_abs"] = quarterly["gdp_abs"].ffill()
             quarterly["gdp_yoy"] = quarterly["gdp_yoy"].ffill()
-            # 4 季平滑 = 16 季度滚动（季度数据上等价 4 年；年频上仍用 rolling(4) 见上分支）
+            # 4 年平滑：本分支是季频轴，16 季 = 4 年，与上面年频分支的 rolling(4)
+            # （同为 4 年）口径一致；gdp_yoy 是年值经 merge_asof+ffill 铺到该年 4 个
+            # 季度，故 16 季窗口覆盖的正是同样的 4 个年度观测。旧注释写「4 季平滑」
+            # 是标签错误（值一直是 4 年均值），修标签而非改窗口。
+            # min_periods=4 = 至少 1 年：滚动均值的部分窗口仍是「可得数据的均值」，
+            # 与 total_12m 那种「部分和当整年用」的量纲错误不同，故保留。
             quarterly["gdp_yoy_smooth"] = quarterly["gdp_yoy"].rolling(16, min_periods=4).mean()
 
     # ─── 居民真实杠杆率（债务 / 可支配收入）───
@@ -208,9 +245,21 @@ def compute_derived(conn):
     if not hh_income.empty and not quarterly.empty and "gdp_abs" in quarterly.columns:
         hi = hh_income.copy()
         hi["date"] = pd.to_datetime(hi["date"])
-        hi = hi.sort_values("date")
-        quarterly = pd.merge_asof(quarterly.sort_values("date"), hi[["date", "income_abs"]],
-                                  on="date", direction="backward")
+        # 防前视：hh_income.date 是「参考年」，但参考年 Y 的年度收入要到 Y+1 年 1 月
+        # 才发布。直接对 date 做 backward merge_asof 会把还没发布的值回填进 Y 年各
+        # 季度（约 12 个月前视，直接抬高当年的 hh_debt_to_income / hh_income_share）。
+        # 按可得日期对齐；旧表无 available_from 时按 Y+1-01-01 推算，口径一致。
+        if "available_from" in hi.columns:
+            asof = pd.to_datetime(hi["available_from"], errors="coerce")
+        else:
+            asof = pd.Series(pd.NaT, index=hi.index)
+        lag = hi["date"] + pd.DateOffset(years=1)   # 旧表无 available_from → 按 Y+1 推
+        # merge_asof 要求两侧 key 的 dtype 完全一致（pandas 3 的 datetime 单位会漂）
+        hi["_asof"] = asof.fillna(lag).astype(quarterly["date"].dtype)
+        hi = hi.dropna(subset=["_asof"]).sort_values("_asof")
+        quarterly = pd.merge_asof(quarterly.sort_values("date"), hi[["_asof", "income_abs"]],
+                                  left_on="date", right_on="_asof", direction="backward")
+        quarterly = quarterly.drop(columns=["_asof"])
         if "household" in quarterly.columns:
             # 年度GDP 优先用该年 Q4(10月)累计行; 当年无 Q4 用上年全年; 仍无则 Q1×4 近似。
             g = load_table(conn, "gdp")
@@ -235,6 +284,7 @@ def compute_derived(conn):
         quarterly = quarterly.sort_values("date").reset_index(drop=True)
         quarterly["date"] = quarterly["date"].dt.strftime("%Y-%m-%d")
         quarterly.to_sql("derived_quarterly", conn, if_exists="replace", index=False)
+        enforce_indexes(conn, "derived_quarterly", ["date"])
         log(f"  ✅ derived_quarterly: {len(quarterly)} rows")
 
     return monthly, quarterly
