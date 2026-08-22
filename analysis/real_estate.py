@@ -8,17 +8,28 @@ Dimensions scored 0–100 (100 = most favourable for housing demand):
                      (positive and rising → higher score)
 3. Rate environment: lpr_5y vs its own historical median since 2019
                      (below median → higher score = cheaper credit)
+
+A dimension with no data scores NEUTRAL and is EXCLUDED from the composite (which
+renormalises over what is left) — never scored at an extreme, and never silently
+averaged in as if it were measured.
 """
 
-import functools
 import sqlite3
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
+from analysis.cycle_merrill import db_versioned_cache
+
 # Theoretical ceiling for household leverage ratio (%)
 HOUSEHOLD_LEVERAGE_CAP = 70.0
+
+# Midpoint of the 0–100 scale: what an *unmeasured* dimension reports. WHY not
+# 0.0 (the old fallback): 0 is the score of a −3% MoM price collapse, so a data
+# gap used to read as the most bearish input possible. 50 says "no information",
+# which is also what the radar chart's own null-fallback renders least misleadingly.
+NEUTRAL_SCORE = 50.0
 
 ALL_CITIES = ["北京", "上海", "深圳", "广州", "杭州", "南京", "成都", "武汉", "天津", "重庆"]
 
@@ -56,14 +67,16 @@ def analyze_real_estate(
     """Run a multi-dimensional real-estate assessment (cached).
 
     Wrapper around :func:`_analyze_real_estate_impl` that converts ``cities`` to
-    a hashable tuple so results can be memoised.
+    a hashable, NORMALISED tuple so results can be memoised: the same city set in
+    a different order (or with duplicates) is the same query, and must not evict
+    a live entry from the small cache (F15).
     """
     if cities is None:
         cities = ALL_CITIES
-    return _analyze_real_estate_cached(db_path, tuple(cities))
+    return _analyze_real_estate_cached(db_path, tuple(sorted(set(cities))))
 
 
-@functools.lru_cache(maxsize=8)
+@db_versioned_cache(maxsize=8)
 def _analyze_real_estate_cached(db_path: str, cities_tuple: tuple) -> Dict:
     return _analyze_real_estate_impl(db_path, list(cities_tuple))
 
@@ -129,45 +142,73 @@ def _analyze_real_estate_impl(
     conn.close()
 
     # ── Build assessment from latest available data ─────────────────────────
-    latest_lev = leverage_df.dropna(subset=["leverage_space"]).iloc[-1]
-    latest_mom = price_df_pivot["mom_12m"].dropna()
-    latest_lpr = lpr_df.dropna(subset=["rate_deviation"]).iloc[-1]
+    # Every ``.iloc[-1]`` below is guarded: an empty frame means the dimension was
+    # not measured, which must stay distinguishable from a measured bad reading
+    # (the old code either raised IndexError or substituted 0.0 — see NEUTRAL_SCORE).
+    lev_rows = leverage_df.dropna(subset=["leverage_space"])
+    lpr_rows = lpr_df.dropna(subset=["rate_deviation"])
+    mom_rows = price_df_pivot["mom_12m"].dropna() if len(price_df_pivot) else pd.Series(dtype=float)
 
-    current_headroom = float(latest_lev["leverage_space"])
-    current_mom_12m = float(latest_mom.iloc[-1]) if not latest_mom.empty else 0.0
-    current_rate_dev = float(latest_lpr["rate_deviation"])
+    latest_lev = lev_rows.iloc[-1] if not lev_rows.empty else None
+    latest_lpr = lpr_rows.iloc[-1] if not lpr_rows.empty else None
+    current_mom_12m = float(mom_rows.iloc[-1]) if not mom_rows.empty else None
 
     assessment = {
-        "as_of_leverage": latest_lev["date"].strftime("%Y-%m"),
-        "household_leverage": float(latest_lev["household"]),
-        "leverage_space_pp": current_headroom,
-        "leverage_space_score": _score_leverage_space(current_headroom),
+        "as_of_leverage": latest_lev["date"].strftime("%Y-%m") if latest_lev is not None else None,
+        "household_leverage": float(latest_lev["household"]) if latest_lev is not None else None,
+        "leverage_space_pp": float(latest_lev["leverage_space"]) if latest_lev is not None else None,
+        "leverage_space_score": (
+            _score_leverage_space(float(latest_lev["leverage_space"]))
+            if latest_lev is not None else NEUTRAL_SCORE
+        ),
+        "leverage_space_available": latest_lev is not None,
 
-        "as_of_price": price_df_pivot.index[-1].strftime("%Y-%m"),
+        "as_of_price": (
+            price_df_pivot.index[-1].strftime("%Y-%m") if len(price_df_pivot) else None
+        ),
         "price_mom_12m": current_mom_12m,
-        "price_momentum_score": _score_price_momentum(current_mom_12m),
+        "price_momentum_score": (
+            _score_price_momentum(current_mom_12m)
+            if current_mom_12m is not None else NEUTRAL_SCORE
+        ),
+        "price_momentum_available": current_mom_12m is not None,
 
-        "as_of_lpr": latest_lpr["date"].strftime("%Y-%m"),
-        "lpr_5y": float(latest_lpr["lpr_5y"]),
-        "lpr_5y_median": float(latest_lpr["lpr_5y_median"]),
-        "rate_deviation_bp": current_rate_dev,
-        "rate_env_score": _score_rate_env(current_rate_dev),
+        "as_of_lpr": latest_lpr["date"].strftime("%Y-%m") if latest_lpr is not None else None,
+        "lpr_5y": float(latest_lpr["lpr_5y"]) if latest_lpr is not None else None,
+        "lpr_5y_median": float(latest_lpr["lpr_5y_median"]) if latest_lpr is not None else None,
+        "rate_deviation_bp": float(latest_lpr["rate_deviation"]) if latest_lpr is not None else None,
+        "rate_env_score": (
+            _score_rate_env(float(latest_lpr["rate_deviation"]))
+            if latest_lpr is not None else NEUTRAL_SCORE
+        ),
+        "rate_env_available": latest_lpr is not None,
     }
 
-    # Composite: equal weight
+    # Composite: equal weight over the dimensions that actually have data, so a
+    # gap neither drags the score down nor pulls it toward a fabricated 50.
+    dimensions = ("leverage_space", "price_momentum", "rate_env")
     scores = [
-        assessment["leverage_space_score"],
-        assessment["price_momentum_score"],
-        assessment["rate_env_score"],
+        assessment[f"{d}_score"] for d in dimensions
+        if assessment[f"{d}_available"]
     ]
-    assessment["composite_score"] = float(np.mean(scores))
+    assessment["excluded_dimensions"] = [
+        d for d in dimensions if not assessment[f"{d}_available"]
+    ]
+    assessment["composite_score"] = float(np.mean(scores)) if scores else None
 
-    if assessment["composite_score"] >= 65:
+    if assessment["composite_score"] is None:
+        assessment["summary"] = "Insufficient data — no dimension available"
+    elif assessment["composite_score"] >= 65:
         assessment["summary"] = "Supportive — ample leverage room, positive momentum, cheap credit"
     elif assessment["composite_score"] >= 45:
         assessment["summary"] = "Neutral — mixed signals across dimensions"
     else:
         assessment["summary"] = "Constrained — limited leverage room, weak momentum, or expensive credit"
+    if assessment["excluded_dimensions"] and scores:
+        assessment["summary"] += (
+            f" (scored on {len(scores)}/3 dimensions; no data: "
+            + ", ".join(assessment["excluded_dimensions"]) + ")"
+        )
 
     return {
         "leverage_df": leverage_df,
