@@ -16,6 +16,10 @@ data/last_run.json
 data/.dashcache/
 data/.refresh.lock
 data/refresh_schedule.log
+# 运行期日志目录（run_app.sh 的 api.log、01_fetch_data.py 的 fetch.log）。
+# 根忽略此前只列了具体的 data/* 条目、未覆盖该目录，run_app.sh 只能在创建目录时
+# 顺手写一个自忽略的 data/logs/.gitignore 兜底；补在这里让根文件成为唯一权威。
+data/logs/
 
 # IDE
 .idea/

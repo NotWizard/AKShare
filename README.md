@@ -400,17 +400,39 @@ font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe 
 
 ## 依赖
 
-### 后端（`requirements.txt` + `backend/pyproject.toml`）
+### 后端
+
+依赖只有一处权威来源：根目录 `requirements.txt`（人读的直接依赖）+ `requirements.lock`（逐包精确锁）。`backend/pyproject.toml` 只声明后端自身最小依赖与 pytest 配置，**不再平行重述**一份分析依赖（旧版两处各自漂移，是审计项 O-H2 的成因）。
 
 ```text
-akshare>=1.14.0        # NBS 新接口需 ≥1.18（实测 1.18.83）
-pandas>=1.5
-numpy>=1.24
-scipy>=1.10
-statsmodels>=0.14
-# backend 额外（pyproject.toml）：
-fastapi>=0.115  uvicorn[standard]  pydantic>=2  httpx  pytest
+# requirements.txt —— 下界全部 == 实测在用版本（旧版 pandas>=1.5 / numpy>=1.24 跨了
+# 两个 pandas 大版本，按下界解出来的组合根本跑不通本仓代码）
+akshare==1.18.64                  # 精确锁：爬虫库，minor 升级会静默改列名
+requests>=2.34.2,<3
+yfinance>=1.4.1,<2                # crcl_collect 备用行情源（惰性 import）
+pandas>=3.0.3,<4
+numpy>=2.4.6,<3
+scipy>=1.17.1,<2                  # 注：当前代码未直接 import
+statsmodels>=0.14.6,<0.15         # 同上
+fastapi>=0.137.1,<0.140
+uvicorn[standard]>=0.49.0,<0.50
+pydantic>=2.13.4,<3
+httpx>=0.28.1,<0.29
+pytest>=9.1.0,<10
 ```
+
+```bash
+.venv312/bin/python -m pip install -r requirements.lock   # 精确复现（63 包传递闭包）
+.venv312/bin/python -m pip install -r requirements.txt    # 只按直接依赖装
+```
+
+- `requirements.lock` 由 `.venv312/bin/python -m pip list --format=freeze` 离线导出后取直接依赖的传递闭包，每个 `==` 都对应真实安装的版本
+- **无 `--hash`**：生成哈希需联网向 PyPI 取每个 wheel/sdist 摘要，本仓离线环境无法生成，故不写、也不伪造；有网环境用 `uv pip compile --generate-hashes` 补齐
+- **升级 akshare 必须做回归**：它决定采集出来的列名，`data/last_run.json` 记录的就是 `1.18.64`。改版本前后要跑 `scripts/diff_vintage.py`（与 `data/vintages/` 快照比对）与 `scripts/dual_sources.py`（双源交叉校验），通过后再同步改 `requirements.txt` / `requirements.lock` / `changeLog.md`
+
+### 环境变量
+
+`.env.example` 是模板（`.env` 已 gitignored）：`COMMENTARY_BASE_URL` / `COMMENTARY_API_KEY` / `COMMENTARY_MODEL`（AI 点评，三者同时非空才启用）、`REFRESH_TIMEOUT_S`（默认 300）、`HEALTH_STALE_DAYS`（默认 40）、`CORS_ORIGINS`、`CRCL_STARTUP_COLLECT`、`EXPAT_LIB_PATH`。仓库没有接 dotenv 自动加载，需 `set -a; source .env; set +a` 后再启动。
 
 ### 前端（`frontend/package.json`）
 
