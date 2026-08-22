@@ -11,6 +11,21 @@
 - 不删/跳/弱化既有测试来变绿。不提交 .env / data/*.db / 密钥。不 force-push。不跳 hook。
 - 每次提交同步更新 `changeLog.md` 的 `[Unreleased]`，双语结构化（AGENTS.md）。
 
+## 第二波在飞（2026-08-22，resume 后必读）
+第二批 5 个 fixer 子 Agent 已后台启动，**其产出可能以未提交改动的形式留在工作树里**。
+resume 后第一件事：`git status --short` —— 若有改动，先辨认属于下列哪一组，跑该组测试并按组提交，**不要重复派发 fixer**。
+
+| 组 | 覆盖 finding | 文件集（判断归属用） |
+|---|---|---|
+| W2 · G23+G03b | A-H1/A-H2/A-H3/A-M5 + cycle_*/real_estate 缓存版本键 + F15 | `analysis/*.py`, `backend/tests/test_signal_robustness.py` |
+| W3 · G11+G12+G20+G21 | P-H1/P-H3/P-M1-M4/P-M6 + A-M2/A-M3 | `scripts/{01,02,_pipeline,03}*.py`, `backend/tests/test_pipeline_guards.py`/`test_derived_calc.py` |
+| W4 · G13+G14+G15+G25 | FE-H2/FE-H3/FE-H4/FE-M1-M11 + F10(_busy 竞态) | `frontend/src/**`, `frontend/tailwind.config.ts`, `backend/app/core/commentary.py` |
+| W5 · G09+G10+G24rest | F6/F7/F11/F12 + A-M1(WAL) + F16 | `backend/app/api/v1/{crcl,refresh}.py`, `core/{refresh,crcl_collect,crcl_db,db,locking}.py`, `main.py`, `schemas/refresh.py` |
+| W6 · G17+G27 | O-H2/O-M2/O-M3/O-M6/O-L3 | `requirements.txt`, `requirements.lock`, `backend/pyproject.toml`, `run_app.sh`, `README.md`, `.env.example` |
+
+后续仍未开工（按此顺序）：**G08**（变更端点鉴权，需 W5 落地后再动 main.py/api）→ **G16+G18**（CI + fixture DB + 契约/前端测试，必须在工作树干净时一起做：CI 没有 fixture DB 必红，而 conftest.py 会被 pytest 收集从而干扰在飞 Agent 的验证）→ `shared/openapi.json` 重导（依赖 W5 定稿）→ **G26/G28/G29/G30** → 发布。
+发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名（故意推迟，因在飞提交都指向现文件名）；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
+
 ---
 
 ## Critical 层
