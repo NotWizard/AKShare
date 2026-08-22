@@ -26,6 +26,21 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 后续仍未开工（按此顺序）：**G08**（变更端点鉴权，需 W5 落地后再动 main.py/api）→ **G16+G18**（CI + fixture DB + 契约/前端测试，必须在工作树干净时一起做：CI 没有 fixture DB 必红，而 conftest.py 会被 pytest 收集从而干扰在飞 Agent 的验证）→ `shared/openapi.json` 重导（依赖 W5 定稿）→ **G26/G28/G29/G30** → 发布。
 发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名（故意推迟，因在飞提交都指向现文件名）；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
 
+### 实测状态快照（2026-08-22 01:30，工作树含 5 组未提交产出）
+`cd backend && ../.venv312/bin/python -m pytest -q` → **22 failed, 122 passed**。
+**22 个失败全部落在 `tests/test_signal_robustness.py` 一个文件内**（已用 `grep '^FAILED' | sed 's/::.*//' | uniq -c` 核实）——那是 W2 按 test-first 先写下的用例，`analysis/*.py` 的修复尚未落笔，故失败是**预期的"改前失败"**，不是回归。
+其余 122 passed 覆盖了全部 120 条基线用例，说明 **W3/W4/W5/W6 已写入的改动均未造成回归**。
+resume 时**不要**因为这 22 红去回退任何东西：正确动作是让 W2 的 `analysis/*.py` 修复补齐（或重新派一个只做 G23+G03b 的 fixer，让这 22 条转绿）。
+
+各组完成度（按工作树文件判断，均**尚未**收到 fixer 完成回执，故都还不可提交）：
+- W2：仅有测试文件，`analysis/*.py` 未改 → **未完成**
+- W3：`01_fetch_data.py`/`_pipeline.py` 已改，`02_compute_derived.py` 未改 → **未完成**
+- W4：15 个前端文件已改 + PageState/useAsyncData 新增，但 `CrclMonitor.vue`(G15) 与 `core/commentary.py`(F10) 未改 → **未完成**
+- W5：8 个后端文件已改（crcl/refresh/crcl_collect/crcl_db/db/locking/main/schemas），新测试未写 → **未完成**
+- W6：`requirements.txt`/`requirements.lock`/`pyproject.toml`/`run_app.sh`/`.env.example` 已就位，`README.md` 未改 → **未完成**
+
+**不要提交半成品组**：一组只落一半（例如 W3 缺 `02_compute_derived.py`）比留在工作树里更糟。逐组等齐后再按组测试+提交。
+
 ---
 
 ## Critical 层
