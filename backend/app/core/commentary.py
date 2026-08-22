@@ -164,7 +164,7 @@ def generate(blocking: bool = True) -> dict:
     if not blocking:
         t = threading.Thread(target=_generate_impl, daemon=True)
         t.start()
-        return {"status": "generating", "msg": "评论生成中…"}
+        return {"status": "generating", "msg": "评论生成中…", "text": ""}
     return _generate_impl()
 
 
@@ -172,14 +172,14 @@ def _generate_impl() -> dict:
     if not _gen_lock.acquire(blocking=False):
         # Another generation is in flight — don't stack a second one. The lock
         # being held IS the busy signal, so there is nothing to flag here.
-        return {"status": "generating", "msg": "已有生成在进行中…"}
+        return {"status": "generating", "msg": "已有生成在进行中…", "text": ""}
     try:
         snapshot = build_snapshot()
         text, model_name = call_model(snapshot)
         row = _persist(snapshot, text, model_name)
         return row
     except Exception as e:
-        return {"status": "error", "msg": f"生成失败：{type(e).__name__}: {e}"}
+        return {"status": "error", "msg": f"生成失败：{type(e).__name__}: {e}", "text": ""}
     finally:
         _gen_lock.release()
 

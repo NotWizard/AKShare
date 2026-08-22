@@ -30,7 +30,9 @@ export interface RefreshResult {
   updated: string[]
   kept_previous: string[]
   busy?: boolean
-  detail?: string | null
+  // F12：原 detail 会外泄子进程 traceback 与绝对路径，已改为只回 8 位 error_id，
+  // 完整详情留在服务端日志里按 id 检索。
+  error_id?: string | null
 }
 
 export interface SourceHealth {

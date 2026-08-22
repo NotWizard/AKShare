@@ -29,6 +29,8 @@ export const PHASE_COLORS: Record<string, string> = {
 }
 
 export const PHASE_LABELS: Record<string, string> = {
+  // 数据不足：子信号在输入缺失时返回该相位（不再伪装成中性），需可读文案
+  insufficient_data: '数据不足',
   recovery: '复苏', overheating: '过热', stagflation: '滞胀', recession: '衰退',
   easing: '宽松', tightening: '紧缩', neutral: '中性',
   active_restocking: '主动补库', passive_restocking: '被动补库',
