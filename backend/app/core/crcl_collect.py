@@ -9,8 +9,22 @@ Sources (all free, no API key):
 - Treasury    home.treasury.gov CSV       3M/6M/1Y 美债收益率曲线（日频）
 - AKShare     stock_us_daily('CRCL')      CRCL 日线 OHLCV
 - yfinance    Ticker('CRCL').info         市值 / TTM P/E / 前瞻 P/E / P/S 快照
+
+Two concurrency guarantees (F6), both enforced in ``collect_all``:
+* SINGLE-FLIGHT — an OS ``flock`` on ``data/.crcl_collect.lock`` (a different
+  file from the macro refresh lock). N clicks used to start N concurrent full
+  collections all writing crcl_monitor.db; now the loser returns "busy"
+  immediately and the startup collection can never stampede a user-triggered one.
+* ENFORCEABLE TIMEOUT — the httpx sources already pass ``timeout=30``, but
+  ``ak.stock_us_daily`` goes through akshare's internal *bare* ``requests.get``
+  (no timeout) and yfinance is equally uncontrolled, so a black-holed host used
+  to pin the calling thread forever. Those three calls now run behind
+  ``_call_with_timeout``.
 """
 
+import logging
+import os
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -18,9 +32,48 @@ from datetime import datetime, timezone
 import httpx
 
 from backend.app.core import crcl_db
+from backend.app.core.locking import crcl_collect_lock
+
+logger = logging.getLogger(__name__)
 
 DEFILLAMA_TIMEOUT = 30
 TREASURY_YEARS = 2  # 当年 + 上一年，用于回填与跨年连续
+
+# Wall-clock ceiling for ONE uncontrollable third-party blocking call
+# (akshare / yfinance). Env-overridable, same pattern as REFRESH_TIMEOUT_S.
+THIRD_PARTY_TIMEOUT_S = int(os.getenv("CRCL_STEP_TIMEOUT_S", "60"))
+
+
+def _call_with_timeout(fn, timeout: int | None = None):
+    """Call ``fn()`` with an enforceable wall-clock ceiling.
+
+    Python cannot interrupt a thread blocked in a socket read, so the ceiling is
+    enforced by *waiting* on a DAEMON worker and giving up on it: on timeout a
+    ``TimeoutError`` is raised to the caller (which logs it as a failed source
+    and moves on) while the hung thread is ABANDONED. That leak is deliberate
+    and bounded — it is one daemon thread per hung call, it holds no lock and no
+    DB connection, it dies with the process, and being daemon it never delays
+    interpreter shutdown. The alternative (a subprocess per call) buys real
+    cancellation at the cost of re-importing akshare/yfinance every time.
+    """
+    box: dict = {}
+    limit = THIRD_PARTY_TIMEOUT_S if timeout is None else timeout
+
+    def _run():
+        try:
+            box["value"] = fn()
+        except BaseException as e:  # noqa: BLE001 — re-raised in the caller
+            box["error"] = e
+
+    t = threading.Thread(target=_run, daemon=True, name="crcl-thirdparty")
+    t.start()
+    t.join(limit)
+    if t.is_alive():
+        raise TimeoutError(f"第三方调用超时（>{limit} 秒）")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
 
 METRIC_LABELS = {
     "usdc_circ": ("USDC 流通量", "美元", "DefiLlama /stablecoin/2", "日"),
@@ -151,7 +204,9 @@ def collect_crcl_stock(run_id: str) -> int:
     try:
         import akshare as ak
 
-        df = ak.stock_us_daily(symbol="CRCL")
+        # akshare's stock_us_daily uses a BARE requests.get (no timeout) → an
+        # unreachable Sina endpoint would block this thread forever.
+        df = _call_with_timeout(lambda: ak.stock_us_daily(symbol="CRCL"))
         points_close = [
             (d.strftime("%Y-%m-%d"), float(c))
             for d, c in zip(df["date"], df["close"])
@@ -171,7 +226,7 @@ def collect_crcl_stock(run_id: str) -> int:
     try:
         import yfinance as yf
 
-        h = yf.Ticker("CRCL").history(period="max")
+        h = _call_with_timeout(lambda: yf.Ticker("CRCL").history(period="max"))
         points_close = [(d.strftime("%Y-%m-%d"), float(v)) for d, v in zip(h.index, h["Close"])]
         points_vol = [(d.strftime("%Y-%m-%d"), float(v)) for d, v in zip(h.index, h["Volume"])]
         n = crcl_db.upsert_points("crcl_close", points_close)
@@ -189,7 +244,7 @@ def collect_valuation_snapshot(run_id: str) -> bool:
     try:
         import yfinance as yf
 
-        info = yf.Ticker("CRCL").info
+        info = _call_with_timeout(lambda: yf.Ticker("CRCL").info)
         snap = {
             "price": info.get("currentPrice"),
             "market_cap": info.get("marketCap"),
@@ -232,8 +287,29 @@ def update_circ_snapshot(run_id: str) -> None:
         _log(run_id, "snapshot_stablecoins", "error", f"{type(e).__name__}: {e}", t0)
 
 
-def collect_all(progress_cb=None) -> dict:
-    """Run all collectors + alert evaluation. Returns a summary dict."""
+def collect_all(progress_cb=None, stop_event=None) -> dict:
+    """Run all collectors + alert evaluation. Returns a summary dict.
+
+    SINGLE-FLIGHT (F6): the whole collection is wrapped in an OS ``flock`` on
+    ``data/.crcl_collect.lock``, so a second caller — another click, another tab,
+    or the startup collection racing a user-triggered one — returns
+    ``status="busy"`` INSTEAD of starting a second full network collection
+    against the same DB. Acquisition is atomic and non-blocking (no
+    check-then-act window), and the kernel drops the lock if the process dies.
+    ``stop_event`` (threading.Event) is checked between steps for cooperative
+    cancellation when the SSE client disconnects.
+    """
+    try:
+        with crcl_collect_lock():
+            return _collect_all_locked(progress_cb, stop_event)
+    except BlockingIOError:
+        logger.info("[crcl] 采集已在进行中，本次请求返回 busy")
+        return {"status": "busy", "msg": "已有采集在进行中，请稍候…",
+                "run_id": None, "steps": [], "alerts_changed": []}
+
+
+def _collect_all_locked(progress_cb, stop_event) -> dict:
+    """Body of collect_all, executed while holding the CRCL collect lock."""
     from backend.app.core import crcl_alerts
 
     crcl_db.ensure_schema()
@@ -245,8 +321,13 @@ def collect_all(progress_cb=None) -> dict:
         ("美债收益率", collect_treasury),
         ("CRCL 日线", collect_crcl_stock),
     ]
-    summary = {"run_id": run_id, "steps": []}
+    summary = {"status": "ok", "run_id": run_id, "steps": []}
     for i, (name, fn) in enumerate(steps):
+        # Cancellation is BETWEEN steps: a thread blocked in a socket read cannot
+        # be interrupted (the per-call ceiling in _call_with_timeout bounds it).
+        if stop_event is not None and stop_event.is_set():
+            return {"status": "cancelled", "msg": "采集已取消（客户端断开）",
+                    "run_id": run_id, "steps": [], "alerts_changed": []}
         fn(run_id)
         if progress_cb:
             progress_cb((i + 1) / (len(steps) + 2))
@@ -270,18 +351,20 @@ def collect_all(progress_cb=None) -> dict:
 def schedule_startup_collection() -> None:
     """Non-blocking startup hook (called from FastAPI lifespan).
 
+    Cannot stampede a user-triggered collect: it goes through the SAME
+    single-flight lock, so whichever starts second simply returns "busy"
+    (and this thread exits) instead of running a duplicate collection.
     Skippable via CRCL_STARTUP_COLLECT=0 (used by tests).
     """
-    import os
-    import threading
-
     if os.getenv("CRCL_STARTUP_COLLECT", "1") == "0":
         return
 
     def _bg():
         try:
-            collect_all()
+            result = collect_all()
+            if result.get("status") == "busy":
+                logger.info("[crcl] 启动采集跳过：已有采集在进行中")
         except Exception:  # noqa: BLE001 — startup must never crash
-            pass
+            logger.exception("[crcl] 启动采集异常")
 
-    threading.Thread(target=_bg, daemon=True).start()
+    threading.Thread(target=_bg, daemon=True, name="crcl-startup").start()

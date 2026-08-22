@@ -61,7 +61,9 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # table may not exist yet (fresh install) — skip silently
     commentary.ensure_on_startup()
-    crcl_collect.schedule_startup_collection()  # CRCL 监控：启动自动采集（后台线程，不阻塞）
+    # CRCL 监控：启动自动采集（后台线程，不阻塞）。与手动刷新共用同一把
+    # flock 单飞锁，谁后到谁直接 busy 返回，绝不会并发跑第二遍采集。
+    crcl_collect.schedule_startup_collection()
     yield
 
 

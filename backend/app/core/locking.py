@@ -16,15 +16,28 @@ Both the API refresh driver (``backend.app.core.refresh``) and the CLI fetch
 script (``scripts/01_fetch_data.py``) acquire this SAME lock, so an API-triggered
 refresh and a manual ``python scripts/01_fetch_data.py`` can never run
 concurrently and corrupt the shared ``data/macro_data.db.staging``.
+
+The primitive is parameterised by lock FILE, so it guards two independent
+single-flight domains that must not block each other:
+    * ``LOCK_PATH``      — the macro fetch pipeline (staging DB writer);
+    * ``CRCL_LOCK_PATH`` — the CRCL collector (F6: N clicks used to start N
+      concurrent full network collections, all writing crcl_monitor.db).
+
+``submit_job`` adds the other half of the concurrency ceiling (F7): background
+work is admitted to ONE small thread pool instead of a new unbounded
+``threading.Thread`` per request.
 """
 
 import fcntl
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LOCK_PATH = PROJECT_ROOT / "data" / ".refresh.lock"
+CRCL_LOCK_PATH = PROJECT_ROOT / "data" / ".crcl_collect.lock"
 
 
 @contextmanager
@@ -79,3 +92,51 @@ def is_running(lock_path=LOCK_PATH) -> bool:
         return False
     finally:
         os.close(fd)
+
+
+@contextmanager
+def crcl_collect_lock(lock_path=CRCL_LOCK_PATH):
+    """Single-flight for the CRCL collector — same primitive, DIFFERENT file.
+
+    A separate lock file on purpose: a running macro refresh must not make a
+    CRCL collect report "busy" (and vice versa); they touch different DBs.
+    """
+    with refresh_lock(lock_path) as fd:
+        yield fd
+
+
+# --- bounded background-job admission control (F7) --------------------------
+# Before: every SSE request did ``threading.Thread(...).start()`` with no cap, so
+# a few dozen tabs/mis-clicks spawned a few dozen concurrent full network
+# collections on a single-worker uvicorn. Now ALL background work (macro refresh
+# + CRCL collect) shares ONE small pool, and admission is refused rather than
+# queued: an unbounded queue would only trade thread exhaustion for latency
+# exhaustion (a click "accepted" then serviced 20 minutes later is a lie).
+MAX_BACKGROUND_JOBS = int(os.getenv("MAX_BACKGROUND_JOBS", "2"))
+_JOB_POOL = ThreadPoolExecutor(max_workers=MAX_BACKGROUND_JOBS,
+                               thread_name_prefix="bgjob")
+_JOB_SLOTS = threading.BoundedSemaphore(MAX_BACKGROUND_JOBS)
+
+
+def submit_job(fn, *args, **kwargs):
+    """Run ``fn`` on the shared bounded pool; return the Future, or None if full.
+
+    The semaphore (not the executor's own unbounded queue) is what bounds
+    concurrency: a caller that cannot get a slot gets ``None`` immediately and
+    reports "busy" to the client. The slot is released in the worker's
+    ``finally`` so a raising job can never leak it.
+    """
+    if not _JOB_SLOTS.acquire(blocking=False):
+        return None
+
+    def _run():
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _JOB_SLOTS.release()
+
+    try:
+        return _JOB_POOL.submit(_run)
+    except RuntimeError:  # pool shut down (interpreter teardown)
+        _JOB_SLOTS.release()
+        return None

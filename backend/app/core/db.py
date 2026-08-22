@@ -11,6 +11,7 @@ survives only as a memory-reclaim helper.
 """
 
 import functools
+import os
 import sqlite3
 from pathlib import Path
 
@@ -18,6 +19,47 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DB_PATH = PROJECT_ROOT / "data" / "macro_data.db"
+
+# How long a statement waits for a competing writer before raising
+# "database is locked" (A-M1). Env-overridable, same pattern as REFRESH_TIMEOUT_S.
+BUSY_TIMEOUT_MS = int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "5000"))
+
+
+def connect(db_path=None, *, row_factory=None) -> sqlite3.Connection:
+    """The ONE SQLite connection factory for the backend (A-M1).
+
+    Every backend connection — macro (``db.py``) and CRCL (``crcl_db.py``) —
+    goes through here so the three concurrency PRAGMAs are impossible to forget:
+
+    * ``journal_mode=WAL``  — readers no longer block on a writer (and vice
+      versa). Both DB files were ``delete`` (rollback journal), where a single
+      commentary/signal_history/upsert_points write took an EXCLUSIVE lock and a
+      concurrent read request died with ``sqlite3.OperationalError: database is
+      locked`` → an unhandled HTTP 500. WAL is a persistent property of the DB
+      FILE, so issuing it per-connection is idempotent (a no-op after the first).
+    * ``busy_timeout``     — the residual contention (WAL still serialises
+      writer-vs-writer, and a checkpoint briefly excludes) is waited out for
+      ``BUSY_TIMEOUT_MS`` instead of failing instantly.
+    * ``synchronous=NORMAL`` — the documented companion of WAL: fsync only at
+      checkpoints (safe against process crash; a power loss can lose the last
+      commits, which for re-fetchable macro/CRCL series is acceptable).
+
+    ``db_path=None`` resolves ``DB_PATH`` at CALL time (never a default-arg
+    snapshot) so monkeypatching ``db.DB_PATH`` in tests keeps working.
+    ``row_factory`` is applied here so callers cannot forget it.
+    """
+    conn = sqlite3.connect(DB_PATH if db_path is None else db_path)
+    if row_factory is not None:
+        conn.row_factory = row_factory
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.DatabaseError:
+        # A read-only file / non-file DB cannot switch journal mode. Degrade to
+        # the previous behaviour instead of failing the request outright.
+        pass
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
 
 
 def _db_version() -> tuple:
@@ -43,7 +85,7 @@ def _load_full_versioned(table: str, version: tuple) -> pd.DataFrame:
     lru_cache key a function of the DB file's identity, so a swap invalidates the
     entry automatically.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = connect()
     try:
         df = pd.read_sql(f"SELECT * FROM [{table}]", conn)
     finally:
