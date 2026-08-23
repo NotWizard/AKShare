@@ -56,9 +56,9 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 剩余：
 1. ✅ **G26 全部已提交**：源 `b9167ec`（P-M7/P-M8/P-M9）+ 收尾 `d8e5e51`（03 staged 显式 backup/enforce_indexes、`test_pm9_declarative_fetch.py` 9 例）。工作树此刻**干净**、全套 288 passed、`_pipeline_test.py` ALL CHECKS PASSED、typecheck 0。
 2. ✅ **G28-G30 已提交 `740899f`**（A-L2/F17/FE-L3/L5/L7/L8；G29/G30 其余低危项见下方 G16+G18 代办）。
-3. 🟨 **G16+G18 已派后台 agent（`ageneral-purpose-f74418705acd34ff`）**：CI 工作流 `.github/workflows/ci.yml` + 夹具库 `backend/tests/fixtures/` + conftest 接缝 + **openapi 漂移门禁**（含重生 `shared/openapi.json`，测试对 version 字段鲁棒以容后续 bump）+ 量化/契约/前端测试；并复核收口 G29/G30 需复核低危项（FE-L2/L4/L6/L9/L10、A-L3/A-L4、P-L）。等其回报 → 独立复核 → 绿门禁 → 按组提交 + 账本/changelog。**该 agent 正在写树，勿并发改其文件。**
-4. `shared/openapi.json` 重导已并入上面 G16+G18（drift gate 附带重生）；版本 bump 后需再跑一次 regen 确认 version=1.1.0 且 drift test 仍绿。
-5. 发布：bump `1.0.0`→`1.1.0`（`backend/pyproject.toml` + `frontend/package.json` 双文件）→ `changeLog.md`→`CHANGELOG.md` 改名 → **停下等用户确认** → `git push` → `gh release create`（双语，中文在前，遵 `Release_Notes_Guidelines.md`）。
+3. ✅ **G16+G18 已完成（待提交本批）**：`.github/workflows/ci.yml`（backend pytest+_pipeline_test / frontend typecheck+build）、`scripts/gen_fixture_db.py` + `backend/tests/fixtures/{macro_data,crcl_monitor}.db`、`backend/tests/conftest.py`（真库缺失才播种、teardown 只删自建 → 真库在场 no-op）、`scripts/gen_openapi.py` + 重生 `shared/openapi.json`（14→23 路径）、`test_openapi_drift.py`(3，version 归一容 bump)、`test_api_contract.py`(8)。量化测试复用既有；前端单测无 runner **跳过（诚实缺口）**。G29/G30：FE-L2/L4/L6/L9/L10、A-L2 早前已修；A-L3/A-L4/P-L(plist/双备份/未用 import) 判非开放。⚠️ **两条网络依赖 P-L 残留**（`01_fetch_data.py:874/877` TLS `verify=False` + `dfs[1]` 位置式）离线不可测、盲改有冻 `bond_yield` 险，**据实保留待联网复核**——这是「fix every finding」唯一未闭合项，属 blocked-with-reason，非遗漏。实测 299 passed、`_pipeline_test.py` 全过、typecheck 0、`npm build` ✓。
+4. `shared/openapi.json` 已随 G16+G18 重生（23 路径，drift test 对 version 归一）；**版本 bump 后需再跑 `python scripts/gen_openapi.py` 一次**确认 version=1.1.0 且 `test_openapi_drift` 仍绿。
+5. 发布：bump `1.0.0`→`1.1.0`（`backend/pyproject.toml` + `frontend/package.json` 双文件）→ regen openapi → `changeLog.md`→`CHANGELOG.md` 改名 → **停下等用户确认** → `git push` → `gh release create`（双语，中文在前，遵 `Release_Notes_Guidelines.md`）。
 
 resume 协议：`git status --short` → 按上表把每个在飞文件归到 G26（`scripts/**`）或 G28-30（`analysis/`+前端）→ 取该组 fixer 回报或自行重建 fail→pass → **只 stage 该组文件**单独提交，切勿混入另一组或用 `git checkout --`/`stash` 碰 agent 未提交改动。
 发布前遗留动作：未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。

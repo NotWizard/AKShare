@@ -21,7 +21,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -37,7 +38,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -116,7 +118,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -132,7 +135,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -191,7 +195,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -207,7 +212,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -265,7 +271,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -281,7 +288,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "format": "date"
                 },
                 {
                   "type": "null"
@@ -411,7 +419,7 @@
           "refresh"
         ],
         "summary": "Trigger",
-        "description": "Run the fetch pipeline (blocks ~30s; cleared caches on success).\n\n``full=true`` bypasses the release calendar (fetch all tables).",
+        "description": "Start the fetch pipeline in the background; returns its ``job_id`` at once.\n\nF4: this POST is now the ONLY way to start a refresh — ``GET /refresh/stream``\njust subscribes — and it requires the local capability token, so a\ncross-origin page can no longer rewrite the production DB by pointing an\n``<img>``/prefetch at an API URL.\n\n``full=true`` bypasses the release calendar (fetch all tables). The final\nmanifest arrives on the stream's terminal ``done`` event (or via\n``GET /refresh/status``); a saturated pool reports busy instead of queueing.",
         "operationId": "trigger_api_v1_refresh_post",
         "parameters": [
           {
@@ -422,6 +430,22 @@
               "type": "boolean",
               "default": false,
               "title": "Full"
+            }
+          },
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
             }
           }
         ],
@@ -455,17 +479,16 @@
           "refresh"
         ],
         "summary": "Stream",
-        "description": "SSE: real-time progress (0.0 → 1.0) then the final result.\n\nRuns the blocking refresh on a worker thread and polls a queue from the\ngenerator so progress lines stream as the fetcher emits them (not buffered\nuntil completion). Supports cancellation: if the client disconnects, the\nworker is signaled to stop early (kills subprocess + releases lockfile).",
+        "description": "SSE: real-time progress (0.0 → 1.0) then the final result. READ-ONLY.\n\nF4: ``job_id`` is required and is only ever minted by ``POST /refresh``, so\nthis GET can no longer start a refresh — which is what made\n``<img src=\"…/refresh/stream\">``, a browser prefetch/prerender or a link\nscanner able to rewrite the production DB. A missing ``job_id`` is a 422 from\nvalidation (the handler never runs) and an unknown/expired one is a 404.",
         "operationId": "stream_api_v1_refresh_stream_get",
         "parameters": [
           {
-            "name": "full",
+            "name": "job_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Full"
+              "type": "string",
+              "title": "Job Id"
             }
           }
         ],
@@ -572,6 +595,24 @@
         "summary": "Regenerate",
         "description": "Re-run the model on current data (sync). Returns the new commentary.",
         "operationId": "regenerate_api_v1_commentary_regenerate_post",
+        "parameters": [
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -579,6 +620,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Commentary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -608,10 +659,317 @@
         }
       }
     },
+    "/api/v1/crcl/overview": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Overview",
+        "description": "KPI 区数据：估值快照 + 流通量快照 + 告警汇总 + 最近采集状态。",
+        "operationId": "overview_api_v1_crcl_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/metrics": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Metrics",
+        "description": "时序数据（图表用）。keys 逗号分隔；缺省返回全部。\n\nF11: ``keys`` 只接受 METRIC_LABELS 白名单内的键（未知键丢弃并记日志），\n去重后扇出上限 = 白名单长度，与用户输入长度无关——旧代码对\n``?keys=`` 的每个逗号项都新建一个连接并查询一次。\n``since``（含当日）与 ``max_points`` 把响应体积也框住。",
+        "operationId": "metrics_api_v1_crcl_metrics_get",
+        "parameters": [
+          {
+            "name": "keys",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keys"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "max_points",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 1500,
+              "title": "Max Points"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/events": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Events",
+        "description": "宏观事件与里程碑时间线（手工维护的 JSON 文件）。",
+        "operationId": "events_api_v1_crcl_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/fundamentals": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Fundamentals",
+        "description": "季报拆解与标志位（手工维护的 JSON 文件）。",
+        "operationId": "fundamentals_api_v1_crcl_fundamentals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/alerts": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Alerts",
+        "description": "告警规则当前状态 + 触发历史。",
+        "operationId": "alerts_api_v1_crcl_alerts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/logs": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Logs",
+        "description": "采集/告警日志（倒序）。\n\nF11: ``limit`` 必须有界——SQLite 把负数 LIMIT 当作\"无限制\"，旧签名\n``limit: int`` 让 ``?limit=-1`` 一次导出整张表。",
+        "operationId": "logs_api_v1_crcl_logs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/refresh": {
+      "post": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Refresh",
+        "description": "启动全量采集 + 告警评估（后台），立即返回 ``job_id``。\n\nF4：采集只能由这个 POST 触发（且必须携带本机令牌），\n``GET /crcl/refresh/stream`` 只做订阅——旧实现里一个\n``<img src=\"…/crcl/refresh/stream\">`` 或浏览器预取就能跑一整轮网络采集。\n单飞（F6）仍在 ``collect_all`` 内部：已有采集在进行时该 job 的终止事件\n会带回 ``status=\"busy\"``；线程池满则本次直接返回 busy，不排队。",
+        "operationId": "refresh_api_v1_crcl_refresh_post",
+        "parameters": [
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/crcl/refresh/stream": {
+      "get": {
+        "tags": [
+          "crcl"
+        ],
+        "summary": "Refresh Stream",
+        "description": "SSE 实时进度（只订阅，不触发采集）。\n\nF4：``job_id`` 只能由 ``POST /crcl/refresh`` 签发，因此本 GET 不再启动任何\n工作——缺参数由校验层直接 422（函数体都不会执行），未知/过期 id 回 404。",
+        "operationId": "refresh_stream_api_v1_crcl_refresh_stream_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
         "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session": {
+      "get": {
+        "summary": "Session",
+        "description": "Hand this process's capability token to the SAME-ORIGIN SPA (F4).\n\nThe SPA is served by this very app, so for it this is a plain same-origin\nread; ``frontend/src/api/client.ts`` caches the value and sends it as\n``X-API-Token`` on every POST.\n\nA localhost-CSRF page can still SEND this GET, but:\n  * it cannot READ the response body (cross-origin, and the response is not\n    a script/image the browser would hand it), and\n  * it cannot read ``data/.api_token`` (mode 0600, no filesystem access),\nso it can never present the token on a mutating POST. ``no-store`` keeps the\ntoken out of the browser's disk cache.",
+        "operationId": "session_api_v1_session_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -844,7 +1202,8 @@
               "busy",
               "error",
               "unknown",
-              "cancelled"
+              "cancelled",
+              "running"
             ],
             "title": "Status"
           },
@@ -879,7 +1238,7 @@
             "title": "Kept Previous",
             "default": []
           },
-          "detail": {
+          "job_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -888,7 +1247,18 @@
                 "type": "null"
               }
             ],
-            "title": "Detail"
+            "title": "Job Id"
+          },
+          "error_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Id"
           }
         },
         "type": "object",
@@ -1029,6 +1399,52 @@
           "interpretation": {
             "type": "string",
             "title": "Interpretation"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "included": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Included",
+            "default": []
+          },
+          "excluded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded",
+            "default": []
+          },
+          "stale": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stale",
+            "default": []
+          },
+          "composite_raw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composite Raw"
           }
         },
         "type": "object",
@@ -1122,7 +1538,8 @@
             "enum": [
               "green",
               "yellow",
-              "red"
+              "red",
+              "unknown"
             ],
             "title": "Status"
           },
