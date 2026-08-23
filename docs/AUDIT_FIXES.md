@@ -54,7 +54,7 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 ### 仍未开工（按此顺序）
 已完成并提交：Critical/High/Medium 主体 + 遗留 5-8（`f4baa1f`）+ **G08 变更端点鉴权（`9e8d4f8`，Critical）**。
 剩余：
-1. **提交 G26（管线中危，`scripts/**`）**：在飞文件 = `scripts/{01_fetch_data,03_supplement_leverage,_pipeline,_pipeline_test}.py` + 新增 `scripts/{_specs,nifd_leverage}.py`、`backend/tests/test_pipeline_{freshness,supplement}.py`。等其 fixer 回报（含 fail→pass），review→门禁→单独提交。
+1. **G26 源已提交 `b9167ec`（P-M7/P-M8/P-M9）**。⚠️ 但**仍有一个在飞 agent 未报**正在改 `scripts/03_supplement_leverage.py`（给 `backup_db` 加 `backup_dir` 注入参数，疑似 G30 P-L「双备份拷贝」）并已落 `backend/tests/test_pm9_declarative_fetch.py`（9 passed）。当前工作树**红**：`test_pipeline_supplement` 4 例失败，因为该 03 改动改了签名而其已提交测试仍期望旧签名——**HEAD (`b9167ec`) 本身是绿的**（旧 03 + 匹配测试），红只在未提交改动里。resume：等该 agent 报完，把 `03` 新版 + `test_pm9_declarative_fetch.py` +（可能的 `test_pipeline_supplement` 更新）作为一组 review→绿门禁→提交；勿把当前半成品红态提交。
 2. **提交 G28-G30（低危，`analysis/`+前端）**：在飞文件 = `analysis/cross_indicator.py`、`backend/app/core/serial.py`、`frontend/src/components/charts/{EChart.vue,options.ts}`、`frontend/src/components/layout/Sidebar.vue`、`frontend/src/pages/CrclMonitor.vue`、`backend/tests/test_{cross_lag_semantics,serial_precision}.py`。同上流程。
 3. **G16+G18**（CI + fixture DB + 契约/前端测试 + openapi 漂移门禁）：**必须工作树干净后**再做（`conftest.py` 会被每次 pytest 收集，在飞期会污染 agent 验证）。
 4. `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*` + G08 的 `/session`、POST/GET 拆分）：**放在版本 bump 之后**（`info.version` 取自 app，先 bump 免得重导两次）。
