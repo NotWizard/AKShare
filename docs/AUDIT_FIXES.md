@@ -255,13 +255,17 @@ resume 协议：`git status --short` → 按上表把每个在飞文件归到 G2
 - findings: F15(real_estate 缓存键归一) F16(crcl_db 连接关闭+docstring) F17(db.load copy / SELECT* 防御 / crcl.py:31 KeyError / serial 精度 / commentary 常量)
 - files: analysis/real_estate.py, backend/app/core/{crcl_db,db,serial,commentary}.py, api/v1/crcl.py
 
-### G29 · 前端低危项 · ⬜
+### G29 · 前端低危项 · 🟨 部分
 - findings: FE-L1(时区 off-by-one filters.ts:17) L2(refresh.ts done 缺失) L3(Sidebar computed/render) L4(Overview 死代码) L5(PALETTE TDZ) L6(num truthy 0 bug) L7(any 消除) L8(Date 解析缓存) L9(li tabindex) L10(focus-visible)
 - files: frontend/src/**
+- 已确认修复：FE-L3/L5/L7/L8（`740899f`，G28-30 批次）；FE-L1 时区 off-by-one 与 router.onError 已在 G25(`6f2a99c`) 提及。
+- **需复核（resume 时逐项确认是否已在 G25/M3 覆盖，未覆盖则补修）**：FE-L2(refresh.ts done)、FE-L4(Overview 死代码)、FE-L6(num truthy 0)、FE-L9(li tabindex)、FE-L10(focus-visible)。
 
-### G30 · 分析/管线低危项 · ⬜
+### G30 · 分析/管线低危项 · 🟨 部分
 - findings: A-L2(cross_indicator in-sample/abs) A-L3(SELECT*) A-L4(lru_cache mutable) + P-L(TLS verify=False / dfs[1] 位置式 / 双备份拷贝 / 未用 import / plist expat 路径)
 - files: analysis/cross_indicator.py, backend/app/core/db.py, scripts/01_fetch_data.py, _pipeline.py, schedule/*
+- 已确认修复：A-L2（`740899f`）。
+- **需复核（resume）**：A-L3(SELECT*)、A-L4(lru_cache mutable) 是否随 G03b/G23 缓存版本键一并处理；P-L 各项（TLS verify=False、dfs[1] 位置式、双备份拷贝、未用 import、plist expat 路径）多在 `scripts/`，应在 **G26 提交时**核对是否覆盖，未覆盖则补一条低危提交。
 
 ---
 
