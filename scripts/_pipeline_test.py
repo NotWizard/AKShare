@@ -65,6 +65,27 @@ ok, reason = P.validate(_cpi_with_outliers(0).assign(cpi_yoy=2000.0), "cpi")
 check("ranges: whole-table ×1000 unit error rejected", not ok)
 
 
+# dtype gate (P-M7): a required numeric col that arrived as strings → reject
+def _ppi(newest="2026-07-01", n=220):
+    dates = pd.date_range(end=pd.Timestamp(newest), periods=n, freq="MS").strftime("%Y-%m-01")
+    return pd.DataFrame({"date": dates, "ppi_yoy": [1.0 + (i % 20) * 0.1 for i in range(n)]})
+
+_TODAY = pd.Timestamp("2026-08-23")
+_str = _ppi(); _str["ppi_yoy"] = _str["ppi_yoy"].astype(str)
+ok, reason = P.validate(_str, "ppi", today=_TODAY)
+check("dtype: required string col rejected", not ok)
+check("dtype: reason names col + not numeric", "ppi_yoy" in reason and "numeric" in reason)
+
+# freshness gate (P-M7): newest date too far behind today → reject frozen source
+check("freshness: recent monthly ppi passes", P.validate(_ppi("2026-07-01"), "ppi", today=_TODAY)[0])
+ok, reason = P.validate(_ppi("2025-06-01"), "ppi", today=_TODAY)   # ~14 months stale
+check("freshness: stale (frozen) ppi rejected", not ok)
+check("freshness: reason names max_date_lag", "max_date_lag" in reason and "stale" in reason)
+check("freshness: future newest never false-rejects", P.validate(_ppi("2030-01-01"), "ppi", today=_TODAY)[0])
+check("freshness: table without max_date_lag is exempt (old money_supply ok)",
+      P.validate(good_money(500), "money_supply", today=_TODAY)[0])
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 2) Full staged flow: good + bad + partial fetchers, atomic commit
 # ──────────────────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ import json
 import os
 import shutil
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -47,7 +47,10 @@ SHRINK_FLOOR = 0.8
 # Per-table data contracts. A fetcher's output must satisfy every listed check
 # before it may replace the staging table.
 #   min_rows  : absolute lower bound on row count (blocks catastrophic overwrite)
-#   required  : columns that must exist and not be all-NaN
+#   required  : columns that must exist, not be all-NaN, and (except "date") carry
+#               a NUMERIC dtype — a required series that arrived as strings means
+#               the source changed shape and the fetcher forgot to coerce, which
+#               would turn every downstream pd.to_numeric into silent NaN.
 #   ranges    : column → (lo, hi) value domain; validate() rejects when >10% of
 #               non-null values fall outside (blocks unit/scale errors, absorbs
 #               isolated revisions). Bounds calibrated on live DB min–max 2026-08-09.
@@ -58,24 +61,33 @@ SHRINK_FLOOR = 0.8
 #   min_groups: for multi-series tables (key longer than ["date"]) the minimum
 #               number of distinct series, so losing whole series is rejected
 #               even on a first/cold load where no previous count exists.
+#   max_date_lag: freshness ceiling in DAYS. A source can silently FREEZE — it
+#               keeps returning "valid" rows that simply stop advancing — and the
+#               row-count / range gates never notice. When the newest date is more
+#               than max_date_lag days behind "today" the fetch is rejected
+#               (kept_previous → health lamp turns amber). Only declared on tables
+#               with a firm monthly/quarterly cadence; annual / naturally-sparse
+#               tables (household_income, demographics, …) legitimately lag a year+
+#               and omit it. Bounds are generous (well beyond the normal
+#               inter-release gap) so only a genuine multi-month freeze trips them.
 TABLE_SPECS = {
     "money_supply":     dict(min_rows=400, required=["m2_yoy"],
                              ranges=dict(m2_yoy=(0, 45))),
     "gdp":              dict(min_rows=15,  required=["gdp_yoy"],
-                             ranges=dict(gdp_yoy=(-10, 25))),
+                             ranges=dict(gdp_yoy=(-10, 25)), max_date_lag=400),
     # 东财当前全国 CPI/PPI 序列约 220+/240+ 行（较早期覆盖缩短），绝对下限按
     # 现状校准；对已有表的缩水防护由 distinct-date 反缩水县闸承担
     "cpi":              dict(min_rows=200, required=["cpi_yoy"],
                              ranges=dict(cpi_yoy=(-5, 10))),
     "ppi":              dict(min_rows=200, required=["ppi_yoy"],
-                             ranges=dict(ppi_yoy=(-15, 20))),
+                             ranges=dict(ppi_yoy=(-15, 20)), max_date_lag=200),
     "pmi":              dict(min_rows=200, required=["pmi_official"],
                              ranges=dict(pmi_official=(30, 70))),
     "leverage":         dict(min_rows=40,  required=["household"]),
     "social_finance":   dict(min_rows=50,  required=["total"],
-                             ranges=dict(total=(-5000, 100000))),
+                             ranges=dict(total=(-5000, 100000)), max_date_lag=200),
     "lpr":              dict(min_rows=100, required=["lpr_1y"]),
-    "industrial":       dict(min_rows=100, required=["ip_yoy"]),
+    "industrial":       dict(min_rows=100, required=["ip_yoy"], max_date_lag=200),
     # 10-城市面板：粒度是 (date, city)，不是 date。只按 date 防缩水会漏掉「7 个城市
     # 失败但日期集不变」的坍塌（行数 1860→558 仍过 min_rows 且日期数不降），
     # if_exists="replace" 会因此删掉另外 7 城全部历史。min_groups 对齐
@@ -83,19 +95,19 @@ TABLE_SPECS = {
     "house_price":      dict(min_rows=500, required=["date", "new_yoy"],
                              key=["date", "city"], min_groups=10),
     "household_income": dict(min_rows=8),                 # annual data, naturally sparse
-    "new_credit":       dict(min_rows=100, required=["new_rmb_loan"]),
+    "new_credit":       dict(min_rows=100, required=["new_rmb_loan"], max_date_lag=200),
     "bond_yield":       dict(min_rows=100,  required=["y_10y"],
-                             ranges=dict(y_10y=(0, 10))),  # monthly resampled, ~20y
+                             ranges=dict(y_10y=(0, 10)), max_date_lag=200),  # monthly resampled, ~20y
     "demographics":   dict(min_rows=8),                 # annual, ~30y, NBS-sourced (may be blocked)
     # NBS 月度财政收支（2015- 起约 120+ 月）；同比为累计增长口径
     "fiscal":           dict(min_rows=100, required=["revenue_cum", "expenditure_cum"],
                              ranges=dict(revenue_cum_yoy=(-30, 40),
-                                         expenditure_cum_yoy=(-40, 70))),
+                                         expenditure_cum_yoy=(-40, 70)), max_date_lag=220),
     # NBS 月度货物进出口（美元计）+ 美国 ISM 制造业 PMI；出口同比上限留春节低基数脉冲裕量
     "external_demand":  dict(min_rows=100, required=["exports_yoy"],
                              ranges=dict(exports_yoy=(-40, 170),
                                          imports_yoy=(-40, 70),
-                                         trade_total_yoy=(-30, 80))),
+                                         trade_total_yoy=(-30, 80)), max_date_lag=220),
 }
 
 
@@ -167,11 +179,13 @@ def enforce_indexes(conn, table, key=None):
 
 
 # ── validation gate ──────────────────────────────────────────────────────────
-def validate(df, table, prev_distinct_dates=0):
+def validate(df, table, prev_distinct_dates=0, today=None):
     """Return (ok, reason). A fetched df must clear every check to replace a table.
 
     ``prev_distinct_dates`` is the previously-good table's distinct GRAIN-KEY
-    count (== distinct dates for date-keyed tables; see table_distinct_keys)."""
+    count (== distinct dates for date-keyed tables; see table_distinct_keys).
+    ``today`` is the freshness reference date (defaults to date.today(); injected
+    in tests for determinism)."""
     spec = TABLE_SPECS.get(table, {})
     min_rows = spec.get("min_rows", 1)
     required = spec.get("required", [])
@@ -186,6 +200,13 @@ def validate(df, table, prev_distinct_dates=0):
     for c in required:
         if c != "date" and df[c].isna().all():
             return False, f"column {c!r} all NaN"
+    # dtype gate (P-M7): a required numeric column that arrived as strings/objects
+    # means the source changed shape (数值带了单位/千分位/百分号后缀) and the fetcher
+    # forgot to coerce — storing it silently NaN-s every downstream pd.to_numeric.
+    # "date" is intentionally a string key and is exempt.
+    for c in required:
+        if c != "date" and not pd.api.types.is_numeric_dtype(df[c]):
+            return False, f"column {c!r} is not numeric (dtype {df[c].dtype})"
     # value-range gate: >10% of non-null values outside the calibrated domain →
     # reject (whole-table unit/scale errors blocked, isolated revisions absorbed)
     for c, (lo, hi) in spec.get("ranges", {}).items():
@@ -194,6 +215,20 @@ def validate(df, table, prev_distinct_dates=0):
         s = df[c].dropna()
         if len(s) and ((s < lo) | (s > hi)).mean() > 0.10:
             return False, f"column {c!r}: >10% of non-null values outside [{lo}, {hi}]"
+    # freshness gate (P-M7): a source can silently FREEZE — the newest date stops
+    # advancing while every other gate still passes. Tables that declare
+    # max_date_lag are rejected once their newest date falls more than that many
+    # days behind ``today`` (kept_previous → health lamp turns amber). A future /
+    # NaT newest date never trips it.
+    max_lag = spec.get("max_date_lag")
+    if max_lag and "date" in df.columns:
+        newest = pd.to_datetime(df["date"], errors="coerce").max()
+        ref = pd.Timestamp(date.today() if today is None else today)
+        if pd.notna(newest):
+            lag_days = (ref - newest).days
+            if lag_days > max_lag:
+                return False, (f"newest date {newest.date()} is {lag_days}d behind "
+                               f"{ref.date()} > max_date_lag {max_lag}d (stale/frozen source)")
     # grain gate: the declared key must be unique. Duplicate keys are how the
     # live DB ended up with lpr 1536 rows / 154 dates and pmi 2 rows for
     # 2012-05 with different caixin values, which then forced order-dependent

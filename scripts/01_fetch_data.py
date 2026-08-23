@@ -43,6 +43,8 @@ from _pipeline import (  # noqa: E402
 from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
 import dual_sources  # noqa: E402
 from signal_history import append_signal_history  # noqa: E402
+from nifd_leverage import nifd_supplement_df  # noqa: E402
+from _specs import DATE_PARSERS, FETCH_SPECS, to_num  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
@@ -277,65 +279,65 @@ def run_fetcher(name, f, conn_factory, timeout_s, attempts=FETCH_ATTEMPTS,
 
 
 # ─────────────────────────────────────────────
-# 1. 货币供应量 (M0/M1/M2)
+# 声明式采集器（P-M9）: 1.货币供应量 2.GDP 9.工业增加值 12.新增人民币贷款
 # ─────────────────────────────────────────────
-def fetch_money_supply(conn):
-    log("采集: 货币供应量 M0/M1/M2 ...")
-    df = ak.macro_china_supply_of_money()
+# 这四张表的抓取体此前逐字重复（call ak → 中文列名 rename + to_numeric coerce →
+# 解析日期 → dropna/sort/reset → save_to_db）。现由 scripts/_specs.py 的
+# FETCH_SPECS 声明式描述 + 下面这一个通用循环驱动；生成出的 fetch_* 仍是模块级
+# 函数（__name__ 保持 fetch_<table>），故 main() 的 fetchers 列表与测试对它们的
+# 引用/替身完全不变。真正不规则的采集器（cpi/ppi/pmi/bond/leverage/lpr/
+# social_finance/household_income/demographics/fiscal/external_demand）仍各自成
+# 函数，只复用 DATE_PARSERS / to_num。
+def _build_spec_frame(df, spec):
+    """Raw akshare frame → standardized (date + English numeric cols) frame.
 
-    # 解析日期: "2026.5" → "2026-05-01"
-    def parse_date(s):
-        parts = str(s).split(".")
-        if len(parts) == 2:
-            return f"{parts[0]}-{int(parts[1]):02d}-01"
-        return None
+    Reproduces the old inline bodies exactly: date via the named DATE_PARSERS
+    entry, every value column via to_num, optional columns via ``df.get`` (a
+    missing optional column raises the same length-mismatch the old
+    ``df.get(src, pd.Series())`` idiom did), then dropna(date)/sort/reset."""
+    date_col, parser_key = spec["date"]
+    parser = DATE_PARSERS[parser_key]
+    data = {"date": [parser(x) for x in df[date_col]]}
+    for dest, src, optional in spec["cols"]:
+        series = df.get(src, pd.Series(dtype="float64")) if optional else df[src]
+        data[dest] = to_num(series)
+    out = pd.DataFrame(data)
+    return out.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
-    result = pd.DataFrame({
-        "date": [parse_date(x) for x in df["统计时间"]],
-        "m2": pd.to_numeric(df["货币和准货币（广义货币M2）"], errors="coerce"),
-        "m2_yoy": pd.to_numeric(df["货币和准货币（广义货币M2）同比增长"], errors="coerce"),
-        "m1": pd.to_numeric(df["货币(狭义货币M1)"], errors="coerce"),
-        "m1_yoy": pd.to_numeric(df["货币(狭义货币M1)同比增长"], errors="coerce"),
-        "m0": pd.to_numeric(df["流通中现金(M0)"], errors="coerce"),
-        "m0_yoy": pd.to_numeric(df["流通中现金(M0)同比增长"], errors="coerce"),
-        "demand_deposit": pd.to_numeric(df.get("活期存款", pd.Series()), errors="coerce"),
-        "time_deposit": pd.to_numeric(df.get("定期存款", pd.Series()), errors="coerce"),
-        "savings": pd.to_numeric(df.get("储蓄存款", pd.Series()), errors="coerce"),
-    })
-    result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-    save_to_db(result, "money_supply", conn)
+
+def _run_spec(conn, name):
+    """Generic fetch/rename/coerce/persist for one FETCH_SPECS table."""
+    spec = FETCH_SPECS[name]
+    log(f"采集: {spec['label']} ...")
+    fn = getattr(ak, spec["api"])
+    if spec.get("swallow_errors"):
+        # 保持 fetch_new_credit 历史行为：网络异常吞成空表 → 闸门记 kept_previous
+        # （可重试），而非把异常上抛给 run_fetcher。
+        try:
+            result = _build_spec_frame(fn(), spec)
+        except Exception as e:
+            log(f"  ⚠️ {spec.get('fail_log', spec['label'] + '采集失败')}: {e}")
+            result = pd.DataFrame()
+    else:
+        result = _build_spec_frame(fn(), spec)
+    save_to_db(result, name, conn)
     return result
 
 
-# ─────────────────────────────────────────────
-# 2. GDP (绝对值 + 同比增速)
-# ─────────────────────────────────────────────
-def fetch_gdp(conn):
-    log("采集: GDP ...")
-    df = ak.macro_china_gdp()
+def _make_spec_fetcher(name):
+    """Build a module-level ``fetch_<name>(conn)`` that runs the declarative spec.
+    The returned function keeps the ``fetch_<name>`` identity main()/tests rely on."""
+    def _f(conn):
+        return _run_spec(conn, name)
+    _f.__name__ = _f.__qualname__ = f"fetch_{name}"
+    _f.__doc__ = f"Declarative fetcher for {name!r} (see scripts/_specs.py FETCH_SPECS)."
+    return _f
 
-    # 解析季度日期: "2024年第1季度" → "2024-01-01"; 累计 "2026年第1-2季度" → 末季 "2026-04-01"
-    def parse_quarter(s):
-        import re
-        m = re.match(r"(\d{4})年第(\d)(?:-(\d))?季度", str(s))
-        if m:
-            year = int(m.group(1))
-            q = int(m.group(3) or m.group(2))   # 累计取末季
-            month = (q - 1) * 3 + 1
-            return f"{year}-{month:02d}-01"
-        return None
 
-    result = pd.DataFrame({
-        "date": [parse_quarter(x) for x in df["季度"]],
-        "gdp_abs": pd.to_numeric(df["国内生产总值-绝对值"], errors="coerce"),
-        "gdp_yoy": pd.to_numeric(df["国内生产总值-同比增长"], errors="coerce"),
-        "gdp_primary": pd.to_numeric(df.get("第一产业-绝对值", pd.Series()), errors="coerce"),
-        "gdp_secondary": pd.to_numeric(df.get("第二产业-绝对值", pd.Series()), errors="coerce"),
-        "gdp_tertiary": pd.to_numeric(df.get("第三产业-绝对值", pd.Series()), errors="coerce"),
-    })
-    result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-    save_to_db(result, "gdp", conn)
-    return result
+fetch_money_supply = _make_spec_fetcher("money_supply")   # 1. 货币供应量 (M0/M1/M2)
+fetch_gdp = _make_spec_fetcher("gdp")                      # 2. GDP (绝对值 + 同比增速)
+fetch_industrial = _make_spec_fetcher("industrial")       # 9. 工业增加值
+fetch_new_credit = _make_spec_fetcher("new_credit")       # 12. 新增人民币贷款
 
 
 # ─────────────────────────────────────────────
@@ -385,8 +387,8 @@ def fetch_cpi(conn):
         save_to_db(pd.DataFrame(), "cpi", conn)  # 记 kept_previous → 计入退出码/健康灯
         return pd.DataFrame()
     em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
-    em["cpi_yoy"] = pd.to_numeric(em["cpi_yoy"], errors="coerce")
-    em["cpi_mom"] = pd.to_numeric(em["cpi_mom"], errors="coerce")
+    em["cpi_yoy"] = to_num(em["cpi_yoy"])
+    em["cpi_mom"] = to_num(em["cpi_mom"])
     em = em.dropna(subset=["cpi_yoy"])
 
     # Keep old data for dates before eastmoney coverage
@@ -443,7 +445,7 @@ def fetch_ppi(conn):
         save_to_db(pd.DataFrame(), "ppi", conn)  # 记 kept_previous → 计入退出码/健康灯
         return pd.DataFrame()
     em["date"] = pd.to_datetime(em["date"]).dt.strftime("%Y-%m-01")
-    em["ppi_yoy"] = pd.to_numeric(em["ppi_yoy"], errors="coerce")
+    em["ppi_yoy"] = to_num(em["ppi_yoy"])
     em = em.dropna(subset=["ppi_yoy"])
 
     em_min = em["date"].min()
@@ -477,7 +479,7 @@ def _pmi_monthly(release_dates, values, col):
     out = pd.DataFrame({
         "date": release.dt.strftime("%Y-%m-01"),
         "_release": release,
-        col: pd.to_numeric(values, errors="coerce"),
+        col: to_num(values),
     }).dropna(subset=[col])
     return (out.sort_values("_release")
                .drop_duplicates(subset=["date"], keep="last")
@@ -508,7 +510,7 @@ def fetch_pmi(conn):
         log("  ⚠️ 东财 PMI 无数据，官方/非制造业仅用 akshare")
         off, non = off_ak, non_ak
     else:
-        em2 = em.assign(pmi_official=pd.to_numeric(em["pmi_official"], errors="coerce")) \
+        em2 = em.assign(pmi_official=to_num(em["pmi_official"])) \
                 .dropna(subset=["pmi_official"])
         em_off = _pmi_monthly(em2["date"], em2["pmi_official"], "pmi_official")
         em_non = _pmi_monthly(em2["date"], em2["pmi_non_mfg"], "pmi_non_mfg")
@@ -540,26 +542,8 @@ def fetch_pmi(conn):
 # ─────────────────────────────────────────────
 # 6. 宏观杠杆率 (CNBS)
 # ─────────────────────────────────────────────
-# NIFD（国家金融与发展实验室）季度杠杆率报告提取值（官方发布，非自算）。
-# 出处见 scripts/03_supplement_leverage.py 头部报告链接；AKShare macro_cnbs 滞后时补齐。
-_NIFD_DATA = [
-    # date, household, non_fin_corp, gov_total,
-    #   gov_central, gov_local, real_economy, fin_asset, fin_liability
-    ("2025-03-01", 61.5, 173.7, 63.2, 26.4, 36.8, 298.4, 50.3, 69.4),
-    ("2025-06-01", 61.1, 174.0, 65.3, 27.6, 37.8, 300.4, 51.7, 71.8),
-    ("2025-09-01", 60.4, 174.4, 67.5, 28.8, 38.7, 302.3, 51.3, 73.4),
-    ("2025-12-01", 59.4, 174.6, 68.4, 29.4, 39.1, 302.4, 50.5, 73.5),
-    ("2026-03-01", 59.0, 180.0, 70.3, 29.9, 40.4, 309.3, None, None),
-    ("2026-06-01", 57.7, 179.5, 71.0, 30.5, 40.4, 308.2, None, None),  # NIFD 2026Q2 (2026-07-30 发布, 双源交叉验证)
-]
-_NIFD_COLUMNS = [
-    "date", "household", "non_fin_corp", "gov_total",
-    "gov_central", "gov_local", "real_economy", "fin_asset", "fin_liability",
-]
-
-
-def _nifd_supplement_df() -> pd.DataFrame:
-    return pd.DataFrame(_NIFD_DATA, columns=_NIFD_COLUMNS)
+# NIFD 季度杠杆率补充值（官方发布、非自算）已抽到 scripts/nifd_leverage.py 作为
+# 单一真相源（此前 01 与 03 各存一份、易漂移，即 P-M8）。macro_cnbs 滞后时补齐。
 
 
 def fetch_leverage(conn):
@@ -567,22 +551,18 @@ def fetch_leverage(conn):
     df = ak.macro_cnbs()
 
     # 解析季度日期: "1992-12" → "1992-12-01" (Q4), "1993-03" → "1993-03-01" (Q1)
-    def parse_cnbs_date(s):
-        parts = str(s).split("-")
-        if len(parts) == 2:
-            return f"{parts[0]}-{parts[1]}-01"
-        return None
+    parse_cnbs_date = DATE_PARSERS["cnbs_dash"]
 
     result = pd.DataFrame({
         "date": [parse_cnbs_date(x) for x in df["年份"]],
-        "household": pd.to_numeric(df["居民部门"], errors="coerce"),
-        "non_fin_corp": pd.to_numeric(df["非金融企业部门"], errors="coerce"),
-        "gov_total": pd.to_numeric(df["政府部门"], errors="coerce"),
-        "gov_central": pd.to_numeric(df["中央政府"], errors="coerce"),
-        "gov_local": pd.to_numeric(df["地方政府"], errors="coerce"),
-        "real_economy": pd.to_numeric(df["实体经济部门"], errors="coerce"),
-        "fin_asset": pd.to_numeric(df["金融部门资产方"], errors="coerce"),
-        "fin_liability": pd.to_numeric(df["金融部门负债方"], errors="coerce"),
+        "household": to_num(df["居民部门"]),
+        "non_fin_corp": to_num(df["非金融企业部门"]),
+        "gov_total": to_num(df["政府部门"]),
+        "gov_central": to_num(df["中央政府"]),
+        "gov_local": to_num(df["地方政府"]),
+        "real_economy": to_num(df["实体经济部门"]),
+        "fin_asset": to_num(df["金融部门资产方"]),
+        "fin_liability": to_num(df["金融部门负债方"]),
     })
     result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
@@ -591,7 +571,7 @@ def fetch_leverage(conn):
     # gated save_to_db. date>cnbs_max filter means once AKShare catches up, the
     # NIFD rows for those dates drop out and fresher CNBS data supersedes them.
     cnbs_max = result["date"].max()
-    nifd_new = _nifd_supplement_df()
+    nifd_new = nifd_supplement_df()
     nifd_new = nifd_new[nifd_new["date"] > cnbs_max]
     if not nifd_new.empty:
         result = pd.concat([result, nifd_new], ignore_index=True)
@@ -662,7 +642,7 @@ def _pbc_shrzgm_supplement_df() -> pd.DataFrame:
             def gv(j):
                 if j is None:
                     return None
-                v = pd.to_numeric(xls.iloc[i, j], errors="coerce")
+                v = to_num(xls.iloc[i, j])
                 return None if pd.isna(v) else float(v)
             rows.append({"date": f"{y}-{month:02d}-01", **{k: gv(j) for k, j in idx.items()}})
         return pd.DataFrame(rows)
@@ -677,13 +657,13 @@ def fetch_social_finance(conn):
         df = ak.macro_china_shrzgm()
         result = pd.DataFrame({
             "date": [f"{str(x)[:4]}-{str(x)[4:6]}-01" for x in df["月份"]],
-            "total": pd.to_numeric(df["社会融资规模增量"], errors="coerce"),
-            "rmb_loan": pd.to_numeric(df["其中-人民币贷款"], errors="coerce"),
-            "entrusted_loan": pd.to_numeric(df["其中-委托贷款"], errors="coerce"),
-            "trust_loan": pd.to_numeric(df["其中-信托贷款"], errors="coerce"),
-            "acceptance_bill": pd.to_numeric(df["其中-未贴现银行承兑汇票"], errors="coerce"),
-            "corp_bond": pd.to_numeric(df["其中-企业债券"], errors="coerce"),
-            "equity": pd.to_numeric(df["其中-非金融企业境内股票融资"], errors="coerce"),
+            "total": to_num(df["社会融资规模增量"]),
+            "rmb_loan": to_num(df["其中-人民币贷款"]),
+            "entrusted_loan": to_num(df["其中-委托贷款"]),
+            "trust_loan": to_num(df["其中-信托贷款"]),
+            "acceptance_bill": to_num(df["其中-未贴现银行承兑汇票"]),
+            "corp_bond": to_num(df["其中-企业债券"]),
+            "equity": to_num(df["其中-非金融企业境内股票融资"]),
         })
         result = result.sort_values("date").reset_index(drop=True)
     except Exception as e:
@@ -717,8 +697,8 @@ def fetch_lpr(conn):
         result = pd.DataFrame({
             "trade_date": trade_date,
             "date": trade_date.dt.strftime("%Y-%m-01"),
-            "lpr_1y": pd.to_numeric(df["LPR1Y"], errors="coerce"),
-            "lpr_5y": pd.to_numeric(df["LPR5Y"], errors="coerce"),
+            "lpr_1y": to_num(df["LPR1Y"]),
+            "lpr_5y": to_num(df["LPR5Y"]),
         })
         # 只保留有 LPR 数据的行 (2019年8月起)
         result = result.dropna(subset=["lpr_1y"])
@@ -740,28 +720,8 @@ def fetch_lpr(conn):
 
 
 # ─────────────────────────────────────────────
-# 9. 工业增加值
+# 9. 工业增加值 → 声明式 fetch_industrial（见上方 P-M9 块 + scripts/_specs.py）
 # ─────────────────────────────────────────────
-def fetch_industrial(conn):
-    log("采集: 工业增加值 ...")
-    df = ak.macro_china_gyzjz()
-
-    # 解析月份: "2008年02月份" → "2008-02-01"
-    def parse_month(s):
-        import re
-        m = re.match(r"(\d{4})年(\d{2})月份", str(s))
-        if m:
-            return f"{m.group(1)}-{m.group(2)}-01"
-        return None
-
-    result = pd.DataFrame({
-        "date": [parse_month(x) for x in df["月份"]],
-        "ip_yoy": pd.to_numeric(df["同比增长"], errors="coerce"),
-        "ip_cumulative": pd.to_numeric(df["累计增长"], errors="coerce"),
-    })
-    result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-    save_to_db(result, "industrial", conn)
-    return result
 
 
 # ─────────────────────────────────────────────
@@ -787,12 +747,12 @@ def fetch_house_price(conn):
         result = pd.DataFrame({
             "date": pd.to_datetime(combined["日期"]).dt.strftime("%Y-%m-01"),
             "city": combined["城市"],
-            "new_yoy": pd.to_numeric(combined["新建商品住宅价格指数-同比"], errors="coerce"),
-            "new_mom": pd.to_numeric(combined["新建商品住宅价格指数-环比"], errors="coerce"),
-            "new_base": pd.to_numeric(combined["新建商品住宅价格指数-定基"], errors="coerce"),
-            "used_yoy": pd.to_numeric(combined["二手住宅价格指数-同比"], errors="coerce"),
-            "used_mom": pd.to_numeric(combined["二手住宅价格指数-环比"], errors="coerce"),
-            "used_base": pd.to_numeric(combined["二手住宅价格指数-定基"], errors="coerce"),
+            "new_yoy": to_num(combined["新建商品住宅价格指数-同比"]),
+            "new_mom": to_num(combined["新建商品住宅价格指数-环比"]),
+            "new_base": to_num(combined["新建商品住宅价格指数-定基"]),
+            "used_yoy": to_num(combined["二手住宅价格指数-同比"]),
+            "used_mom": to_num(combined["二手住宅价格指数-环比"]),
+            "used_base": to_num(combined["二手住宅价格指数-定基"]),
         })
         result = result.sort_values(["date", "city"]).reset_index(drop=True)
     else:
@@ -814,12 +774,7 @@ def fetch_household_income(conn):
     """
     log("采集: 居民可支配收入与人口 ...")
 
-    def _parse_year_col(col):
-        import re
-        m = re.match(r"(\d{4})年", str(col))
-        if m:
-            return f"{m.group(1)}-01-01"
-        return None
+    _parse_year_col = DATE_PARSERS["cn_year"]
 
     income_df = pd.DataFrame()
     pop_df = pd.DataFrame()
@@ -840,7 +795,7 @@ def fetch_household_income(conn):
             for col, val in row.items():
                 d = _parse_year_col(col)
                 if d:
-                    records.append({"date": d, "income_per_capita": pd.to_numeric(val, errors="coerce")})
+                    records.append({"date": d, "income_per_capita": to_num(val)})
             income_df = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
             log(f"  ✅ 人均可支配收入: {len(income_df)} 年")
         else:
@@ -862,7 +817,7 @@ def fetch_household_income(conn):
             for col, val in row.items():
                 d = _parse_year_col(col)
                 if d:
-                    records.append({"date": d, "population_10k": pd.to_numeric(val, errors="coerce")})
+                    records.append({"date": d, "population_10k": to_num(val)})
             pop_df = pd.DataFrame(records).dropna().sort_values("date").reset_index(drop=True)
             log(f"  ✅ 总人口: {len(pop_df)} 年")
         else:
@@ -891,30 +846,8 @@ def fetch_household_income(conn):
 
 
 # ─────────────────────────────────────────────
-# 12. 新增人民币贷款（社融数据的信用替代指标）
+# 12. 新增人民币贷款 → 声明式 fetch_new_credit（见上方 P-M9 块 + scripts/_specs.py）
 # ─────────────────────────────────────────────
-def fetch_new_credit(conn):
-    log("采集: 新增人民币贷款 ...")
-    try:
-        df = ak.macro_china_new_financial_credit()
-        # 解析月份: "2026年5月份" → "2026-05-01"
-        def parse_month(s):
-            import re
-            m = re.match(r"(\d{4})年(\d{1,2})月", str(s))
-            if m:
-                return f"{m.group(1)}-{int(m.group(2)):02d}-01"
-            return None
-        result = pd.DataFrame({
-            "date": [parse_month(x) for x in df["月份"]],
-            "new_rmb_loan": pd.to_numeric(df["当月"], errors="coerce"),
-        })
-        result = result.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
-    except Exception as e:
-        log(f"  ⚠️ 新增信贷数据采集失败: {e}")
-        result = pd.DataFrame()
-
-    save_to_db(result, "new_credit", conn)
-    return result
 
 
 # ─────────────────────────────────────────────
@@ -943,7 +876,7 @@ def fetch_bond_yield(conn):
             dfs = pd.read_html(StringIO(text), header=0)
             df = dfs[1]
             gz = df[df["曲线名称"] == "中债国债收益率曲线"][["日期", "10年"]].copy()
-            gz["10年"] = pd.to_numeric(gz["10年"], errors="coerce")
+            gz["10年"] = to_num(gz["10年"])
             return gz.dropna(subset=["10年"])
         except Exception:
             return pd.DataFrame()
@@ -1067,9 +1000,8 @@ def fetch_demographics(conn):
 # 15. 财政收支（NBS 月度预算收入/支出，2015- 起）
 # ─────────────────────────────────────────────
 def _parse_nbs_month(s):
-    import re
-    m = re.match(r"(\d{4})年(\d{1,2})月", str(s))
-    return f"{m.group(1)}-{int(m.group(2)):02d}-01" if m else None
+    # NBS 月份标签（"2026年5月"）解析，与 industrial/new_credit 同款
+    return DATE_PARSERS["cn_month"](s)
 
 
 def _nbs_long(df):
@@ -1080,7 +1012,7 @@ def _nbs_long(df):
             d = _parse_nbs_month(col)
             if d:
                 records.append({"date": d, "indicator": str(ind),
-                                "value": pd.to_numeric(val, errors="coerce")})
+                                "value": to_num(val)})
     return pd.DataFrame(records)
 
 
@@ -1164,7 +1096,7 @@ def fetch_external_demand(conn):
         df_ism = ak.macro_usa_ism_pmi()
         ism = pd.DataFrame({
             "date": [dual_sources._norm_ism_date(x) for x in df_ism["日期"]],
-            "us_ism_pmi": pd.to_numeric(df_ism["今值"], errors="coerce"),
+            "us_ism_pmi": to_num(df_ism["今值"]),
         }).dropna(subset=["us_ism_pmi"])
         ism = ism.drop_duplicates(subset=["date"], keep="last")
         result = result.merge(ism, on="date", how="outer")

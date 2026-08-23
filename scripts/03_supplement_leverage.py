@@ -1,88 +1,129 @@
 #!/usr/bin/env python3
 """
-补充宏观杠杆率数据（NIFD 季度报告）
+补充宏观杠杆率数据（NIFD 季度报告）—— 经暂存闸门原子提交（G26 / P-M8）。
 
-ak.macro_cnbs() (AKShare) 数据滞后至 2024-Q4。
-NIFD（国家金融与发展实验室）按季度发布宏观杠杆率报告，
-包含居民/非金融企业/政府部门（中央+地方）完整分项数据。
+ak.macro_cnbs() (AKShare) 数据滞后；NIFD（国家金融与发展实验室）按季度发布宏观
+杠杆率报告，含居民/非金融企业/政府（中央+地方）完整分项。本脚本把这些官方补充
+值合并进 leverage 表，作为 fetch_leverage 之外的手动兜底。
 
-本脚本从 NIFD 季度报告中提取的数据，补充至 leverage 表。
+改动要点（P-M8）：
+  1. NIFD 数据不再在本文件内自存一份，改从 `scripts/nifd_leverage.py` 单一真相源
+     引入（此前 01/03 各存一份、逐字重复、极易漂移）。
+  2. 不再直接 `INSERT INTO data/macro_data.db`（live 库），而是走与所有写入者相同的
+     暂存路径：open_staging(live→staging) → 合并 → validate() 闸门 → 在暂存库上
+     重算派生表 → commit_staging() 原子交换。任何一步失败都丢弃暂存、live 保持不动，
+     维持「非经闸门，数据不入 live」这一核心不变量。
+     （其自带的“日期已存在则跳过”守卫意味着新的唯一索引不改变它的行为。）
 
-数据来源：
-  - NIFD 2025Q1 报告 (2025-04-29): http://www.nifd.cn/SeriesReport/Details/4712
-  - NIFD 2025Q2 报告 (2025-07-30): http://www.nifd.cn/SeriesReport/Details/4728
-  - NIFD 2025Q3 报告 (2025-10-24): http://www.nifd.cn/SeriesReport/Details/4800
-  - NIFD 2025Q4 报告 (2026-01-26): http://www.nifd.cn/SeriesReport/Details/4851
-  - NIFD 2026Q1 报告 (2026-04-21): http://www.nifd.cn/SeriesReport/Details/4896
-
-当 ak.macro_cnbs() 更新至 2025+ 数据后，fetch_leverage 会自动覆盖，
-本脚本可保留作为手动补充参考。
+数据来源见 scripts/nifd_leverage.py 头部（各季报告链接、交叉验证说明）。
+当 ak.macro_cnbs() 更新至 2025+ 数据后，fetch_leverage 会自动覆盖，本脚本可保留
+作为手动补充参考。
 """
-import sqlite3
 import os
+import sqlite3
+import sys
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
+import pandas as pd
 
-# NIFD 季度报告提取的杠杆率数据
-# 各季度数值已通过报告间交叉验证（季度变化之和 = 全年涨幅）
-# 微小差异（≤0.1pp）来自 NIFD 报告四舍五入，脚注已说明
-NIFD_DATA = [
-    # date, household, non_fin_corp, gov_total, gov_central, gov_local,
-    #   real_economy, fin_asset, fin_liability
-    ("2025-03-01", 61.5, 173.7, 63.2, 26.4, 36.8, 298.4, 50.3, 69.4),
-    ("2025-06-01", 61.1, 174.0, 65.3, 27.6, 37.8, 300.4, 51.7, 71.8),
-    ("2025-09-01", 60.4, 174.4, 67.5, 28.8, 38.7, 302.3, 51.3, 73.4),
-    ("2025-12-01", 59.4, 174.6, 68.4, 29.4, 39.1, 302.4, 50.5, 73.5),
-    ("2026-03-01", 59.0, 180.0, 70.3, 29.9, 40.4, 309.3, None, None),
-    ("2026-06-01", 57.7, 179.5, 71.0, 30.5, 40.4, 308.2, None, None),  # NIFD 2026Q2 (2026-07-30 发布, 双源交叉验证)
-]
-
-COLUMNS = [
-    "date", "household", "non_fin_corp", "gov_total",
-    "gov_central", "gov_local", "real_economy",
-    "fin_asset", "fin_liability",
-]
+# allow `import _pipeline` / `import nifd_leverage` whether run as a script or imported
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _pipeline import (  # noqa: E402
+    DB_PATH,
+    STAGING_PATH,
+    VINTAGE_DIR,
+    BACKUP_DIR,
+    backup_db,
+    open_staging,
+    commit_staging,
+    discard_staging,
+    validate,
+    enforce_indexes,
+    table_distinct_keys,
+    run_derived,
+)
+from nifd_leverage import nifd_supplement_df  # noqa: E402 — 单一真相源
 
 
-def supplement():
-    conn = sqlite3.connect(DB_PATH)
+def supplement(db_path=DB_PATH, staging_path=STAGING_PATH, vintage_dir=VINTAGE_DIR):
+    """Merge NIFD supplement rows into leverage THROUGH the staged pipeline.
 
-    # Check existing data to avoid duplicate inserts
-    existing = {row[0] for row in conn.execute("SELECT date FROM leverage")}
-    inserted = 0
-    skipped = 0
+    Reads the previously-good leverage from a staging COPY of the live DB, appends
+    only NIFD dates not already present (the same "skip existing dates" behaviour
+    the old direct-INSERT had), runs the validation gate, recomputes derived
+    tables on staging, and only then atomically swaps staging → live. On any gate
+    rejection / error the staging file is discarded and the live DB is untouched.
 
-    for row in NIFD_DATA:
-        if row[0] in existing:
-            print(f"  ⏭️  {row[0]}: already exists, skipping")
-            skipped += 1
-            continue
+    Returns 0 on success (or when there is nothing new to add), 1 when the gate
+    rejected the merged frame. All paths are injectable for testing.
+    """
+    backup_db(db_path)                      # recoverable snapshot of live
+    open_staging(db_path, staging_path)      # live → staging (old good data inside)
+    conn = sqlite3.connect(staging_path)
+    try:
+        try:
+            existing = pd.read_sql("SELECT * FROM leverage", conn)
+        except Exception:
+            existing = pd.DataFrame(columns=["date"])
 
-        placeholders = ", ".join(["?"] * len(COLUMNS))
-        col_list = ", ".join(COLUMNS)
-        conn.execute(
-            f"INSERT INTO leverage ({col_list}) VALUES ({placeholders})",
-            row,
-        )
-        print(f"  ✅ {row[0]}: inserted (household={row[1]}, non_fin={row[2]}, gov={row[3]}, central={row[4]}, local={row[5]})")
-        inserted += 1
+        existing_dates = set(existing["date"]) if "date" in existing.columns else set()
+        nifd = nifd_supplement_df()
+        new_rows = nifd[~nifd["date"].isin(existing_dates)]
 
-    conn.commit()
+        if new_rows.empty:
+            print("  ⏭️  无新增 NIFD 行（现有 leverage 已覆盖全部日期），live 保持不动")
+            conn.close()
+            discard_staging(staging_path)    # nothing changed → keep last good snapshot
+            return 0
 
-    # Verify
-    result = conn.execute(
-        "SELECT date, household, non_fin_corp, gov_total, gov_central, gov_local "
-        "FROM leverage ORDER BY date DESC LIMIT 10"
-    ).fetchall()
-    print(f"\nLatest 10 rows in leverage table:")
-    for r in result:
-        print(f"  {r[0]} | household={r[1]} | non_fin={r[2]} | gov={r[3]} | central={r[4]} | local={r[5]}")
+        merged = (pd.concat([existing, new_rows], ignore_index=True)
+                    .sort_values("date").reset_index(drop=True))
 
-    print(f"\nInserted: {inserted}, Skipped: {skipped}")
-    conn.close()
+        prev = table_distinct_keys(conn, "leverage")     # grain-fair shrink basis
+        ok, reason = validate(merged, "leverage", prev)
+        if not ok:
+            print(f"  ⛔ 闸门拒收，丢弃暂存、live 未改动：{reason}")
+            conn.close()
+            discard_staging(staging_path)
+            return 1
+
+        merged.to_sql("leverage", conn, if_exists="replace", index=False)
+        enforce_indexes(conn, "leverage")     # replace 会丢索引 → 重建唯一索引
+        run_derived(conn)                      # raw+derived 原子：同批重算派生表
+        conn.commit()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    vintage = commit_staging(staging_path, db_path, vintage_dir)  # 原子交换 + vintage 快照
+
+    for _, r in new_rows.iterrows():
+        print(f"  ✅ {r['date']}: inserted (household={r['household']}, "
+              f"non_fin={r['non_fin_corp']}, gov={r['gov_total']})")
+    print(f"\nInserted {len(new_rows)} NIFD row(s) via staged gate; "
+          f"live promoted atomically" + (f" (vintage {vintage.name})" if vintage else ""))
+    return 0
 
 
 if __name__ == "__main__":
-    print("补充宏观杠杆率数据（NIFD 季度报告）...")
-    supplement()
-    print("完成")
+    # 与 01_fetch_data.py / API 刷新共用同一把 flock：本脚本现在也写 staging，
+    # 必须与其他刷新互斥，避免竞争共享的 data/macro_data.db.staging。
+    from contextlib import nullcontext
+
+    print("补充宏观杠杆率数据（NIFD 季度报告，经暂存闸门原子提交）...")
+    if os.getenv("REFRESH_LOCK_HELD") == "1":
+        _guard = nullcontext()
+    else:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from backend.app.core.locking import refresh_lock
+        _guard = refresh_lock()
+
+    try:
+        with _guard:
+            code = supplement()
+        print("完成")
+        sys.exit(code)
+    except BlockingIOError:
+        print("⛔ 已有刷新在进行中（另一进程持有刷新锁），本次退出")
+        sys.exit(1)
