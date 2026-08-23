@@ -72,9 +72,16 @@ function seriesDelta(pts: CrclPoint[] | undefined, daysBack: number): number | n
   if (!pts || pts.length < 2) return null
   const last = pts[pts.length - 1]
   const target = new Date(last.date).getTime() - daysBack * 86400000
+  // Parse each point once and carry the running best's distance, instead of
+  // re-parsing best.date every iteration (this loops the full ~3187-pt series).
   let best = pts[0]
+  let bestDiff = Math.abs(new Date(best.date).getTime() - target)
   for (const pt of pts) {
-    if (Math.abs(new Date(pt.date).getTime() - target) < Math.abs(new Date(best.date).getTime() - target)) best = pt
+    const diff = Math.abs(new Date(pt.date).getTime() - target)
+    if (diff < bestDiff) {
+      best = pt
+      bestDiff = diff
+    }
   }
   if (best.value <= 0) return null
   return (last.value / best.value - 1) * 100
@@ -198,6 +205,10 @@ function lineOption(m: CrclMetric | undefined, opts: { area?: boolean; unit?: st
 const priceOpt = computed(() => lineOption(metrics.value.crcl_close, { unit: 'USD' }))
 const usdcOpt = computed(() => lineOption(metrics.value.usdc_circ, { area: true, unit: '十亿美元', divisor: 1e9 }))
 const totalOpt = computed(() => lineOption(metrics.value.stablecoin_total, { area: true, unit: '十亿美元', divisor: 1e9 }))
+// 6M / 1Y 曲线配色（3M 用 accent）——treasuryOpt 内引用，声明须在其之前（否则一旦
+// 该 computed 变为 eager 求值就会命中 TDZ ReferenceError）。
+const PALETTE1 = '#22d3ee'
+const PALETTE2 = '#f59e0b'
 const treasuryOpt = computed(() => {
   const m3 = metrics.value.treasury_3m, m6 = metrics.value.treasury_6m, m12 = metrics.value.treasury_1y
   if (!m3 || !m6 || !m12) return null
@@ -219,8 +230,6 @@ const treasuryOpt = computed(() => {
     ],
   }))
 })
-const PALETTE1 = '#22d3ee'
-const PALETTE2 = '#f59e0b'
 
 // ---------- alerts ----------
 const LEVEL_STYLE: Record<string, { ring: string; badge: string; label: string }> = {

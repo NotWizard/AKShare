@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { computed } from 'vue'
 
 const route = useRoute()
 const items = [
@@ -14,9 +13,11 @@ const items = [
   { to: '/fiscal-external', label: '财政与外需', icon: '◫' },
   { to: '/crcl-monitor', label: 'CRCL 监控', icon: '◒' },
 ]
-const isActive = (to: string) => computed(() =>
-  to === '/overview' ? route.path === to : route.path.startsWith(to),
-)
+// Plain function, not a computed factory: the template re-evaluates on every
+// route change anyway, so wrapping each call in computed() only created 9 new
+// (never-disposed) refs per render. String compare is trivially cheap.
+const isActive = (to: string): boolean =>
+  to === '/overview' ? route.path === to : route.path.startsWith(to)
 </script>
 
 <template>
@@ -31,7 +32,7 @@ const isActive = (to: string) => computed(() =>
         :key="it.to"
         :to="it.to"
         class="flex items-center gap-2.5 px-3.5 py-2 mx-0 mb-0.5 rounded-lg text-[13px] font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
-        :class="isActive(it.to).value
+        :class="isActive(it.to)
           ? 'bg-[rgba(99,102,241,0.15)] text-text border-l-2 border-accent pl-3'
           : 'text-text-3 hover:bg-[rgba(255,255,255,0.04)] hover:text-text-2'"
       >

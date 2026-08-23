@@ -8,6 +8,7 @@ import {
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { computed, markRaw } from 'vue'
+import type { EChartsOption } from 'echarts'
 
 // RadarChart + RadarComponent are NOT registered here — they're lazy-loaded
 // only by RealEstate.vue (the only page using radar), keeping them out of the
@@ -20,7 +21,7 @@ use([
   MarkAreaComponent, MarkLineComponent, DataZoomComponent,
 ])
 
-const props = defineProps<{ option: Record<string, any>; height?: string; notMerge?: boolean }>()
+const props = defineProps<{ option: EChartsOption; height?: string; notMerge?: boolean }>()
 
 // markRaw → vue-echarts deep-watches `option`; wrapping it keeps Vue from
 // traversing/proxying the (up to ~3000-point) series graph on every tick.

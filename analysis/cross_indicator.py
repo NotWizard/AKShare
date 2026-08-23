@@ -1,12 +1,18 @@
 """
-Cross-Indicator Analysis — leading/lag correlation structure.
+Cross-Indicator Analysis — historical leading/lag correlation structure.
 
 Two key relationships tested:
 1. M1_yoy leads PPI_yoy (expected best lag ≈ 6 months)
 2. M2_M1_spread leads CPI_yoy (expected best lag ≈ 6–12 months)
 
-For each pair, rolling correlations are computed at lags 0–12 months.
-The lag with the highest absolute Pearson correlation is reported.
+For each pair, the FULL-SAMPLE Pearson correlation is computed at lags 0–12
+months and the lag with the highest (most positive) correlation is reported.
+
+This is an in-sample, purely descriptive statistic: every historical point is
+correlated against its own future, so the result characterises the historical
+lead-lag shape for display only — it is NOT a real-time or tradable signal, and
+signals.py surfaces it merely as `cross_lags` display data (never in the
+composite score).
 """
 
 import sqlite3
@@ -23,10 +29,18 @@ def _best_lag_corr(
     lag_var: pd.Series,
     max_lag: int = MAX_LAG,
 ) -> tuple:
-    """Find lag (in months) that maximises Pearson r between lead(+k) and lag_var.
+    """Find the lag (in months) with the highest positive full-sample Pearson r
+    between lead(+k) and lag_var.
 
-    Returns (best_lag, max_corr, corr_series).
-    A positive lag means the first series LEADS by that many months.
+    Returns (best_lag, best_corr, corr_series). A positive lag means the first
+    series LEADS by that many months. Selection is by the highest SIGNED r (most
+    positive), consistent with the "leading indicator co-moves with its target"
+    framing — so the returned sign always matches the reported relationship (an
+    inverse pair is never mislabelled as the leading one). The full signed
+    corr_series is returned unchanged for callers that want to inspect inverses.
+
+    This is an in-sample, full-sample descriptive statistic, not a real-time
+    signal (see the module docstring).
     """
     records = []
     for k in range(0, max_lag + 1):
@@ -43,8 +57,11 @@ def _best_lag_corr(
     if valid.empty:
         return 0, np.nan, corr_df
 
-    # Best lag by highest positive correlation (direction matters for leading indicators)
-    best_idx = valid["corr"].abs().idxmax()
+    # Highest SIGNED correlation → returned lag and r always share the reported
+    # (positive, leading) direction. Selecting by abs() here would let a strong
+    # NEGATIVE r win while still being reported as "leads by k months", which
+    # contradicts the documented intent.
+    best_idx = valid["corr"].idxmax()
     return int(valid.loc[best_idx, "lag"]), float(valid.loc[best_idx, "corr"]), corr_df
 
 

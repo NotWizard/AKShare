@@ -4,8 +4,16 @@
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import { hexA, mergePhaseSegments } from './utils'
+import type { EChartsOption, LineSeriesOption, ScatterSeriesOption } from 'echarts'
 
 type Rec = Record<string, string | number | null>
+
+// applyTheme lives in echarts.theme.ts and is typed Record<string, any>, so a
+// mistyped option key passed straight to it is invisible. Wrap it once with an
+// EChartsOption-typed parameter: every builder now runs its option literal
+// through this seam, so `markLine`→`marklLine` (and friends) is a compile error,
+// and each builder can honestly return EChartsOption.
+const themed = (option: EChartsOption): EChartsOption => applyTheme(option)
 
 /** 列 key → 中文图例名（NBS / 央行 / NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等
  *  特有名词保留英文缩语）。未收录的 key 原样回退。 */
@@ -35,18 +43,18 @@ const zh = (col: string): string => COL_ZH[col] ?? col
 
 /** Credit cycle flagship: M2 同比 line (connectNulls) + M2 趋势 dashed +
  *  phase-background markArea + the 1991–1996 source-gap markArea + caption. */
-export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string, any> {
+export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): EChartsOption {
   const dates = derived.map((r) => r.date as string)
   const m2 = derived.map((r) => r.m2_yoy)
   const trendByDate = new Map(cycle.map((r) => [r.date as string, r.m2_trend as number | null]))
   const trend = dates.map((d) => trendByDate.get(d) ?? null)
 
   const segs = mergePhaseSegments(cycle).filter((s) => s.phase !== 'neutral')
-  const phaseBg = segs.map((s) => [
+  const phaseBg = segs.map((s): [{ xAxis: string; itemStyle: { color: string } }, { xAxis: string }] => [
     { xAxis: s.x0, itemStyle: { color: hexA(phaseColor(s.phase), 0.08) } },
     { xAxis: s.x1 },
   ])
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
     series: [
@@ -67,10 +75,10 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): Record<string,
 }
 
 /** Credit impulse — bars (社融信贷脉冲). */
-export function buildCreditImpulseChart(cycle: Rec[]): Record<string, any> {
+export function buildCreditImpulseChart(cycle: Rec[]): EChartsOption {
   const dates = cycle.map((r) => r.date as string)
   const impulse = cycle.map((r) => r.credit_impulse as number | null)
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis() },
     yAxis: { type: 'value', ...baseAxis({ name: '亿' }) },
     series: [
@@ -89,9 +97,9 @@ export function buildDualAxisLine(
   derived: Rec[], a: string, b: string,
   aColor = COLORS.accent, bColor = COLORS.up,
   aName?: string, bName?: string,
-): Record<string, any> {
+): EChartsOption {
   const dates = derived.map((r) => r.date as string)
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: [
       { type: 'value', name: aName ?? zh(a), scale: true, ...baseAxis() },
@@ -111,12 +119,12 @@ export function buildDualAxisLine(
 /** Stacked area — multiple series stacked (e.g. leverage by sector). */
 export function buildStackedArea(
   derived: Rec[], cols: string[],
-): Record<string, any> {
+): EChartsOption {
   const dates = derived.map((r) => r.date as string)
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%' }) },
-    series: cols.map((c, i) => {
+    series: cols.map((c, i): LineSeriesOption => {
       const color = PALETTE[i % PALETTE.length]
       return {
         name: zh(c), type: 'line', stack: 'total', connectNulls: true, symbol: 'none',
@@ -135,7 +143,7 @@ export function buildStackedArea(
 export function buildScatterQuadrant(
   cycle: Rec[], xKey: string, yKey: string,
   xLabel: string, yLabel: string, hline = 0, vline = 0,
-): Record<string, any> {
+): EChartsOption {
   const byPhase = new Map<string, [number, number][]>()
   for (const r of cycle) {
     const x = r[xKey] as number | null
@@ -145,16 +153,16 @@ export function buildScatterQuadrant(
     if (!byPhase.has(p)) byPhase.set(p, [])
     byPhase.get(p)!.push([x, y])
   }
-  const refLines: any[] = []
+  const refLines: Array<{ yAxis: number } | { xAxis: number }> = []
   if (hline) refLines.push({ yAxis: hline })
   if (vline) refLines.push({ xAxis: vline })
 
-  return applyTheme({
+  return themed({
     xAxis: { type: 'value', name: xLabel, ...baseAxis({ name: xLabel }) },
     yAxis: { type: 'value', name: yLabel, ...baseAxis({ name: yLabel }) },
     tooltip: { trigger: 'item' },
     series: [
-      ...Array.from(byPhase.entries()).map(([p, data]) => ({
+      ...Array.from(byPhase.entries()).map(([p, data]): ScatterSeriesOption => ({
         name: phaseLabel(p), type: 'scatter', data, symbolSize: 8,
         itemStyle: { color: phaseColor(p), opacity: 0.85 },
       })),
@@ -176,8 +184,8 @@ export function buildRadar(assessment: {
   leverage_space_score?: number
   price_momentum_score?: number
   rate_env_score?: number
-}): Record<string, any> {
-  return applyTheme({
+}): EChartsOption {
+  return themed({
     tooltip: { trigger: 'item', valueFormatter: (v: unknown) => Number(v).toFixed(2) },
     legend: { show: false },
     radar: {
@@ -215,9 +223,9 @@ export function buildBarLineCombo(
   derived: Rec[], barCol: string, lineCol: string,
   barName: string, lineName: string,
   barUnit = '', lineUnit = '',
-): Record<string, any> {
+): EChartsOption {
   const dates = derived.map((r) => r.date as string)
-  return applyTheme({
+  return themed({
     legend: { top: 0 },
     xAxis: { type: 'category', data: dates, ...baseAxis() },
     yAxis: [
@@ -239,9 +247,9 @@ export function buildBarLineCombo(
  *  markLineName overrides the label (e.g. 零线 for the demographics zero line). */
 export function buildMultiLine(
   derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number, markLineName = '荣枯线',
-): Record<string, any> {
+): EChartsOption {
   const dates = derived.map((r) => r.date as string)
-  const series: Record<string, any>[] = cols.map((c, i) => {
+  const series: LineSeriesOption[] = cols.map((c, i): LineSeriesOption => {
     const color = PALETTE[i % PALETTE.length]
     return {
       name: c.name, type: 'line', connectNulls: true, symbol: 'none',
@@ -267,7 +275,7 @@ export function buildMultiLine(
       }
     })
   }
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     // scale:true → the y-axis adapts to the data range (not forced from 0),
     // so narrow-amplitude series (PMI 49~52) aren't flattened into a near-line.
@@ -282,9 +290,9 @@ export function buildMultiLine(
  *  `markLineValue` defaults to 0. */
 export function buildSpreadChart(
   derived: Rec[], col: string, name = '剪刀差', unit = 'pp', markLineValue = 0,
-): Record<string, any> {
+): EChartsOption {
   const dates = derived.map((r) => r.date as string)
-  return applyTheme({
+  return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', name: unit, scale: true, ...baseAxis({ name: unit }) },
     series: [
