@@ -48,12 +48,20 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 8. ✅ **已修 `f4baa1f`（launcher 部分）** — `启动面板.command` `:5173`→`:8000`（vite preview 已下线）。余项 `max_points` 静默抽稀、`scipy`/`statsmodels` 零 import 归入 G26/G28-30 低危批次处理，不在本条。
 9. 说明：`data/macro_data.db` 现为 `journal_mode=wal`（跑测试经新工厂读真实库的持久副作用）；`integrity_check ok`、无 `-wal/-shm` 残留、该文件已 gitignore。
 
-### 当前实测门禁（2026-08-22，22 次提交后）
-`pytest -q` = **222 passed / 0 failed**（基线 63，新增 159 条，每组均有改前失败证据）；`vue-tsc --noEmit` 退出码 **0**；`scripts/_pipeline_test.py` 全过；工作树干净（仅 `.scratch/` 被忽略）。
+### 当前实测门禁（2026-08-23，G08 提交后 29 次提交）
+`pytest backend/tests -q` = **279 passed / 0 failed**（含 G26/G28-30 在飞未提交的新测试）；`vue-tsc --noEmit` 退出码 **0**；`scripts/_pipeline_test.py` = ALL CHECKS PASSED。已提交至 `9e8d4f8`。工作树**非干净**：仍有 G26 + G28-30 两组在飞改动（下方 resume 协议）。
 
 ### 仍未开工（按此顺序）
-**G08**（变更端点鉴权：本地 token + 变更语义收回 POST——当前 localhost CSRF 可触发全量采集与付费 LLM 调用）→ **G16+G18**（CI + fixture DB + 契约/前端测试）→ `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*`）→ 上面第 5-8 条遗留 → **G26/G28/G29/G30** → 发布（bump v1.1.0 → 用户确认 → push → `gh release`）。
-发布前遗留动作：`changeLog.md` → `CHANGELOG.md` 改名；未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
+已完成并提交：Critical/High/Medium 主体 + 遗留 5-8（`f4baa1f`）+ **G08 变更端点鉴权（`9e8d4f8`，Critical）**。
+剩余：
+1. **提交 G26（管线中危，`scripts/**`）**：在飞文件 = `scripts/{01_fetch_data,03_supplement_leverage,_pipeline,_pipeline_test}.py` + 新增 `scripts/{_specs,nifd_leverage}.py`、`backend/tests/test_pipeline_{freshness,supplement}.py`。等其 fixer 回报（含 fail→pass），review→门禁→单独提交。
+2. **提交 G28-G30（低危，`analysis/`+前端）**：在飞文件 = `analysis/cross_indicator.py`、`backend/app/core/serial.py`、`frontend/src/components/charts/{EChart.vue,options.ts}`、`frontend/src/components/layout/Sidebar.vue`、`frontend/src/pages/CrclMonitor.vue`、`backend/tests/test_{cross_lag_semantics,serial_precision}.py`。同上流程。
+3. **G16+G18**（CI + fixture DB + 契约/前端测试 + openapi 漂移门禁）：**必须工作树干净后**再做（`conftest.py` 会被每次 pytest 收集，在飞期会污染 agent 验证）。
+4. `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*` + G08 的 `/session`、POST/GET 拆分）：**放在版本 bump 之后**（`info.version` 取自 app，先 bump 免得重导两次）。
+5. 发布：bump `1.0.0`→`1.1.0`（`backend/pyproject.toml` + `frontend/package.json` 双文件）→ `changeLog.md`→`CHANGELOG.md` 改名 → **停下等用户确认** → `git push` → `gh release create`（双语，中文在前，遵 `Release_Notes_Guidelines.md`）。
+
+resume 协议：`git status --short` → 按上表把每个在飞文件归到 G26（`scripts/**`）或 G28-30（`analysis/`+前端）→ 取该组 fixer 回报或自行重建 fail→pass → **只 stage 该组文件**单独提交，切勿混入另一组或用 `git checkout --`/`stash` 碰 agent 未提交改动。
+发布前遗留动作：未跟踪的 `backtest_hshylv/`、`.playwright-mcp/`、根目录 PNG 保持原样（已 gitignore，属用户本地文件，不删）。
 
 ---
 
