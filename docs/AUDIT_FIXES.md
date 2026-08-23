@@ -54,10 +54,10 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 ### 仍未开工（按此顺序）
 已完成并提交：Critical/High/Medium 主体 + 遗留 5-8（`f4baa1f`）+ **G08 变更端点鉴权（`9e8d4f8`，Critical）**。
 剩余：
-1. **G26 源已提交 `b9167ec`（P-M7/P-M8/P-M9）**。⚠️ 但**仍有一个在飞 agent 未报**正在改 `scripts/03_supplement_leverage.py`（给 `backup_db` 加 `backup_dir` 注入参数，疑似 G30 P-L「双备份拷贝」）并已落 `backend/tests/test_pm9_declarative_fetch.py`（9 passed）。当前工作树**红**：`test_pipeline_supplement` 4 例失败，因为该 03 改动改了签名而其已提交测试仍期望旧签名——**HEAD (`b9167ec`) 本身是绿的**（旧 03 + 匹配测试），红只在未提交改动里。resume：等该 agent 报完，把 `03` 新版 + `test_pm9_declarative_fetch.py` +（可能的 `test_pipeline_supplement` 更新）作为一组 review→绿门禁→提交；勿把当前半成品红态提交。
-2. **提交 G28-G30（低危，`analysis/`+前端）**：在飞文件 = `analysis/cross_indicator.py`、`backend/app/core/serial.py`、`frontend/src/components/charts/{EChart.vue,options.ts}`、`frontend/src/components/layout/Sidebar.vue`、`frontend/src/pages/CrclMonitor.vue`、`backend/tests/test_{cross_lag_semantics,serial_precision}.py`。同上流程。
-3. **G16+G18**（CI + fixture DB + 契约/前端测试 + openapi 漂移门禁）：**必须工作树干净后**再做（`conftest.py` 会被每次 pytest 收集，在飞期会污染 agent 验证）。
-4. `shared/openapi.json` 重导（现缺全部 8 条 `/crcl/*` + G08 的 `/session`、POST/GET 拆分）：**放在版本 bump 之后**（`info.version` 取自 app，先 bump 免得重导两次）。
+1. ✅ **G26 全部已提交**：源 `b9167ec`（P-M7/P-M8/P-M9）+ 收尾 `d8e5e51`（03 staged 显式 backup/enforce_indexes、`test_pm9_declarative_fetch.py` 9 例）。工作树此刻**干净**、全套 288 passed、`_pipeline_test.py` ALL CHECKS PASSED、typecheck 0。
+2. ✅ **G28-G30 已提交 `740899f`**（A-L2/F17/FE-L3/L5/L7/L8；G29/G30 其余低危项见下方 G16+G18 代办）。
+3. 🟨 **G16+G18 已派后台 agent（`ageneral-purpose-f74418705acd34ff`）**：CI 工作流 `.github/workflows/ci.yml` + 夹具库 `backend/tests/fixtures/` + conftest 接缝 + **openapi 漂移门禁**（含重生 `shared/openapi.json`，测试对 version 字段鲁棒以容后续 bump）+ 量化/契约/前端测试；并复核收口 G29/G30 需复核低危项（FE-L2/L4/L6/L9/L10、A-L3/A-L4、P-L）。等其回报 → 独立复核 → 绿门禁 → 按组提交 + 账本/changelog。**该 agent 正在写树，勿并发改其文件。**
+4. `shared/openapi.json` 重导已并入上面 G16+G18（drift gate 附带重生）；版本 bump 后需再跑一次 regen 确认 version=1.1.0 且 drift test 仍绿。
 5. 发布：bump `1.0.0`→`1.1.0`（`backend/pyproject.toml` + `frontend/package.json` 双文件）→ `changeLog.md`→`CHANGELOG.md` 改名 → **停下等用户确认** → `git push` → `gh release create`（双语，中文在前，遵 `Release_Notes_Guidelines.md`）。
 
 resume 协议：`git status --short` → 按上表把每个在飞文件归到 G26（`scripts/**`）或 G28-30（`analysis/`+前端）→ 取该组 fixer 回报或自行重建 fail→pass → **只 stage 该组文件**单独提交，切勿混入另一组或用 `git checkout --`/`stash` 碰 agent 未提交改动。
