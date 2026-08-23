@@ -17,6 +17,17 @@ class SignalSummary(BaseModel):
     cross_lags: dict
     composite_score: int            # [-4, +4]
     interpretation: str
+    # ── G23 coverage / as-of transparency ───────────────────────────────────
+    # compute_signals() excludes a sub-signal with no data (instead of counting
+    # it as a neutral 0) and half-weights a stale one, then renormalises. These
+    # fields are how a client SEES that happen; without them the response model
+    # filtered them out and the composite looked unconditional. All optional so
+    # a payload predating them still validates.
+    as_of: str | None = None        # newest observation across frameworks
+    included: list[str] = []        # frameworks in the composite
+    excluded: list[str] = []        # frameworks with no usable phase
+    stale: list[str] = []           # frameworks kept at half weight
+    composite_raw: float | None = None   # composite before rounding
 
 
 class PhaseFlip(BaseModel):

@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from analysis.signals import compute_signals
-from backend.app.core.db import DB_PATH
+from backend.app.core.db import DB_PATH, connect
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 COMMENTARY_TABLE = "commentary"
@@ -51,9 +51,15 @@ def _ts() -> str:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Macro-DB connection from the ONE factory in ``core/db.py`` (A-M1).
+
+    A bare ``sqlite3.connect`` inherited WAL (a persistent property of the DB
+    FILE) but got **no** ``busy_timeout`` — that is a per-CONNECTION setting, so
+    a concurrent writer made these reads/writes fail instantly with
+    ``database is locked`` instead of waiting ``BUSY_TIMEOUT_MS``.
+    ``DB_PATH`` is read at call time so monkeypatching it in tests keeps working.
+    """
+    return connect(DB_PATH, row_factory=sqlite3.Row)
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
@@ -238,14 +244,20 @@ def get_current() -> dict:
     poll it rendered an empty card for minutes.
     """
     row = None
+    conn = _connect()
     try:
-        conn = _connect()
         if not _table_ready:
             _ensure_table(conn)
         row = _latest_row(conn)
-        conn.close()
-    except Exception:
+    except sqlite3.OperationalError as e:
+        # 唯一良性分支：全新安装尚无该表 → 空状态（fresh install 不 500）。
+        # 其余（列缺失=schema 漂移、镜像损坏等）与一切编程错误必须冒泡，
+        # 避免把"读取失败"静默伪装成"暂无评论"——与 signal_history.read_history 一致。
+        if "no such table" not in str(e).lower():
+            raise
         return {"status": "empty", "msg": "暂无评论", "text": ""}
+    finally:
+        conn.close()
     if _gen_lock.locked():
         if row is None:
             return {"status": "generating", "msg": "评论生成中…", "text": "", "regenerating": False}

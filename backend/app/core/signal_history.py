@@ -6,7 +6,7 @@ cross-process constant-copy precedent as MANIFEST_PATH in _pipeline/refresh.
 
 import sqlite3
 
-from backend.app.core.db import DB_PATH
+from backend.app.core.db import DB_PATH, connect
 
 TABLE = "signal_history"
 FRAMEWORKS = ("merrill", "credit", "inventory", "debt")
@@ -28,8 +28,12 @@ def annotate_flips(rows):
 
 def read_history(limit=60, db_path=DB_PATH):
     """倒序（rowid DESC，append-only 表 rowid 单调）取 limit+1 行——多取一行
-    保证窗口内最旧一行的翻转也能对到前值；表缺失 → []（fresh install 不 500）。"""
-    conn = sqlite3.connect(db_path)
+    保证窗口内最旧一行的翻转也能对到前值；表缺失 → []（fresh install 不 500）。
+
+    连接走 `core/db.connect()` 工厂（A-M1）：裸 `sqlite3.connect` 只继承到 WAL
+    （DB 文件的持久属性），`busy_timeout` 是连接属性且默认 0，并发写入者一出现
+    就抛 `database is locked` 而不是等待。"""
+    conn = connect(db_path)
     try:
         cur = conn.execute(
             f"SELECT ts, data_as_of, composite, merrill, credit, inventory, debt "
