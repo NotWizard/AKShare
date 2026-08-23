@@ -9,11 +9,11 @@ ak.macro_cnbs() (AKShare) 数据滞后；NIFD（国家金融与发展实验室�
 改动要点（P-M8）：
   1. NIFD 数据不再在本文件内自存一份，改从 `scripts/nifd_leverage.py` 单一真相源
      引入（此前 01/03 各存一份、逐字重复、极易漂移）。
-  2. 不再直接 `INSERT INTO data/macro_data.db`（live 库），而是走与所有写入者相同的
-     暂存路径：open_staging(live→staging) → 合并 → validate() 闸门 → 在暂存库上
-     重算派生表 → commit_staging() 原子交换。任何一步失败都丢弃暂存、live 保持不动，
-     维持「非经闸门，数据不入 live」这一核心不变量。
-     （其自带的“日期已存在则跳过”守卫意味着新的唯一索引不改变它的行为。）
+  2. 不再直接 `INSERT INTO data/macro_data.db`（live 库），而是走与主管线相同的
+     暂存路径：backup → open_staging(live→staging) → 合并 → validate() 闸门 →
+     在暂存库上 enforce_indexes + run_derived → commit_staging() 原子交换。任何一步
+     失败/拒收都丢弃暂存、live 逐字节保持不动，维持「非经闸门，数据不入 live」这一
+     核心不变量。（其“日期已存在则跳过”守卫意味着新的唯一索引不改变它的行为。）
 
 数据来源见 scripts/nifd_leverage.py 头部（各季报告链接、交叉验证说明）。
 当 ak.macro_cnbs() 更新至 2025+ 数据后，fetch_leverage 会自动覆盖，本脚本可保留
@@ -22,6 +22,7 @@ ak.macro_cnbs() (AKShare) 数据滞后；NIFD（国家金融与发展实验室�
 import os
 import sqlite3
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -44,20 +45,29 @@ from _pipeline import (  # noqa: E402
 from nifd_leverage import nifd_supplement_df  # noqa: E402 — 单一真相源
 
 
-def supplement(db_path=DB_PATH, staging_path=STAGING_PATH, vintage_dir=VINTAGE_DIR):
+def supplement(db_path=DB_PATH, staging_path=STAGING_PATH,
+               backup_dir=BACKUP_DIR, vintage_dir=VINTAGE_DIR):
     """Merge NIFD supplement rows into leverage THROUGH the staged pipeline.
 
-    Reads the previously-good leverage from a staging COPY of the live DB, appends
-    only NIFD dates not already present (the same "skip existing dates" behaviour
-    the old direct-INSERT had), runs the validation gate, recomputes derived
-    tables on staging, and only then atomically swaps staging → live. On any gate
-    rejection / error the staging file is discarded and the live DB is untouched.
+    Copies the previously-good live DB into staging, appends only NIFD dates not
+    already present (the same "skip existing dates" behaviour the old direct
+    INSERT had), runs the validation gate, rebuilds the UNIQUE index, recomputes
+    derived tables on staging (raw+derived stay atomic), and only then atomically
+    swaps staging → live with a vintage snapshot of the pre-commit live.
 
-    Returns 0 on success (or when there is nothing new to add), 1 when the gate
-    rejected the merged frame. All paths are injectable for testing.
+    Returns the number of NIFD rows supplemented (0 when there is nothing new).
+    Raises FileNotFoundError when there is no live DB to supplement, ValueError
+    when the merged frame fails the gate, and propagates any error from the
+    staged run — in every failure case the staging file is discarded and the live
+    DB is left byte-for-byte unchanged. All paths are injectable for testing.
     """
-    backup_db(db_path)                      # recoverable snapshot of live
-    open_staging(db_path, staging_path)      # live → staging (old good data inside)
+    db_path, staging_path = Path(db_path), Path(staging_path)
+    if not db_path.exists():
+        raise FileNotFoundError(
+            f"live DB not found: {db_path}（请先运行 scripts/01_fetch_data.py）")
+
+    backup_db(db_path, backup_dir)              # recoverable snapshot of live
+    open_staging(db_path, staging_path)          # live → staging (old good data inside)
     conn = sqlite3.connect(staging_path)
     try:
         try:
@@ -66,13 +76,14 @@ def supplement(db_path=DB_PATH, staging_path=STAGING_PATH, vintage_dir=VINTAGE_D
             existing = pd.DataFrame(columns=["date"])
 
         existing_dates = set(existing["date"]) if "date" in existing.columns else set()
-        nifd = nifd_supplement_df()
-        new_rows = nifd[~nifd["date"].isin(existing_dates)]
+        new_rows = nifd_supplement_df()
+        new_rows = new_rows[~new_rows["date"].isin(existing_dates)]
 
         if new_rows.empty:
+            # nothing to add → never write an unchanged snapshot as if a run landed
             print("  ⏭️  无新增 NIFD 行（现有 leverage 已覆盖全部日期），live 保持不动")
             conn.close()
-            discard_staging(staging_path)    # nothing changed → keep last good snapshot
+            discard_staging(staging_path)
             return 0
 
         merged = (pd.concat([existing, new_rows], ignore_index=True)
@@ -81,29 +92,29 @@ def supplement(db_path=DB_PATH, staging_path=STAGING_PATH, vintage_dir=VINTAGE_D
         prev = table_distinct_keys(conn, "leverage")     # grain-fair shrink basis
         ok, reason = validate(merged, "leverage", prev)
         if not ok:
-            print(f"  ⛔ 闸门拒收，丢弃暂存、live 未改动：{reason}")
-            conn.close()
-            discard_staging(staging_path)
-            return 1
+            raise ValueError(f"NIFD 杠杆率补充被验证闸门拒收，丢弃暂存、live 未改动：{reason}")
 
         merged.to_sql("leverage", conn, if_exists="replace", index=False)
         enforce_indexes(conn, "leverage")     # replace 会丢索引 → 重建唯一索引
-        run_derived(conn)                      # raw+derived 原子：同批重算派生表
+        run_derived(conn)                      # raw+derived 原子：同批在暂存库重算派生表
         conn.commit()
-    finally:
+    except BaseException:
+        # 任何失败/拒收：关连接、丢弃暂存，live 保持上一份一致快照，异常上抛给调用方
         try:
             conn.close()
         except Exception:
             pass
+        discard_staging(staging_path)
+        raise
+    conn.close()
 
     vintage = commit_staging(staging_path, db_path, vintage_dir)  # 原子交换 + vintage 快照
-
     for _, r in new_rows.iterrows():
         print(f"  ✅ {r['date']}: inserted (household={r['household']}, "
               f"non_fin={r['non_fin_corp']}, gov={r['gov_total']})")
-    print(f"\nInserted {len(new_rows)} NIFD row(s) via staged gate; "
-          f"live promoted atomically" + (f" (vintage {vintage.name})" if vintage else ""))
-    return 0
+    print(f"\n补充 {len(new_rows)} 行 NIFD（经暂存闸门），live 已原子提交"
+          + (f"（vintage {vintage.name}）" if vintage else ""))
+    return len(new_rows)
 
 
 if __name__ == "__main__":
@@ -121,9 +132,12 @@ if __name__ == "__main__":
 
     try:
         with _guard:
-            code = supplement()
-        print("完成")
-        sys.exit(code)
+            added = supplement()
+        print(f"完成（新增 {added} 行）")
+        sys.exit(0)
     except BlockingIOError:
         print("⛔ 已有刷新在进行中（另一进程持有刷新锁），本次退出")
+        sys.exit(1)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"⛔ 补充失败：{e}")
         sys.exit(1)
