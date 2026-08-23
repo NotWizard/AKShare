@@ -8,6 +8,10 @@
 //     (the old clearTimeout-after-headers left slow bodies unbounded);
 //   · idempotent GETs retry with bounded exponential backoff on transport
 //     errors / 408 / 429 / 5xx — POSTs never retry;
+//   · every POST carries the local capability token (F4): mutating endpoints are
+//     token-guarded so a localhost-CSRF page cannot fire them, and the token is
+//     read same-origin from GET /session (a cross-origin page can send that GET
+//     but cannot read its body, so it can never obtain the token);
 //   · identical signal-less GETs are deduped in flight and cached for a short
 //     TTL, invalidated by invalidateCache() on every successful data refresh;
 //   · failures throw ApiError with a machine-readable `kind` so the UI can name
@@ -58,6 +62,8 @@ export interface ReqOpts {
 
 // ── error mapping ───────────────────────────────────────────────────────────
 const HTTP_LABEL: Record<number, string> = {
+  401: '缺少本机令牌（401）',
+  403: '本机令牌无效（403）',
   404: '接口不存在（404）',
   408: '后端处理超时（408）',
   422: '请求参数不合法（422）',
@@ -100,6 +106,39 @@ function transportError(e: unknown, external: AbortSignal | undefined, timeoutMs
   return new ApiError('unreachable', '后端未连接', null, err?.message ?? String(e))
 }
 
+// ── local capability token (F4) ──────────────────────────────────────────────
+// The mutating endpoints (all POSTs) require the token the backend minted at
+// startup. We read it same-origin from GET /session and cache it for the page's
+// lifetime; a localhost-CSRF page can send that GET too but cannot read the
+// response body, so it can never reach this value.
+const TOKEN_HEADER = 'X-API-Token'
+let tokenPromise: Promise<string> | null = null
+
+function fetchToken(): Promise<string> {
+  const p = (async () => {
+    const resp = await fetch(`${BASE}/session`, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) })
+    if (!resp.ok) throw httpError(resp.status, await resp.text().catch(() => ''))
+    const body = (await resp.json()) as { token?: string }
+    if (!body.token) throw new ApiError('server', '本机令牌为空（/session 未返回 token）')
+    return body.token
+  })().catch((e) => {
+    if (tokenPromise === p) tokenPromise = null   // never cache a failure
+    throw e
+  })
+  tokenPromise = p
+  return p
+}
+
+/** Cached local capability token; fetched once per page load. */
+function apiToken(): Promise<string> {
+  return tokenPromise ?? fetchToken()
+}
+
+/** Drop the cached token — the backend rotates it on every restart. */
+function forgetToken(): void {
+  tokenPromise = null
+}
+
 // ── single attempt ──────────────────────────────────────────────────────────
 async function attempt<T>(path: string, method: 'GET' | 'POST', opts: ReqOpts): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -110,7 +149,9 @@ async function attempt<T>(path: string, method: 'GET' | 'POST', opts: ReqOpts): 
     ? AbortSignal.any([AbortSignal.timeout(timeoutMs), external])
     : AbortSignal.timeout(timeoutMs)
   try {
-    const resp = await fetch(`${BASE}${path}`, { method, signal })
+    // GETs stay header-free: they are read-only, so they need no capability.
+    const headers = method === 'POST' ? { [TOKEN_HEADER]: await apiToken() } : undefined
+    const resp = await fetch(`${BASE}${path}`, { method, signal, headers })
     if (!resp.ok) throw httpError(resp.status, await resp.text().catch(() => ''))
     return (await resp.json()) as T
   } catch (e) {
@@ -188,9 +229,20 @@ async function getJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
   return p as Promise<T>
 }
 
-// POST is never retried, never cached, never deduped (not idempotent).
-function postJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
-  return attempt<T>(path, 'POST', opts)
+// POST is never retried, never cached, never deduped (not idempotent). The ONE
+// exception is a REJECTED TOKEN: the backend mints a new token on every restart,
+// so a long-open tab holds a stale one. A 401/403 is raised by the dependency
+// BEFORE the endpoint body runs, so re-reading /session and replaying the POST
+// once cannot double-fire a refresh or a paid LLM call.
+async function postJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  try {
+    return await attempt<T>(path, 'POST', opts)
+  } catch (e) {
+    const err = e as ApiError
+    if (err.status !== 401 && err.status !== 403) throw err
+    forgetToken()
+    return attempt<T>(path, 'POST', opts)
+  }
 }
 
 // build "?a=..&b=.." from defined pairs (URLSearchParams drops undefined
@@ -203,6 +255,19 @@ function qs(pairs: Array<[string, string | undefined]>): string {
 
 // Polling / status endpoints must never read a cached body.
 const NO_CACHE: ReqOpts = { ttlMs: 0 }
+
+/**
+ * What the two refresh POSTs return now (F4): they only START the background job
+ * and hand back its `job_id`, which `GET …/refresh/stream?job_id=…` subscribes
+ * to. `job_id === null` means nothing was started (pool saturated / busy) and
+ * `msg` says why. The final result still arrives on the stream's `done` event.
+ */
+export interface JobStarted {
+  status: string
+  msg?: string
+  ts?: string | null
+  job_id: string | null
+}
 
 export const api = {
   getDerivedMonthly: (start?: string, end?: string, cols?: string, alignStart?: boolean, opts?: ReqOpts) =>
@@ -224,8 +289,10 @@ export const api = {
     return getJSON<RealEstateResponse>(`/real-estate?${q.toString()}`, opts)
   },
   getRefreshStatus: (opts?: ReqOpts) => getJSON<RefreshResult>('/refresh/status', { ...NO_CACHE, ...opts }),
+  // Starts the job and returns its id; progress comes from /refresh/stream?job_id=…
   triggerRefresh: (full?: boolean, opts?: ReqOpts) =>
-    postJSON<RefreshResult>(`/refresh${qs([['full', full ? '1' : undefined]])}`, opts),
+    postJSON<JobStarted>(`/refresh${qs([['full', full ? '1' : undefined]])}`, opts),
+  triggerCrclRefresh: (opts?: ReqOpts) => postJSON<JobStarted>('/crcl/refresh', opts),
   getSourcesHealth: (opts?: ReqOpts) => getJSON<SourcesHealth>('/sources/health', opts),
   getCommentary: (opts?: ReqOpts) => getJSON<Commentary>('/commentary', { ...NO_CACHE, ...opts }),
   regenerateCommentary: (opts?: ReqOpts) => postJSON<Commentary>('/commentary/regenerate', opts),

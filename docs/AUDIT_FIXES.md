@@ -113,11 +113,11 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 
 ## High 层
 
-### G08 · 变更端点鉴权 + GET 收回 POST · ⬜
+### G08 · 变更端点鉴权 + GET 收回 POST · ✅
 - findings: F4 (`refresh.py:26/36`,`crcl.py:107/113`,`commentary.py:21`,`main.py:52-62`)
-- 根治: 变更语义收回 POST；进程启动生成随机 token 写 `data/.api_token`，中间件校验；前端同源取用。
-- files: backend/app/main.py, api/v1/{refresh,crcl,commentary}.py, frontend/src/api/client.ts
-- reviewer: — · commit: — · evidence: —
+- 根治: 变更语义收回 POST（`create_job`→有界池，返回不可猜 `job_id`）；SSE GET 仅 `get_job` 查表、缺 `job_id`→422；lifespan 生成 `token_urlsafe(32)` 写 `data/.api_token`(0600)，`require_token`(`compare_digest`) 校验，同源 SPA 经 `/api/v1/session` 取用带 `X-API-Token`。
+- files: backend/app/core/{auth(new),locking}.py, api/v1/{refresh,crcl,commentary}.py, schemas/refresh.py, main.py, frontend/src/{api/client.ts,stores/refresh.ts}
+- reviewer: orchestrator 独立复核（逐读 auth.py + 三路由鉴权装配 + job 注册表同锁收发 + test 差分非弱化）· commit: 见 [Unreleased] item 20 · evidence: `test_mutation_auth.py` 改前 21 failed→24 passed；`test_mutation_auth+test_endpoint_hardening` 48 passed；全套 273 passed；前端 typecheck 退出 0。
 
 ### G09 · CRCL 采集单飞+超时 + SQLite WAL · ⬜
 - findings: F6 (`crcl.py:107-110`,`crcl_collect.py`) + A-M1 (`db.py:22`,`crcl_db.py:24`)

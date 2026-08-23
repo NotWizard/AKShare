@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.v1 import router as v1_router
 from backend.app.core.db import _load_full
-from backend.app.core import commentary, crcl_collect
+from backend.app.core import auth, commentary, crcl_collect
 from backend.app.core.serial import _json_safe
 
 
@@ -55,6 +55,14 @@ class SafeJSONResponse(JSONResponse):
 async def lifespan(app: FastAPI):
     """Pre-load the 4 main tables into lru_cache on startup so the FIRST
     request is as fast as a cached one (~13ms instead of ~65ms)."""
+    # F4: mint a fresh local capability token for this process BEFORE any request
+    # can arrive. Every mutating endpoint (the 3 POSTs) requires it, which is what
+    # stops localhost CSRF — a page the user merely browses can SEND a request to
+    # 127.0.0.1:8000 but can neither read data/.api_token nor read a cross-origin
+    # response, so it can never present the token. Rotating per start means a
+    # restart invalidates a stale tab's copy (the SPA re-reads /api/v1/session).
+    # The token itself is never logged or printed.
+    auth.rotate_token()
     for table in ("derived_monthly", "derived_quarterly", "leverage", "house_price"):
         try:
             _load_full(table)
@@ -98,6 +106,25 @@ app.include_router(v1_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/v1/session")
+def session():
+    """Hand this process's capability token to the SAME-ORIGIN SPA (F4).
+
+    The SPA is served by this very app, so for it this is a plain same-origin
+    read; ``frontend/src/api/client.ts`` caches the value and sends it as
+    ``X-API-Token`` on every POST.
+
+    A localhost-CSRF page can still SEND this GET, but:
+      * it cannot READ the response body (cross-origin, and the response is not
+        a script/image the browser would hand it), and
+      * it cannot read ``data/.api_token`` (mode 0600, no filesystem access),
+    so it can never present the token on a mutating POST. ``no-store`` keeps the
+    token out of the browser's disk cache.
+    """
+    return SafeJSONResponse({"token": auth.current_token()},
+                            headers={"Cache-Control": "no-store"})
 
 
 # ---------------------------------------------------------------------------

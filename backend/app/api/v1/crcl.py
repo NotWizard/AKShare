@@ -17,16 +17,16 @@ import datetime
 import json
 import logging
 import math
-import threading
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from backend.app.core import crcl_alerts, crcl_collect, crcl_db
-from backend.app.core.locking import submit_job
+from backend.app.core.auth import require_token
+from backend.app.core.locking import create_job, get_job
 
 logger = logging.getLogger(__name__)
 
@@ -227,71 +227,67 @@ def logs(limit: int = Query(100, ge=1, le=500)):
     return {"logs": crcl_db.get_logs(limit=limit)}
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(require_token)])
 def refresh():
-    """阻塞式全量采集 + 告警评估。
+    """启动全量采集 + 告警评估（后台），立即返回 ``job_id``。
 
-    单飞（F6）：已有采集在进行时立即返回 ``status="busy"``，不再并发跑第二遍。
+    F4：采集只能由这个 POST 触发（且必须携带本机令牌），
+    ``GET /crcl/refresh/stream`` 只做订阅——旧实现里一个
+    ``<img src="…/crcl/refresh/stream">`` 或浏览器预取就能跑一整轮网络采集。
+    单飞（F6）仍在 ``collect_all`` 内部：已有采集在进行时该 job 的终止事件
+    会带回 ``status="busy"``；线程池满则本次直接返回 busy，不排队。
     """
-    return crcl_collect.collect_all()
+    job = create_job(lambda progress_cb, stop_event: crcl_collect.collect_all(
+        progress_cb=progress_cb, stop_event=stop_event))
+    if job is None:
+        return _POOL_BUSY
+    return {"status": "running", "msg": "采集已启动", "run_id": None,
+            "steps": [], "alerts_changed": [], "job_id": job.id}
 
 
-@router.get("/refresh/stream")
-async def refresh_stream():
-    """SSE 实时进度（与现有 /refresh/stream 同模式）。
+# NOTE: the wire format below is frozen — the frontend parses `data: ` lines
+# and reads payload.progress (CrclMonitor.vue) / payload.done.
+async def _event_source(job):
+    """SSE body for one subscriber of ``job``（与 refresh.py 同模式）。
 
-    ``async def`` on purpose (F7): a SYNC generator is driven through
+    ``async`` on purpose (F7): a SYNC generator is driven through
     ``iterate_in_threadpool``, so each open SSE connection permanently occupied
     one of AnyIO's 40 threadpool tokens while blocked in ``q.get(timeout=1.0)``.
     An async generator awaiting an ``asyncio.Queue`` holds ZERO tokens. The
-    collection itself runs on the ONE shared bounded pool (``submit_job``) rather
-    than an uncapped per-request thread, and a disconnecting client now sets
-    ``stop_event`` so the remaining network collection is abandoned instead of
-    running to completion for nobody.
+    collection itself runs on the ONE shared bounded pool (``create_job`` →
+    ``submit_job``) rather than an uncapped per-request thread, and a
+    disconnecting client still sets ``stop_event`` so the remaining network
+    collection is abandoned instead of running to completion for nobody.
+    ``job.subscribe`` replays the ticks emitted before this GET arrived.
     """
-    loop = asyncio.get_running_loop()
-    q: asyncio.Queue = asyncio.Queue()
-    result_box: dict = {}
-    stop_event = threading.Event()
+    q = job.subscribe(asyncio.get_running_loop())
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(q.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+                continue
+            if item is None:
+                break
+            yield f"data: {json.dumps({'progress': round(item, 3)})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'result': job.result}, ensure_ascii=False)}\n\n"
+    except (asyncio.CancelledError, GeneratorExit):
+        job.stop_event.set()  # client disconnected → abandon the collection
+        raise
+    finally:
+        job.unsubscribe(q)
 
-    def emit(item):
-        try:
-            loop.call_soon_threadsafe(q.put_nowait, item)
-        except RuntimeError:
-            pass  # event loop already closed (client gone / server shutdown)
 
-    def cb(frac: float):
-        if stop_event.is_set():
-            return
-        emit(frac)
+@router.get("/refresh/stream")
+async def refresh_stream(job_id: str):
+    """SSE 实时进度（只订阅，不触发采集）。
 
-    def worker():
-        try:
-            result_box["r"] = crcl_collect.collect_all(
-                progress_cb=cb, stop_event=stop_event)
-        finally:
-            emit(None)  # sentinel: collection finished (even if it raised)
-
-    if submit_job(worker) is None:
-        result_box["r"] = _POOL_BUSY  # pool saturated → terminal event only
-        q.put_nowait(None)
-
-    # NOTE: the wire format below is frozen — the frontend parses `data: ` lines
-    # and reads payload.progress (CrclMonitor.vue) / payload.done.
-    async def event_source():
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(q.get(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-                    continue
-                if item is None:
-                    break
-                yield f"data: {json.dumps({'progress': round(item, 3)})}\n\n"
-            yield f"data: {json.dumps({'done': True, 'result': result_box.get('r')}, ensure_ascii=False)}\n\n"
-        except (asyncio.CancelledError, GeneratorExit):
-            stop_event.set()  # client disconnected → abandon the collection
-            raise
-
-    return StreamingResponse(event_source(), media_type="text/event-stream")
+    F4：``job_id`` 只能由 ``POST /crcl/refresh`` 签发，因此本 GET 不再启动任何
+    工作——缺参数由校验层直接 422（函数体都不会执行），未知/过期 id 回 404。
+    """
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404,
+                            detail="job_id 不存在或已过期：请重新触发 POST /api/v1/crcl/refresh")
+    return StreamingResponse(_event_source(job), media_type="text/event-stream")

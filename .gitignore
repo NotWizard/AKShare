@@ -9,12 +9,18 @@ build/
 # Data (runtime / cache / downloaded files)
 data/*.db
 data/*.db.staging
+# WAL 边车：`data/*.db` 匹配不到 `macro_data.db-wal`（后缀不是 .db 结尾），
+# 开启 journal_mode=WAL 后这两个文件会常驻，必须显式忽略。
+data/*.db-wal
+data/*.db-shm
 data/*.csv
 data/backups/
 data/vintages/
 data/last_run.json
 data/.dashcache/
 data/.refresh.lock
+# 本机能力令牌（启动时随机生成，0600）——变更端点的 CSRF 防护凭据，绝不入库。
+data/.api_token
 data/refresh_schedule.log
 # 运行期日志目录（run_app.sh 的 api.log、01_fetch_data.py 的 fetch.log）。
 # 根忽略此前只列了具体的 data/* 条目、未覆盖该目录，run_app.sh 只能在创建目录时

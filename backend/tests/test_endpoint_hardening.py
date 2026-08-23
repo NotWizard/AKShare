@@ -39,6 +39,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend.app.api.v1 import crcl as crcl_api  # noqa: E402
 from backend.app.api.v1 import refresh as refresh_api  # noqa: E402
 from backend.app.core import crcl_collect, crcl_db, locking, refresh  # noqa: E402
+from backend.app.core import auth  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.schemas.refresh import RefreshResult  # noqa: E402
 
@@ -74,6 +75,14 @@ def _events(body: str) -> list[str]:
     return [e for e in body.split("\n\n") if e]
 
 
+def _start_job(runner):
+    """Register a background job and return its id (F4: the stream no longer
+    submits work — it only subscribes to an id a POST/create_job minted)."""
+    job = locking.create_job(runner)
+    assert job is not None, "the shared pool had no free slot for the test job"
+    return job.id
+
+
 # ═══════════════════════════ F7: async SSE, zero threadpool tokens ══════════
 @pytest.mark.parametrize("endpoint", [crcl_api.refresh_stream, refresh_api.stream])
 def test_sse_endpoints_are_async(endpoint):
@@ -84,13 +93,16 @@ def test_sse_endpoints_are_async(endpoint):
         f"{route.path} must be async def"
 
 
-def test_sse_body_iterator_is_an_async_generator(monkeypatch):
+def test_sse_body_iterator_is_an_async_generator():
     """The streamed body must be an ASYNC generator: Starlette only pushes
     non-async iterators through ``iterate_in_threadpool``."""
-    # submit_job → None so nothing is actually collected by this introspection.
-    monkeypatch.setattr(crcl_api, "submit_job", lambda *a, **k: None)
-    monkeypatch.setattr(refresh_api, "submit_job", lambda *a, **k: None)
-    for coro in (crcl_api.refresh_stream(), refresh_api.stream()):
+    # F4: the stream now subscribes to a job_id instead of submitting work, so we
+    # register a trivial job for each and hand its id to the endpoint.
+    crcl_id = _start_job(lambda pcb, se: {"status": "ok", "run_id": "x",
+                                          "steps": [], "alerts_changed": []})
+    refresh_id = _start_job(lambda pcb, se: {"status": "ok", "msg": "", "ts": None,
+                                             "updated": [], "kept_previous": []})
+    for coro in (crcl_api.refresh_stream(crcl_id), refresh_api.stream(refresh_id)):
         response = asyncio.run(_await(coro))
         it = response.body_iterator
         assert inspect.isasyncgen(it), f"{it!r} is not an async generator"
@@ -110,7 +122,10 @@ def test_crcl_sse_payload_format_is_unchanged(monkeypatch):
         return {"status": "ok", "run_id": "abc12345", "steps": [], "alerts_changed": []}
 
     monkeypatch.setattr(crcl_collect, "collect_all", fake_collect_all)
-    with client.stream("GET", CRCL_STREAM) as r:
+    # F4: the POST/create_job mints the job; the GET only subscribes to its id.
+    job_id = _start_job(lambda pcb, se: crcl_collect.collect_all(
+        progress_cb=pcb, stop_event=se))
+    with client.stream("GET", CRCL_STREAM, params={"job_id": job_id}) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
         events = _events(r.read().decode())
@@ -133,7 +148,9 @@ def test_refresh_sse_payload_format_is_unchanged(monkeypatch):
                 "updated": ["cpi"], "kept_previous": []}
 
     monkeypatch.setattr(refresh, "run_refresh", fake_run_refresh)
-    with client.stream("GET", REFRESH_STREAM) as r:
+    job_id = _start_job(lambda pcb, se: refresh.run_refresh(
+        progress_cb=pcb, stop_event=se))
+    with client.stream("GET", REFRESH_STREAM, params={"job_id": job_id}) as r:
         events = _events(r.read().decode())
 
     progress = [e for e in events if '"progress"' in e]
@@ -153,7 +170,9 @@ def test_crcl_sse_passes_a_stop_event_for_cancellation(monkeypatch):
         return {"status": "ok", "run_id": "x", "steps": [], "alerts_changed": []}
 
     monkeypatch.setattr(crcl_collect, "collect_all", fake_collect_all)
-    with client.stream("GET", CRCL_STREAM) as r:
+    job_id = _start_job(lambda pcb, se: crcl_collect.collect_all(
+        progress_cb=pcb, stop_event=se))
+    with client.stream("GET", CRCL_STREAM, params={"job_id": job_id}) as r:
         r.read()
     assert isinstance(seen["stop_event"], threading.Event)
 
@@ -178,18 +197,25 @@ def test_submit_job_refuses_instead_of_queueing():
     assert locking.submit_job(lambda: None) is not None    # slots released
 
 
-@pytest.mark.parametrize("path,module", [(CRCL_STREAM, crcl_api),
-                                         (REFRESH_STREAM, refresh_api)])
-def test_sse_reports_busy_when_pool_is_saturated(monkeypatch, path, module):
-    """A saturated pool yields ONE terminal event with a busy result, in the
-    same envelope — never a hang and never an unbounded queue."""
-    monkeypatch.setattr(module, "submit_job", lambda *a, **k: None)
-    with client.stream("GET", path) as r:
-        events = _events(r.read().decode())
-    assert len(events) == 1, f"expected only a terminal event, got {events}"
-    payload = json.loads(events[0][len("data: "):])
-    assert payload["done"] is True
-    assert payload["result"]["status"] == "busy"
+@pytest.mark.parametrize("path,module", [("/api/v1/crcl/refresh", crcl_api),
+                                         ("/api/v1/refresh", refresh_api)])
+def test_saturated_pool_reports_busy_on_the_post(monkeypatch, tmp_path, path, module):
+    """A saturated pool reports busy — but on the POST now, not the stream.
+
+    F4 moved admission control with the mutation: the GET no longer submits
+    work, so the "pool full" answer belongs to the POST that tries to create the
+    job. It returns a busy envelope and mints NO job_id (so there is nothing to
+    subscribe to), instead of the pre-fix stream emitting a lone terminal event.
+    """
+    monkeypatch.setattr(module, "create_job", lambda *a, **k: None)
+    monkeypatch.setattr(auth, "TOKEN_PATH", tmp_path / ".api_token")
+    monkeypatch.setattr(auth, "_TOKEN", None)
+    token = auth.rotate_token()
+    r = client.post(path, headers={auth.HEADER_NAME: token})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "busy"
+    assert body.get("job_id") is None
 
 
 # ═══════════════════════════ F11: bounded query params ═════════════════════

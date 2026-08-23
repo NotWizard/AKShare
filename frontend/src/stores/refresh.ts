@@ -2,8 +2,8 @@
 // Two independent datasets share one store so a page can never own refresh state
 // privately (FE-H4: CrclMonitor did, so the global bar's buttons were dead and a
 // second concurrent collection could be started by navigating away and back):
-//   · macro  → /refresh/stream        → lastRefreshedAt
-//   · crcl   → /crcl/refresh/stream   → crclRefreshedAt
+//   · macro  → POST /refresh      + /refresh/stream?job_id=…      → lastRefreshedAt
+//   · crcl   → POST /crcl/refresh + /crcl/refresh/stream?job_id=… → crclRefreshedAt
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api, BASE, invalidateCache } from '../api/client'
@@ -49,7 +49,12 @@ export const useRefreshStore = defineStore('refresh', () => {
     else lastRefreshedAt.value = Date.now()
   }
 
-  // SSE-driven refresh: open the stream, parse progress + done.
+  // SSE-driven refresh, two steps since F4:
+  //   1. POST /refresh (or /crcl/refresh) — the ONLY thing that starts work; it
+  //      carries the local capability token and returns a job_id;
+  //   2. GET …/refresh/stream?job_id=… — a pure subscription.
+  // That split is what makes an <img src=".../refresh/stream"> or a browser
+  // prefetch harmless: a GET without a minted job_id can no longer collect.
   // macro full=true 追加 ?full=1 绕过发布日历（全量抓取）。
   async function stream(full = false, k: RefreshKind = 'macro') {
     if (running.value) return
@@ -57,8 +62,15 @@ export const useRefreshStore = defineStore('refresh', () => {
     running.value = true
     kind.value = k
     progress.value = 0
-    const path = k === 'crcl' ? '/crcl/refresh/stream' : `/refresh/stream${full ? '?full=1' : ''}`
     try {
+      const started = k === 'crcl' ? await api.triggerCrclRefresh() : await api.triggerRefresh(full)
+      if (!started.job_id) {
+        // busy / pool saturated — the backend already said why in msg
+        lastResult.value = { msg: started.msg ?? '刷新未启动', ts: started.ts ?? null }
+        return
+      }
+      const base = k === 'crcl' ? '/crcl/refresh/stream' : '/refresh/stream'
+      const path = `${base}?job_id=${encodeURIComponent(started.job_id)}`
       const resp = await fetch(`${BASE}${path}`, {
         signal: abortController.signal,
       })
