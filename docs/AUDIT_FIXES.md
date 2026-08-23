@@ -42,10 +42,10 @@ resume 后第一件事：`git status --short` —— 若有改动，先辨认属
 2. ✅ **已修 `b55b391`** — `core/commentary.py` 三个早退分支（生成中/已在生成/生成失败）补 schema 必需的 `text=""`。此前缺该字段 → FastAPI 响应校验抛错 → 端点 500，把"模型未配置"伪装成服务器崩溃。fail→pass：3 failed → 3 passed。
 3. ✅ **已修 `b55b391`** — `frontend/src/design/phases.ts` 补 `insufficient_data`→「数据不足」（该相位现会真实出现在 `/cycles` 与 `signal_history`）。
 4. ✅ **已修 `b55b391`** — `frontend/src/api/types.ts` 的 `RefreshResult.detail` 改为 `error_id`（后端 F12 已移除 detail）。
-5. ⬜ **未修** — F13-rest：`core/commentary.py:~244` 仍是宽 `except Exception: → {"status":"empty"}`，把编程错误伪装成"暂无评论"（`signal_history` 的同类问题已在 `2e437dc` 修掉，此处照抄即可）。
-6. ⬜ **未修** — `core/commentary.py`、`core/signal_history.py` 仍用裸 `sqlite3.connect`，享受 WAL（文件属性）但**没有 `busy_timeout`**，应改走 `db.connect()`。
-7. ⬜ **未修** — `SignalSummary` schema 过滤掉 G23 新增的 `as_of`/`included`/`excluded`/`stale`/`composite_raw`，故 API 层看不到 coverage/as-of（需在 `backend/app/schemas/signals.py` 加 5 个可选字段）。
-8. ⬜ **未修（次要）** — `启动面板.command` 仍写 `:5173` 双进程（README 已改单进程 `:8000`）；`max_points=1500` 默认会静默抽稀长序列；`scipy`/`statsmodels` 全仓零 import（已钉版并注释为待删候选）。
+5. ✅ **已修 `f4baa1f`** — F13-rest：`core/commentary.py` 的 `get_current` 裸 `except Exception` 收窄为只吞 `sqlite3.OperationalError` 且含 "no such table"，其余冒泡为可见 500（照抄 `signal_history.read_history` 同款）；顺带修掉错误路径 fd 泄漏。fail→pass：`test_commentary_errors.py` 改前 2 failed（编程错误/非良性 sqlite 错误未冒泡）→ 改后 passed。
+6. ✅ **已修 `f4baa1f`** — `core/commentary.py`、`core/signal_history.py` 裸 `sqlite3.connect` 改走 `db.connect()` 工厂，补 `busy_timeout`（连接属性、默认 0）。fail→pass：`test_db_factory_callers.py` 改前 2 failed（模块无 `connect` 属性）→ 改后 passed（PRAGMA busy_timeout == BUSY_TIMEOUT_MS>0）。
+7. ✅ **已修 `f4baa1f`** — `SignalSummary` 补 `as_of`/`included`/`excluded`/`stale`/`composite_raw` 五个可选字段。fail→pass：`test_signals_schema_fields.py` 改前 2 failed（response_model 过滤掉 as_of）→ 改后 passed；实测 `/signals` as_of=2026-06、stale=[inventory]、composite_raw=2.29。
+8. ✅ **已修 `f4baa1f`（launcher 部分）** — `启动面板.command` `:5173`→`:8000`（vite preview 已下线）。余项 `max_points` 静默抽稀、`scipy`/`statsmodels` 零 import 归入 G26/G28-30 低危批次处理，不在本条。
 9. 说明：`data/macro_data.db` 现为 `journal_mode=wal`（跑测试经新工厂读真实库的持久副作用）；`integrity_check ok`、无 `-wal/-shm` 残留、该文件已 gitignore。
 
 ### 当前实测门禁（2026-08-22，22 次提交后）
