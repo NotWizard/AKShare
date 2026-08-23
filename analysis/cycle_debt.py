@@ -103,11 +103,15 @@ def classify_debt(db_path: str) -> pd.DataFrame:
 
     # For each leverage quarter, take the most recent annual GDP observation
     # (backward as-of join — same semantics as the previous per-row scan).
-    gdp_q = pd.merge_asof(
-        lev[["date"]], gdp, on="date", direction="backward"
-    ) if len(lev) and len(gdp) else pd.DataFrame(
-        {"date": lev["date"], "gdp_yoy": np.nan, "gdp_trend": np.nan, "growth_up": np.nan}
-    )
+    # merge_asof needs both sides non-empty; with either side missing every
+    # quarter simply has no growth observation (→ insufficient_data below).
+    if len(lev) and len(gdp):
+        gdp_q = pd.merge_asof(lev[["date"]], gdp, on="date", direction="backward")
+    else:
+        gdp_q = pd.DataFrame({
+            "date": lev["date"], "gdp_yoy": np.nan,
+            "gdp_trend": np.nan, "growth_up": np.nan,
+        })
 
     # ── 4-quarter change in leverage ────────────────────────────────────────
     lev["hh_change"] = lev["household"].diff(4)
