@@ -277,6 +277,7 @@ resume 协议：`git status --short` → 按上表把每个在飞文件归到 G2
 - 已修：A-L2 带符号 `idxmax()` + 样本内 docstring（`740899f`）；**P-L TLS `verify=False` 删除 + `dfs[1]` 改按列认表 `pick_curve_table()` + 裸 except 改逐年 ⚠️ 留痕（`2a3b8a0`）**——实测中债站点 `verify=True` 即 HTTP 200（正文 150214 字节），故关校验纯属无谓暴露 MITM；实测该页 2 张表且表单同样带「曲线名称」列，故认表须三列同时存在。
 - 复核判定**非开放**：A-L3 余下 `SELECT *` 均为通用整表加载器（`db._load_full`/`load_table`/leverage merge），列敏感处（cross_indicator）已显式列名；A-L4 缓存均已纳入 DB 版本键、唯一可变入参 cities 已元组归一（F15），缓存帧消费方只读；P-L plist `/opt/homebrew/opt/expat/lib` 与 `refresh.py:79` 及测试一致；P-L 备份/vintage/staging 三者语义独立且目录可注入；P-L 未用 import 在受检文件中未发现（仓库级清扫需 linter，未安装）。
 - reviewer: orchestrator 独立复核 · commit: `740899f` + `2a3b8a0` · evidence: `test_bond_yield_parse.py` 改前 3 failed → 改后 8 passed；全套 307 passed
+- **联网 e2e 全年重放已实跑（发布后收口，非挂账）**：真网跑通 TLS 200（150214 字节）→ 认表（2 表/474 行）→ 21 年并发 → 月频 **246 个月**、最新 `2026-08-01=1.6839` → 闸门 `status=updated, new_rows=246, unique_index=ux_bond_yield_date` → 索引重建；只写临时库，live 逐字节未动。另一次部分断网的重放反向验证了保护行为：逐年 ⚠️ 记录 3 次 `ConnectionError`，新鲜度闸门据此 `997d behind > 200d` **拒收**（`kept_previous`），且 **214 个已收官月与 live 数值零差异（max 0.0000）**。新增 `backend/tests/test_bond_yield_e2e.py`（3 例离线全链路，仅假 socket；变异 `.last()`→`.first()` 即失败）+ `scripts/verify_bond_yield_e2e.py`（可复用联网验证器，只写 tempfile、只读比对 live）。
 
 ---
 

@@ -18,7 +18,9 @@ data/backups/
 data/vintages/
 data/last_run.json
 data/.dashcache/
-data/.refresh.lock
+# 单飞锁：宏观刷新用 .refresh.lock、CRCL 采集用 .crcl_collect.lock（G09 新增），
+# 都是 flock 的运行期文件，用通配一并忽略，避免每次跑完冒出未跟踪文件。
+data/*.lock
 # 本机能力令牌（启动时随机生成，0600）——变更端点的 CSRF 防护凭据，绝不入库。
 data/.api_token
 data/refresh_schedule.log

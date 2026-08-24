@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+### 收口 v1.1.0 遗留：联网 e2e 全年重放（G30 / P-L）
+
+概述：v1.1.0 发布时唯一挂账的「联网 e2e 全年重放未复跑」现已**真实执行完毕**，并顺带修掉验证器自身两处缺陷与一处 gitignore 漏项。
+
+变更：
+  1. **[验证｜已实跑]** 真实联网跑通全年重放：TLS 默认 CA 直连 **HTTP 200**（正文 150214 字节）→ 认表命中（页面 2 张表、数据表 474 行）→ 21 年并发抓取 → 月频重采样 **246 个月**，最新 `2026-08-01 = 1.6839`，收益率区间 1.6243–4.5518 → `validate()` 闸门 **`status=updated, new_rows=246, unique_index=ux_bond_yield_date, checks=pass`** → UNIQUE 索引重建。全程只写临时库，`data/macro_data.db` **逐字节未动**（`git status data/` 干净）。
+  2. **[验证｜意外增益]** 第二次重放时环境网络中途断开（2024–2026 三年失败），恰好在真实场景验证了两项修复的保护行为：`2a3b8a0` 的**逐年 ⚠️ 告警**如实记录三次 `ConnectionError`（改前会静默返回空表、无人知晓），而 P-M7 的**新鲜度闸门**据此算出 `newest date 2023-12-01 is 997d behind > max_date_lag 200d` 并**拒收**（`kept_previous`），保住了既有好数据。同时 **214 个已收官月与 live 库数值完全一致（最大差 0.0000）**，证明解析链路零回归。
+  3. **[新增] `backend/tests/test_bond_yield_e2e.py`（3 例）**：离线**全链路**重放——除 socket（`mod.requests`）外全为真代码（真 `ThreadPoolExecutor` 并发、真 `read_html`、真 `resample("ME").last()`、真 `save_to_db`→`validate()`→`to_sql`→UNIQUE 索引）。夹具按实测真实结构构造（表单表同样带「曲线名称」列、数据表混入需筛掉的其它曲线且其值 99.0 会打爆闸门 ranges）。覆盖：21 年抓取覆盖面、调用方不得再传 `verify`、月末值取 last 而非 first/mean、闸门 updated + 索引重建、上游整体冻结时拒收、页面改版时逐年留痕含 `LookupError`。**变异测试证明有牙**：把 `.resample("ME").last()` 改成 `.first()` → 失败，恢复 → 3 passed。
+  4. **[新增] `scripts/verify_bond_yield_e2e.py`**：可复用的联网验证器（四步、带断言与退出码），供任意有网机器一条命令闭环；只写 `tempfile`、以 `mode=ro` 只读比对 live，**绝不触碰 live 库**。
+  5. **[修复] 验证器自身两处缺陷**（首跑即暴露）：(a) 回归比对未排除 live 的**未收官月**——live 采集于 2026-07-21（7 月未结束），`resample last` 当时只能取到月中最后交易日 1.7453，7 月收官后正常修订为 1.7141，验证器却把这 0.0312 报成回归；现改为排除未收官月并单独提示。(b) 把「网络抖动导致部分年份失败」与「代码缺陷」混判——现统计失败年份数，序列不完整时按「预期拒收」断言，只在 0 年失败时才要求闸门 `updated`。
+  6. **[修复] `.gitignore` 漏项**：G09 新增的 CRCL 单飞锁 `data/.crcl_collect.lock` 未被忽略（此前只列了 `data/.refresh.lock`），每次跑完都冒出未跟踪文件；改为通配 `data/*.lock` 一并覆盖。
+
+验证：
+  1. 全套 **311 passed**（v1.1.0 的 308 + 本次 3 例）；`scripts/_pipeline_test.py` ALL CHECKS PASSED。
+  2. 联网验证器在有网时四步全绿、断网时第 1 步即优雅退出并明确报因（退出码 1），两种路径均实测。
+
+### Closing the v1.1.0 leftover: networked full-year e2e replay (G30 / P-L)
+
+Summary: the single item left open at v1.1.0 — "the networked full-year e2e replay could not be re-run" — has now **actually been executed**, and doing so also surfaced two defects in the verifier itself plus a gitignore gap.
+
+Changes:
+  1. **[verification｜executed for real]** The live full-year replay passed end to end: a default-CA connection returned **HTTP 200** (150214-byte body) → table picked correctly (2 tables on the page, 474 data rows) → 21 years fetched concurrently → resampled to **246 monthly points**, latest `2026-08-01 = 1.6839`, yields spanning 1.6243–4.5518 → the `validate()` gate reported **`status=updated, new_rows=246, unique_index=ux_bond_yield_date, checks=pass`** → the UNIQUE index was rebuilt. Only a temporary database was written; `data/macro_data.db` was **left byte-identical** (`git status data/` clean).
+  2. **[verification｜unexpected upside]** A second replay hit a mid-run network drop (2024–2026 failed), which happened to validate both fixes' protective behaviour against reality: the **per-year ⚠️ warnings** from `2a3b8a0` faithfully recorded three `ConnectionError`s (previously these years returned an empty frame with nobody the wiser), and P-M7's **freshness gate** consequently computed `newest date 2023-12-01 is 997d behind > max_date_lag 200d` and **rejected** the write (`kept_previous`), preserving the good data. Meanwhile **all 214 closed months matched the live database exactly (max diff 0.0000)**, showing the parsing chain has no regression.
+  3. **[added] `backend/tests/test_bond_yield_e2e.py` (3 cases)**: an offline **full-chain** replay in which only the socket (`mod.requests`) is faked — everything else is real code (real `ThreadPoolExecutor` concurrency, real `read_html`, real `resample("ME").last()`, real `save_to_db`→`validate()`→`to_sql`→UNIQUE index). Fixtures mirror the measured page structure (the form table also carries a 曲线名称 column; the data table mixes in another curve whose 99.0 value would blow the gate's ranges if not filtered). Coverage: the 2006→current fetch span, the caller no longer passing `verify`, month-end values taken by last rather than first/mean, gate `updated` + index rebuild, rejection when the upstream is wholly frozen, and per-year traces containing `LookupError` when the page is redesigned. **Mutation-tested for teeth**: switching `.resample("ME").last()` to `.first()` makes it fail; restored → 3 passed.
+  4. **[added] `scripts/verify_bond_yield_e2e.py`**: a reusable networked verifier (four steps, assertions and an exit code) so any connected machine can close the loop with one command; it writes only to `tempfile` and compares against live read-only (`mode=ro`), **never touching the live database**.
+  5. **[fixed] two defects in the verifier itself**, both exposed on its first run: (a) the regression comparison did not exclude live's **open (incomplete) month** — live was collected on 2026-07-21 while July was still running, so `resample last` could only reach the mid-month trading day at 1.7453, which legitimately revised to 1.7141 once July closed; the verifier reported that 0.0312 as a regression. It now excludes the open month and reports it separately. (b) It conflated "a flaky network failing some years" with "a code defect"; it now counts failed years and, when the series is incomplete, asserts the gate's *expected rejection* instead, requiring `updated` only when zero years failed.
+  6. **[fixed] `.gitignore` gap**: the CRCL single-flight lock `data/.crcl_collect.lock` added by G09 was never ignored (only `data/.refresh.lock` was listed), so every run left an untracked file behind; both are now covered by a `data/*.lock` glob.
+
+Verification:
+  1. Full suite **311 passed** (v1.1.0's 308 plus these 3); `scripts/_pipeline_test.py` ALL CHECKS PASSED.
+  2. The networked verifier was exercised on both paths: all four steps green with connectivity, and a graceful step-1 exit with an explicit reason (exit code 1) without it.
+
+
 ## [1.1.0] — 2026-08-24 — 代码审计修复批次 + 数据源参考手册交叉验证与修正
 
 ### 代码审计修复批次（v1.1.0）
