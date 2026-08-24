@@ -152,3 +152,22 @@ FETCH_SPECS = {
         fail_log="新增信贷数据采集失败",   # 保持原始告警文案
     ),
 }
+
+
+# ── 中债收益率页：按列特征认表（替代位置式 dfs[1]）────────────────────────────
+# 该页 read_html 出两张表：第 0 张是查询表单、第 1 张才是数据。表单**同样带
+# 「曲线名称」列**，所以只能靠三列同时存在来区分；上游一旦多插一张表，位置式
+# 索引就会静默取错表、再被 fetcher 的 except 吞掉，表现为「收益率永远不更新」。
+CB_CURVE_COLS = ("曲线名称", "日期", "10年")
+
+
+def pick_curve_table(dfs):
+    """从 `read_html` 结果中选出中债收益率数据表。
+
+    认不出就抛 `LookupError`——让调用方把「页面改版」记成失败，而不是当作
+    「本年无数据」静默返回空表。"""
+    for df in dfs:
+        if all(col in df.columns for col in CB_CURVE_COLS):
+            return df
+    raise LookupError(
+        f"未找到含 {CB_CURVE_COLS} 的中债收益率表（read_html 共 {len(dfs)} 张表）")

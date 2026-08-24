@@ -44,7 +44,7 @@ from release_calendar import TABLE_CALENDAR, should_fetch  # noqa: E402
 import dual_sources  # noqa: E402
 from signal_history import append_signal_history  # noqa: E402
 from nifd_leverage import nifd_supplement_df  # noqa: E402
-from _specs import DATE_PARSERS, FETCH_SPECS, to_num  # noqa: E402
+from _specs import DATE_PARSERS, FETCH_SPECS, pick_curve_table, to_num  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "macro_data.db")
 
@@ -871,14 +871,18 @@ def fetch_bond_yield(conn):
         }
         try:
             r = requests.get(_CB_URL, params=params, headers=_CB_HEADERS,
-                             verify=False, timeout=30)
+                             timeout=30)
             text = r.text.replace("&nbsp", "")
             dfs = pd.read_html(StringIO(text), header=0)
-            df = dfs[1]
+            df = pick_curve_table(dfs)
             gz = df[df["曲线名称"] == "中债国债收益率曲线"][["日期", "10年"]].copy()
             gz["10年"] = to_num(gz["10年"])
             return gz.dropna(subset=["10年"])
-        except Exception:
+        except Exception as e:
+            # 逐年失败不中断整轮（老年份本就可能无数据），但必须留痕：改前这里
+            # 是裸 `except: return 空表`，把「TLS 拒绝」「页面改版取错表」一起
+            # 伪装成「本年无数据」，直到全部年份都空才报一条笼统告警。
+            log(f"  ⚠️ 国债收益率 {year} 年采集失败: {type(e).__name__}: {e}")
             return pd.DataFrame()
 
     from datetime import datetime
