@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### 空图表 / 报错页面排查 + 数据补全（前端反馈）
+
+概述：用户在浏览器发现「财政与外需」整页报错、「债务周期」个别图为空、多页指标陈旧。逐页 + 数据库 + 代码三方排查后定位并修复；同时核查数据文档要求的"手工补充"数据——**经查 NIFD/ISM/出生率/CRCL 全部已是最新、零缺口**（唯一 stale 是 runbook 文档一行，已修）。真正根因是数据陈旧 + 一处依赖锁定 + 一处代码不健壮：
+
+变更：
+  1. **[G-fix｜/table 缺表健壮性]** `backend/app/core/db.py::_load_full_versioned` 对"表不存在"优雅降级返回空帧，而非让 `OperationalError` 冒泡成 HTTP 500——白名单内但尚未采集的表（如 `fiscal`/`external_demand`）前端显示"暂无数据"而非整页错误卡。新增 `test_missing_table.py`（5 例，变异验证有牙）。改一处覆盖所有走 `db.load` 的端点。
+  2. **[数据｜派生重算]** `derived_quarterly` 是旧年频产物（21 行、9 个杠杆列全 NULL），而 `leverage` 源表齐全（85 行到 2026-03）；重跑 `02_compute_derived.py` → 85 行季频、`household` 等填充 → 修「债务周期·居民真实杠杆空间」空图。
+  3. **[依赖｜akshare 1.18.64 → 1.18.83]** **根因**：`fiscal`/`external_demand`/`household_income` 三表恒空 → `/table/*` 500 → 财政外需页整页错误卡，因为 1.18.64 内部仍调被 WAF 封禁的旧 NBS 端点 `easyquery.htm`（实测 **403**）；1.18.83 重写 `macro_china_nbs_nation()` 走新站 `queryIndexTreeAsync` API。升级前备份 live 库、升级后按 `requirements.txt` 要求跑回归（pytest 316 + pipeline 全绿），实测五个生产路径（财政收入/支出、货物进出口、居民收入、总人口）**5/5 可取数**。同步 `requirements.lock`。
+  4. **[数据｜全量重采]** 用 1.18.83 跑 `01_fetch_data.py --full`：新建 `fiscal`(128 行)/`external_demand`(139 行)/`household_income`(30 行)，`pmi` 前进到 2026-07、`lpr` 去重到 155 行、`social_finance`/`gdp`(21→82 累计季度) 前进；13 表 updated / 3 kept_previous（`money_supply`/`cpi`/`leverage` 无变化或值域校验拦下，非丢失）。`derived_quarterly.hh_debt_to_income` 现非空（2026-03=135.7，落在校验区间 120-140）。
+  5. **[文档]** `docs/data-sources-guide.md` §十一 补 2026-08-24 时间线，点明 NBS 修复依赖 `akshare>=1.18.83`（教训：爬虫库精确锁定会把失效上游一同冻死）；`docs/data-supplement-runbook.md` §0/§1 修正 NIFD 单一源与 2026Q2 现状。
+验证：`/table/fiscal|external_demand|household_income` 均 200 有数据；`/derived/quarterly` 85 行含 `hh_debt_to_income`；财政外需页 5 图渲染、债务页无空图；pytest 316 + pipeline 全绿；playwright 逐页无 red error（Qoder 注入的 MutationObserver 除外）。
+
 ### 前端单测补齐：引入 vitest，覆盖 client/stores/composables/图表 builder（收口 G18 缺口）
 
 概述：v1.1.0 时 G18 唯一的诚实缺口——前端无 test runner、`client.ts`/`options.ts` 等逻辑无单测——现已补齐：引入 **vitest**（唯一新增 devDep），对本轮审计改动过的前端逻辑热区写了 **42 个单测**，并接入 CI。
