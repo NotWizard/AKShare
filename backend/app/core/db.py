@@ -88,6 +88,14 @@ def _load_full_versioned(table: str, version: tuple) -> pd.DataFrame:
     conn = connect()
     try:
         df = pd.read_sql(f"SELECT * FROM [{table}]", conn)
+    except Exception as e:
+        # 白名单内但物理不存在的表（如尚未采集的 fiscal/external_demand）：返回空帧，
+        # 而非让 "no such table" 的 OperationalError 冒泡成 HTTP 500——前端据此显示
+        # "暂无数据"而非错误卡。只吞"表不存在"这一良性情形，schema 漂移/镜像损坏等
+        # 仍冒泡（与 signal_history.read_history / commentary.get_current 同款先例）。
+        if "no such table" in str(e).lower():
+            return pd.DataFrame()
+        raise
     finally:
         conn.close()
     if "date" in df.columns:

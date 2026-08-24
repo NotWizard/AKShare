@@ -15,7 +15,7 @@
 
 | 指标 | 硬编码位置 | 内容 | 当前到 | 更新方式 |
 |---|---|---|---|---|
-| NIFD 宏观杠杆率（居民/非金/政府/中央/地方/实体） | `scripts/01_fetch_data.py` `_NIFD_DATA`；`scripts/03_supplement_leverage.py` `NIFD_DATA`（同内容） | 季度杠杆率(%) | 2026-06 (2026Q2) | §1 Agent 补充 |
+| NIFD 宏观杠杆率（居民/非金/政府/中央/地方/实体） | `scripts/nifd_leverage.py` `NIFD_DATA`（单一真相源，`01`/`03` 均 import） | 季度杠杆率(%) | 2026-06 (2026Q2) | §1 Agent 补充 |
 
 **非时序数据（配置/分类逻辑，无需定期更新）**：
 - 城市清单 `CITIES`（`frontend/src/pages/RealEstate.vue`）/ `_DEFAULT_CITIES`（`backend/app/api/v1/real_estate.py`）/ `01_fetch_data.py` 房价城市列表 —— 配置。
@@ -28,8 +28,8 @@
 | 项 | 内容 |
 |---|---|
 | 目标表 | `leverage`（列：`date, household, non_fin_corp, gov_total, gov_central, gov_local, real_economy, fin_asset, fin_liability`） |
-| 代码位置 | `scripts/01_fetch_data.py` 的 `_NIFD_DATA` 列表 + `_nifd_supplement_df()` |
-| 当前补到 | **2026-03（2026Q1）** |
+| 代码位置 | `scripts/nifd_leverage.py` 的 `NIFD_DATA`（单一真相源；`01`/`03` 均 `from nifd_leverage import nifd_supplement_df`） |
+| 当前补到 | **2026-06（2026Q2）** |
 | 数据源 | NIFD 季报 `http://www.nifd.cn/SeriesReport/Details/<id>`（实测可抓、含"杠杆率"） |
 | 已知报告期 URL | 2025Q1=4712、2025Q2=4728、2025Q3=4800、2025Q4=4851、2026Q1=4896、2026Q2=4976；**2026Q3 及以后**需到 NIFD 网站「系列报告→宏观杠杆率」找最新 id（约季后 1 个月发布） |
 
