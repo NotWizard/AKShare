@@ -20,6 +20,26 @@ Changes:
   2. Updated the two hardcoded assertions in `backend/tests/test_ranges.py` and `scripts/_pipeline_test.py` (reason string `[-5, 10]` → `[-5, 30]`).
 Verification: a live `01_fetch_data.py --full` run shows `cpi` clearing the gate for the first time (486 rows → staging, prev 486); live is now 2026-07; backend 320 passed, `_pipeline_test.py` all green.
 
+### 社会融资规模补齐到 2026-07：PBoC 备用源抽为单一真相源 + 独立补充脚本（04）
+
+概述：`social_finance` 停在 2026-04（akshare `macro_china_shrzgm` 源封顶），而 PBoC 官方 XLSX 已有 05/06/07。主管线里社融排在 `leverage`（`ak.macro_cnbs` 走线程超时封装）之后，CNBS 超时的被弃线程会损坏进程 socket fd（`[Errno 9] Bad file descriptor` 级联），紧随其后的 PBoC `requests` 也失败并被静默吞空 → 社融永远补不进。
+
+变更：
+  1. **[抽取单一真相源]** 把 PBoC 社融 XLSX 抓取从 `01_fetch_data.py` 私有函数抽到新模块 `scripts/pbc_shrzgm.py`（`pbc_shrzgm_supplement_df`），对照 `nifd_leverage.py` 先例；`01` 改为 import 复用，`fetch_social_finance` 行为不变。
+  2. **[新增 `scripts/04_supplement_social_finance.py`]** 对照 `03_supplement_leverage.py`：脱离主管线级联，单独 backup→staging→合并（仅追加 date>现有max 且 total 非空的 PBoC 月，未发布 NaN 月不追加）→ `validate()` 闸门 → enforce_indexes + run_derived → 原子交换；任何失败丢弃暂存、live 逐字节不动。
+  3. **[新增 `backend/tests/test_social_finance_supplement.py`（4 例）]** 覆盖 fold+丢 NaN、闸门拒收 live 不动、无新增 noop、缺库报错；变异测试（禁用 dropna）精确打中 1 例 FAIL 证明有牙。
+验证：跑 04 → 补 05/06/07 三行、`social_finance` 139 行 @2026-07、`derived_monthly` 同批重算；后端 320 passed（含新 4 例）；全表新鲜度复核：所有月频表齐至 2026-07，社融与 `new_credit`/`money_supply` 同期一致。
+
+### Social financing brought current to 2026-07: PBoC fallback extracted to a single source + standalone supplement script (04)
+
+Summary: `social_finance` was stuck at 2026-04 (akshare's `macro_china_shrzgm` source caps there) while the official PBoC XLSX already has 05/06/07. In the main pipeline social finance runs after `fetch_leverage`, whose `ak.macro_cnbs()` timeout abandons a thread that corrupts the process socket fd (`[Errno 9] Bad file descriptor` cascade), so the subsequent PBoC `requests` call also fails and is swallowed to empty → social financing never advances.
+
+Changes:
+  1. **[extracted a single source of truth]** Moved the PBoC social-finance XLSX scraper out of a private function in `01_fetch_data.py` into a new module `scripts/pbc_shrzgm.py` (`pbc_shrzgm_supplement_df`), mirroring the `nifd_leverage.py` precedent; `01` now imports it, `fetch_social_finance` behavior unchanged.
+  2. **[new `scripts/04_supplement_social_finance.py`]** Modeled on `03_supplement_leverage.py`: runs outside the pipeline cascade — backup→staging→merge (append only PBoC months with date > current max and non-null total; unpublished NaN months are not appended) → `validate()` gate → enforce_indexes + run_derived → atomic swap; any failure discards staging and leaves live byte-identical.
+  3. **[new `backend/tests/test_social_finance_supplement.py` (4 cases)]** Covers the fold + NaN-drop, gate rejection leaving live untouched, the no-op case, and the missing-DB error; mutation-testing (disabling the NaN-drop) fails exactly one case, proving teeth.
+Verification: running 04 folds 05/06/07 (three rows), `social_finance` is 139 rows @2026-07 with `derived_monthly` recomputed in the same batch; backend 320 passed (incl. the 4 new cases); a full freshness re-audit shows all monthly tables current to 2026-07, with social financing consistent with `new_credit`/`money_supply`.
+
 ### 空图表 / 报错页面排查 + 数据补全（前端反馈）
 
 概述：用户在浏览器发现「财政与外需」整页报错、「债务周期」个别图为空、多页指标陈旧。逐页 + 数据库 + 代码三方排查后定位并修复；同时核查数据文档要求的"手工补充"数据——**经查 NIFD/ISM/出生率/CRCL 全部已是最新、零缺口**（唯一 stale 是 runbook 文档一行，已修）。真正根因是数据陈旧 + 一处依赖锁定 + 一处代码不健壮：
