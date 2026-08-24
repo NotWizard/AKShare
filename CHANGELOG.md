@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### 数据刷新至最新 + 库快照入库：全表复核全部当期，杠杆率补 2026Q2
+
+概述：应「确定所有数据都刷成最新」的要求，跑通全量重采 + 两处补充，并派多个 Agent 交叉复核确认**全部 18 张数据表均已到达各自真实的最新可得值**。
+变更：
+  1. **[数据｜杠杆率]** 跑 `03_supplement_leverage.py` 把 NIFD 2026Q2（2026-06）补入 `leverage`（85→86 行），`derived_quarterly` 同批重算（含 `hh_debt_to_income`）。
+  2. **[数据｜全量重采]** `01_fetch_data.py --full`：14 表 updated（cpi 经修复后的闸门首次前进、pmi/lpr/social_finance 等至 2026-07/08）、2 表 kept_previous（leverage 因 CNBS `[Errno 9]` 网络抖动保留 03 补的 2026-06；bond_yield 因源抖动保留既有 2026-08）——闸门保护，无回归。
+  3. **[快照]** 把最终一致的库快照 `data/vintages/macro_data_20260824_181018.db`（VACUUM 干净副本）纳入版本，取代旧的 `_170759`（同表结构但杠杆/社融陈旧）；`.gitignore` 白名单相应更新。
+验证（跨 Agent 复核，全 PASS）：全表 `MAX(date)` 与真实发布节奏逐一对齐——月频齐至 2026-07、lpr/bond 至 2026-08、gdp Q2、杠杆/派生季频 2026-06、fiscal 至 NBS 源封顶 2026-05、demographics/household_income 为最新年报 2025；社融与 `new_credit`/`money_supply` 同期一致。
+
+### Data refreshed to latest + DB snapshot committed: full-table re-audit confirms every series current, leverage folded to 2026 Q2
+
+Summary: In response to the "make sure all data is refreshed to latest" request, a full re-collection plus two supplements were run, and multiple cross-review agents independently confirmed **all 18 data tables are at their genuine latest-available value**.
+Changes:
+  1. **[data｜leverage]** Ran `03_supplement_leverage.py` to fold NIFD 2026 Q2 (2026-06) into `leverage` (85→86 rows); `derived_quarterly` recomputed in the same batch (incl. `hh_debt_to_income`).
+  2. **[data｜full re-collection]** `01_fetch_data.py --full`: 14 tables updated (cpi advanced for the first time through the fixed gate; pmi/lpr/social_finance etc. to 2026-07/08), 2 kept_previous (leverage kept the 03-folded 2026-06 through a CNBS `[Errno 9]` network blip; bond_yield kept its existing 2026-08 through a source blip) — gate-protected, no regression.
+  3. **[snapshot]** Committed the final consistent DB snapshot `data/vintages/macro_data_20260824_181018.db` (a clean VACUUM copy), replacing the older `_170759` (same schema but stale leverage/social finance); the `.gitignore` whitelist is updated accordingly.
+Verification (cross-agent reviewed, all PASS): every table's `MAX(date)` lines up with its real release cadence — monthlies at 2026-07, lpr/bond at 2026-08, gdp Q2, leverage/derived quarterly 2026-06, fiscal at the NBS source cap 2026-05, demographics/household_income at the latest annual 2025; social finance consistent with `new_credit`/`money_supply`.
+
 ### CPI 校验闸门过窄修复：合并历史高通胀行被拦 → CPI 永久刷不进（根因）
 
 概述：承上一条「空图表排查」里记为 `cpi kept_previous` 的悬案——`cpi` 每次重采都被验证闸门拒收、永远停在旧值。根因是 `_pipeline.py` 的 `cpi_yoy` 值域上限设为 10，而 `fetch_cpi` 会把东财新序列与库内历史合并，库内含 1989-03≈28.4%、1994-11≈27.7% 的真实高通胀月（全序列约 12% 的行 > 10），于是**每一帧合并结果都有行越界 → 整表 replace 被拒 → CPI 冻结**。属护栏误配，非数据问题。
