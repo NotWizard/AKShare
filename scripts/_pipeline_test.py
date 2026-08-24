@@ -60,7 +60,7 @@ ok, _ = P.validate(_cpi_with_outliers(10), "cpi")          # 5% outside → pass
 check("ranges: 5% outliers pass", ok)
 ok, reason = P.validate(_cpi_with_outliers(30), "cpi")     # 15% outside → reject
 check("ranges: 15% outliers rejected", not ok)
-check("ranges: reason names col + bounds", "cpi_yoy" in reason and "[-5, 10]" in reason)
+check("ranges: reason names col + bounds", "cpi_yoy" in reason and "[-5, 30]" in reason)
 ok, reason = P.validate(_cpi_with_outliers(0).assign(cpi_yoy=2000.0), "cpi")
 check("ranges: whole-table ×1000 unit error rejected", not ok)
 

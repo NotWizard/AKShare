@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### CPI 校验闸门过窄修复：合并历史高通胀行被拦 → CPI 永久刷不进（根因）
+
+概述：承上一条「空图表排查」里记为 `cpi kept_previous` 的悬案——`cpi` 每次重采都被验证闸门拒收、永远停在旧值。根因是 `_pipeline.py` 的 `cpi_yoy` 值域上限设为 10，而 `fetch_cpi` 会把东财新序列与库内历史合并，库内含 1989-03≈28.4%、1994-11≈27.7% 的真实高通胀月（全序列约 12% 的行 > 10），于是**每一帧合并结果都有行越界 → 整表 replace 被拒 → CPI 冻结**。属护栏误配，非数据问题。
+
+变更：
+  1. `scripts/_pipeline.py`：`cpi` 值域 `cpi_yoy` 上限 10 → 30，覆盖中国 CPI 同比历史峰值（1989/1994 两位数通胀），附注根因。此为校准纠偏、非放松（30 仍能拦下解析错位的天文值）。同时补 `max_date_lag=200`（对齐 ppi）——跨监督复核指出 cpi 原无新鲜度灯、源若将来静默冻结无从告警，现已补上。
+  2. 同步两处硬编码断言 `backend/tests/test_ranges.py`、`scripts/_pipeline_test.py`（reason 字符串 `[-5, 10]` → `[-5, 30]`）。
+验证：`01_fetch_data.py --full` 实跑，`cpi` 首次穿过闸门（486 行 → staging，prev 486）、live 现 2026-07；后端 320 passed、`_pipeline_test.py` 全绿。
+
+### Fix: CPI validation gate too narrow — merged historical high-inflation rows rejected → CPI could never refresh (root cause)
+
+Summary: resolves the `cpi kept_previous` mystery flagged in the previous "empty charts" entry — every CPI re-fetch was rejected by the validation gate and frozen at the old value. Root cause: `_pipeline.py` capped `cpi_yoy` at 10, but `fetch_cpi` merges the fresh Eastmoney series with historical DB rows that include real high-inflation months (1989-03≈28.4%, 1994-11≈27.7%; ~12% of the series exceeds 10), so **every merged frame had out-of-range rows → the whole-table replace was rejected → CPI stuck**. A misconfigured guardrail, not a data problem.
+
+Changes:
+  1. `scripts/_pipeline.py`: `cpi_yoy` upper bound 10 → 30, covering China's historical CPI YoY peaks (1989/1994 double-digit inflation), with the root cause noted. A calibration fix, not a loosening (30 still rejects parse-misalignment astronomical values). Also adds `max_date_lag=200` (matching ppi) — the cross-review noted cpi had no freshness lamp, so a future silent source-freeze couldn't raise an alert; now it can.
+  2. Updated the two hardcoded assertions in `backend/tests/test_ranges.py` and `scripts/_pipeline_test.py` (reason string `[-5, 10]` → `[-5, 30]`).
+Verification: a live `01_fetch_data.py --full` run shows `cpi` clearing the gate for the first time (486 rows → staging, prev 486); live is now 2026-07; backend 320 passed, `_pipeline_test.py` all green.
+
 ### 空图表 / 报错页面排查 + 数据补全（前端反馈）
 
 概述：用户在浏览器发现「财政与外需」整页报错、「债务周期」个别图为空、多页指标陈旧。逐页 + 数据库 + 代码三方排查后定位并修复；同时核查数据文档要求的"手工补充"数据——**经查 NIFD/ISM/出生率/CRCL 全部已是最新、零缺口**（唯一 stale 是 runbook 文档一行，已修）。真正根因是数据陈旧 + 一处依赖锁定 + 一处代码不健壮：

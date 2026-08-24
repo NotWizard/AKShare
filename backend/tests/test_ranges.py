@@ -42,7 +42,7 @@ def test_15pct_outliers_rejected():
     values = [99.0] * 33 + [2.0] * (N - 33)  # 15% 越界
     ok, reason = validate(_df(values), "cpi")
     assert not ok
-    assert "cpi_yoy" in reason and "[-5, 10]" in reason
+    assert "cpi_yoy" in reason and "[-5, 30]" in reason
 
 
 def test_exactly_10pct_outliers_pass():

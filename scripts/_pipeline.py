@@ -78,7 +78,12 @@ TABLE_SPECS = {
     # 东财当前全国 CPI/PPI 序列约 220+/240+ 行（较早期覆盖缩短），绝对下限按
     # 现状校准；对已有表的缩水防护由 distinct-date 反缩水县闸承担
     "cpi":              dict(min_rows=200, required=["cpi_yoy"],
-                             ranges=dict(cpi_yoy=(-5, 10))),
+                             # 上限 30 覆盖中国 CPI 同比历史高通胀峰值（1989-03=28.4%、
+                             # 1994-11=27.7%）。旧上限 10 会让「东财新序列 + 库内历史」合并后
+                             # 12% 的行超界（>10% 阈值）→ 每次重抓 CPI 都被拒、永远刷不新
+                             # （实测根因）。属误配护栏的纠正，非削弱。max_date_lag 对齐 ppi，
+                             # 补一道新鲜度灯：源若将来静默冻结（返回陈旧但合法值）也能亮灯。
+                             ranges=dict(cpi_yoy=(-5, 30)), max_date_lag=200),
     "ppi":              dict(min_rows=200, required=["ppi_yoy"],
                              ranges=dict(ppi_yoy=(-15, 20)), max_date_lag=200),
     "pmi":              dict(min_rows=200, required=["pmi_official"],
