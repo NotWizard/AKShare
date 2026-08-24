@@ -15,7 +15,11 @@ data/*.db-wal
 data/*.db-shm
 data/*.csv
 data/backups/
-data/vintages/
+# vintage 快照默认不入库（体积大、可重生）；但破例白名单本次 NBS 修复后的库快照
+# （首次含 fiscal/external_demand/household_income 三表），按用户要求纳入版本。
+# 注意：必须忽略"目录内容"(data/vintages/*)而非"目录"(data/vintages/)，否则白名单不生效。
+data/vintages/*
+!data/vintages/macro_data_20260824_170759.db
 data/last_run.json
 data/.dashcache/
 # 单飞锁：宏观刷新用 .refresh.lock、CRCL 采集用 .crcl_collect.lock（G09 新增），
