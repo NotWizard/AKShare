@@ -169,11 +169,19 @@ resume 协议：`git status --short` → 按上表把每个在飞文件归到 G2
 - files: frontend/src/pages/CrclMonitor.vue, stores/refresh.ts, router/index.ts, components/layout/RefreshBar.vue
 - reviewer: — · commit: — · evidence: —
 
-### G16 · CI + 夹具库 + 测试收编 + openapi 漂移门禁 · ⬜
+### G16 · CI + 夹具库 + 测试收编 + openapi 漂移门禁 · ✅
 - findings: O-H3 + O-H5 + O-H9 + O-H6/FE-M5 + O-H7
-- 根治: 一个 GH Actions（ruff+pytest+vue-tsc+`npm ci`+openapi diff）；提交几 KB fixture DB + `conftest.py` 注入 DB_PATH；`scripts/*_test.py` 收编 backend/tests；`gen:api` 从 live app 生成并纳入 build。
-- files: .github/workflows/ci.yml(新), backend/tests/conftest.py(新), backend/tests/fixtures/*, frontend/package.json, scripts/*_test.py
-- reviewer: — · commit: — · evidence: —
+- 根治: `.github/workflows/ci.yml`（backend: py3.12→pytest+`_pipeline_test.py`；frontend: node20→typecheck+build；未加 ruff——非现有依赖）；`scripts/gen_fixture_db.py` 合成原始表并跑**真** `compute_derived` → `backend/tests/fixtures/{macro_data,crcl_monitor}.db`；`backend/tests/conftest.py` 仅在真库缺失时播种、teardown 只删自建（真库在场为 no-op）；`scripts/gen_openapi.py` 重生 `shared/openapi.json`（14→23 路径）+ `test_openapi_drift.py` 漂移门禁（子进程取干净 schema、version 归一）。
+- files: .github/workflows/ci.yml(新), backend/tests/{conftest.py,fixtures/,test_openapi_drift.py}(新), scripts/{gen_fixture_db,gen_openapi}.py(新), shared/openapi.json
+- reviewer: orchestrator 独立复核（暂存集逐项核对无边车/scratch/dist 混入；真库在场跑全套确认 conftest 为 no-op）· commit: `3691cbc` · evidence: 漂移门禁 fail→pass（从已提交 schema 删 `/health` → 1 failed，`gen_openapi.py` 重生 → 3 passed）；全套 299 passed
+- 未做（据实）：`scripts/*_test.py` 未收编进 backend/tests（`_pipeline_test.py` 由 CI 独立步骤直跑，刻意不被 pytest 收集）。
+
+### G18 · 量化/契约/前端测试补齐 · ✅（前端项为诚实缺口）
+- findings: O-H4 + O-H7 + O-H8
+- 根治: 量化相位测试**已存在不重复**（`test_merrill_phase.py` 8 例中位数趋势+迟滞；`test_signal_robustness.py` 覆盖债务净部门方向 / 库存 PMI 前推 / 信贷死区+持续）；新增 `test_api_contract.py` 契约测试（`/signals`→`SignalSummary`、`/derived/monthly`、`/cycles/{name}`×4、`/crcl/overview` + 运行时↔openapi `$ref` 校验，夹具复制到 tmp_path、DB 路径 monkeypatch，全程 hermetic）。
+- files: backend/tests/test_api_contract.py(新)、test_merrill_phase.py / test_signal_robustness.py（既有）
+- reviewer: orchestrator 独立复核 · commit: `3691cbc` · evidence: 契约 8 例 passed；全套 299 passed
+- ⚠️ **未做（诚实缺口）**：前端单测——`frontend/package.json` 无任何 test runner（无 vitest/jest），按「不擅自新增依赖」约束未引入，故 `client.ts`/`options.ts` 无单测覆盖。若要补，需先决策引入 vitest。
 
 ### G17 · Python 依赖锁定 + 单一 venv · ⬜
 - findings: O-H2 (`requirements.txt`,`pyproject.toml`)
@@ -251,28 +259,31 @@ resume 协议：`git status --short` → 按上表把每个在飞文件归到 G2
 
 ## Low 层
 
-### G28 · 后端低危项 · ⬜
+### G28 · 后端低危项 · ✅
 - findings: F15(real_estate 缓存键归一) F16(crcl_db 连接关闭+docstring) F17(db.load copy / SELECT* 防御 / crcl.py:31 KeyError / serial 精度 / commentary 常量)
 - files: analysis/real_estate.py, backend/app/core/{crcl_db,db,serial,commentary}.py, api/v1/crcl.py
+- 已修：F15 缓存键 `tuple(sorted(set(cities)))`（`6d3c248`）；F16 连接工厂统一关闭（`592ac03`）；F17 serial 精度 `_FLOAT_DP=4` + `_clean_record_float`（`740899f`，与快照用 `_finite_or_none` 分离以保全持久化精度）。
+- reviewer: orchestrator 独立复核 · evidence: `test_serial_precision.py` 改前 2 failed → 改后 passed；`test_signal_robustness.py` 24 例
 
-### G29 · 前端低危项 · 🟨 部分
+### G29 · 前端低危项 · ✅
 - findings: FE-L1(时区 off-by-one filters.ts:17) L2(refresh.ts done 缺失) L3(Sidebar computed/render) L4(Overview 死代码) L5(PALETTE TDZ) L6(num truthy 0 bug) L7(any 消除) L8(Date 解析缓存) L9(li tabindex) L10(focus-visible)
 - files: frontend/src/**
-- 已确认修复：FE-L3/L5/L7/L8（`740899f`，G28-30 批次）；FE-L1 时区 off-by-one 与 router.onError 已在 G25(`6f2a99c`) 提及。
-- **需复核（resume 时逐项确认是否已在 G25/M3 覆盖，未覆盖则补修）**：FE-L2(refresh.ts done)、FE-L4(Overview 死代码)、FE-L6(num truthy 0)、FE-L9(li tabindex)、FE-L10(focus-visible)。
+- 已修：FE-L3/L5/L7/L8（`740899f`）；FE-L1 时区 off-by-one + `router.onError`（`6f2a99c`）。
+- 复核判定（G16+G18 逐项 grep 确认**早前已修**，非遗漏）：FE-L2 `refresh.ts` 已完整处理 `payload.done`（`sawDone`）；FE-L4 `Overview.vue` 已重写为 `useAsyncData`+`PageState`、无死代码；FE-L6 `useCountUp` 用 `typeof v==='number'`、Overview 用 `??`/`!==null`，0 被正确保留；FE-L9 `Overview.vue:143` 条件 `:tabindex`；FE-L10 交互元素均带 `focus-visible:outline`。
 
-### G30 · 分析/管线低危项 · 🟨 部分
+### G30 · 分析/管线低危项 · ✅
 - findings: A-L2(cross_indicator in-sample/abs) A-L3(SELECT*) A-L4(lru_cache mutable) + P-L(TLS verify=False / dfs[1] 位置式 / 双备份拷贝 / 未用 import / plist expat 路径)
 - files: analysis/cross_indicator.py, backend/app/core/db.py, scripts/01_fetch_data.py, _pipeline.py, schedule/*
-- 已确认修复：A-L2（`740899f`）。
-- **需复核（resume）**：A-L3(SELECT*)、A-L4(lru_cache mutable) 是否随 G03b/G23 缓存版本键一并处理；P-L 各项（TLS verify=False、dfs[1] 位置式、双备份拷贝、未用 import、plist expat 路径）多在 `scripts/`，应在 **G26 提交时**核对是否覆盖，未覆盖则补一条低危提交。
+- 已修：A-L2 带符号 `idxmax()` + 样本内 docstring（`740899f`）；**P-L TLS `verify=False` 删除 + `dfs[1]` 改按列认表 `pick_curve_table()` + 裸 except 改逐年 ⚠️ 留痕（`2a3b8a0`）**——实测中债站点 `verify=True` 即 HTTP 200（正文 150214 字节），故关校验纯属无谓暴露 MITM；实测该页 2 张表且表单同样带「曲线名称」列，故认表须三列同时存在。
+- 复核判定**非开放**：A-L3 余下 `SELECT *` 均为通用整表加载器（`db._load_full`/`load_table`/leverage merge），列敏感处（cross_indicator）已显式列名；A-L4 缓存均已纳入 DB 版本键、唯一可变入参 cities 已元组归一（F15），缓存帧消费方只读；P-L plist `/opt/homebrew/opt/expat/lib` 与 `refresh.py:79` 及测试一致；P-L 备份/vintage/staging 三者语义独立且目录可注入；P-L 未用 import 在受检文件中未发现（仓库级清扫需 linter，未安装）。
+- reviewer: orchestrator 独立复核 · commit: `740899f` + `2a3b8a0` · evidence: `test_bond_yield_parse.py` 改前 3 failed → 改后 8 passed；全套 307 passed
 
 ---
 
 ## 发布（全部 ✅ 后）
-- [ ] 全量 pytest 绿（无回归 + 新量化/契约测试）
-- [ ] `npm run typecheck` 0 error；app 启动，/health、/signals、/crcl/overview、/derived/monthly 返回合法 JSON（无 NaN/500）
-- [ ] 账本 100% done；changeLog 更新
-- [ ] bump v1.1.0（backend/pyproject.toml + frontend/package.json）
-- [ ] ⏸️ 用户确认 → `git push` main
-- [ ] ⏸️ 用户确认 → `gh release create v1.1.0`（双语 notes 依 Release_Notes_Guidelines.md）
+- [x] 全量 pytest 绿（无回归 + 新量化/契约测试）——**308 passed / 0 failed**（基线 63 → 新增 245 例）；`scripts/_pipeline_test.py` ALL CHECKS PASSED
+- [x] `npm run typecheck` 0 error；app 启动，/health、/signals、/crcl/overview、/derived/monthly 返回合法 JSON（无 NaN/500）——实启 uvicorn 实测四端点全 **HTTP 200**，并以 `json.loads(parse_constant=raise)` **严格解析**确认无 `NaN`/`Infinity` 字面量（注：`/crcl/overview` 的字面量匹配是 "Fi**nan**ce"、"stag**nan**t" 误报，非真值）
+- [x] 账本 100% done；changeLog 更新——G01–G30 全部 ✅（G18 前端单测为**诚实缺口**：无 runner 未擅自引依赖）
+- [x] bump v1.1.0（backend/pyproject.toml + frontend/package.json）——另修正**第三处漏掉的** `backend/app/main.py` 版本字面量，并加断言把四处（含 `shared/openapi.json`）钉死（`c41ffac`）
+- [x] ⏸️ 用户确认 → `git push` main —— 已推送 `69d9ab0..c41ffac`（38 次提交）
+- [x] ⏸️ 用户确认 → `gh release create v1.1.0`（双语 notes 依 Release_Notes_Guidelines.md）—— 已发布：https://github.com/NotWizard/AKShare/releases/tag/v1.1.0
