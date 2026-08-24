@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Macro Analysis API",
-    version="1.0.0",
+    version="1.1.0",   # 与 backend/pyproject.toml、frontend/package.json 三处一致（有测试守）
     description="中国宏观经济分析 API — 包装不变的 analysis 核心引擎",
     lifespan=lifespan,
     default_response_class=SafeJSONResponse,  # nan/±inf → null for EVERY endpoint

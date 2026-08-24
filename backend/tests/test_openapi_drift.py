@@ -78,3 +78,37 @@ def test_drift_gate_ignores_version_bump():
     # a genuine SHAPE change is still caught
     changed = {"info": {"title": "x", "version": "1.1.0"}, "paths": {"/b": {"get": {}}}}
     assert _normalise(base) != _normalise(changed)
+
+
+def test_version_is_consistent_across_all_three_manifests():
+    """版本号有三处独立来源，必须一字不差。
+
+    v1.1.0 发布时实测踩到：`backend/pyproject.toml` 与 `frontend/package.json`
+    都 bump 到 1.1.0 后，`backend/app/main.py` 的 FastAPI 字面量仍是 1.0.0，
+    于是重生出来的 `shared/openapi.json` 对外宣告了错误版本（漂移门禁按设计把
+    version 归一化，正好照不到这处）。这条断言把三者钉在一起，杜绝再犯。
+    """
+    import re
+    import tomllib
+
+    pyproject = tomllib.loads(
+        (_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8"))
+    backend_version = pyproject["project"]["version"]
+
+    pkg = json.loads((_ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))
+    frontend_version = pkg["version"]
+
+    main_src = (_ROOT / "backend" / "app" / "main.py").read_text(encoding="utf-8")
+    m = re.search(r'^\s*version="([^"]+)"', main_src, re.MULTILINE)
+    assert m, "backend/app/main.py 里找不到 FastAPI(version=...) 字面量"
+    app_version = m.group(1)
+
+    assert backend_version == frontend_version == app_version, (
+        f"版本号三处不一致：pyproject={backend_version} / "
+        f"package.json={frontend_version} / main.py={app_version}")
+
+    # 已提交的 openapi.json 必须由当前 app 版本重生（发布步骤漏跑 regen 即报）
+    committed_version = json.loads(_COMMITTED.read_text(encoding="utf-8"))["info"]["version"]
+    assert committed_version == app_version, (
+        f"shared/openapi.json 的 version={committed_version} 落后于 app 的 {app_version}"
+        "——请重跑 scripts/gen_openapi.py")
