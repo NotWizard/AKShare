@@ -8,7 +8,7 @@
 
 概述：发布 1.2.0 前修复长期红灯的 CI 与版本漂移。
 变更：
-  1. **[CI｜前端]** `npm ci` 在 runner 上挂起约 8 分钟后 npm 崩溃（"Exit handler never called"）致 node_modules 不全、`vue-tsc` 找不到；改用 `npm ci --no-audit --no-fund` 跳过易挂起的联网 audit/fund，并把已废弃的 Node 20 升到 22。
+  1. **[CI｜前端]** `npm ci` 在 runner 上静默挂起约 8 分钟后 npm 崩溃（"Exit handler never called"）致 node_modules 不全、`vue-tsc` 找不到；根因是 postinstall 生命周期脚本（esbuild/vue-demi）联网卡死。改用 `npm ci --no-audit --no-fund --ignore-scripts`：跳过 postinstall（esbuild/rollup 原生二进制来自 lockfile 的平台 optionalDependencies、非 postinstall，本地实测 typecheck+vitest+build 均过），并去掉易挂起的 audit/fund 联网；同时把已废弃的 Node 20 升到 22。
   2. **[CI｜后端]** 3 个日期切片测试（test_golden/test_date_params）硬编码 2020 区间，而 CI 用的 fixture 月频仅 2023-2025 → 切片空。改为 2024（fixture 与 live 均覆盖），保持"有效区间应返回行并收窄全表"的原意。
   3. **[版本]** 补齐 1.2.0：`backend/pyproject.toml`、`backend/app/main.py`、`shared/openapi.json`（重生）与 `frontend/package.json` 四处一致（有 `test_openapi_drift` 守）。
 验证：本地全绿——后端 320 passed、`_pipeline_test`、vue-tsc 0、vitest 42、`vite build` ✓；并按 CI 场景（挪走 live 库让 conftest 播种 fixture）实测 3 个切片测试通过。
@@ -17,7 +17,7 @@
 
 Summary: Before cutting 1.2.0, fix the long-red CI and version drift.
 Changes:
-  1. **[CI｜frontend]** `npm ci` hung ~8 min on the runner then npm crashed ("Exit handler never called"), leaving node_modules incomplete so `vue-tsc` was not found; switched to `npm ci --no-audit --no-fund` (skips the hang-prone networked audit/fund) and bumped the deprecated Node 20 to 22.
+  1. **[CI｜frontend]** `npm ci` hung silently ~8 min on the runner then npm crashed ("Exit handler never called"), leaving node_modules incomplete so `vue-tsc` was not found; the root cause was a postinstall lifecycle script (esbuild/vue-demi) stalling on a network fetch. Switched to `npm ci --no-audit --no-fund --ignore-scripts`: skips the postinstalls (esbuild/rollup native binaries come from the lockfile's platform optionalDependencies, not the postinstalls — verified locally that typecheck+vitest+build all pass) and drops the hang-prone audit/fund round-trips; also bumped the deprecated Node 20 to 22.
   2. **[CI｜backend]** Three date-slice tests (test_golden/test_date_params) hardcoded a 2020 range, but the CI fixture's monthly tables span only 2023-2025 → empty slice. Changed to 2024 (covered by both the fixture and the live DB), preserving the "a valid range returns rows and narrows the table" intent.
   3. **[version]** Completed the 1.2.0 bump across `backend/pyproject.toml`, `backend/app/main.py`, a regenerated `shared/openapi.json`, and `frontend/package.json` (guarded by `test_openapi_drift`).
 Verification: all green locally — backend 320 passed, `_pipeline_test`, vue-tsc 0, vitest 42, `vite build` ✓; and the 3 slice tests verified against the CI scenario (moving the live DB aside so conftest seeds the fixture).

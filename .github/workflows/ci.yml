@@ -47,9 +47,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # npm ci hung ~8min then crashed ("Exit handler never called") on the runner:
+      # a postinstall lifecycle script (esbuild/vue-demi) stalling on a network fetch.
+      # --ignore-scripts skips them; safe here because the esbuild/rollup native
+      # binaries come from platform optionalDependencies in the lockfile, not the
+      # postinstalls (verified: with all postinstalls blocked, typecheck+vitest+build
+      # still pass). --no-audit/--no-fund drop extra registry round-trips.
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Type-check
         working-directory: frontend
