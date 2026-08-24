@@ -14,7 +14,7 @@
 # ============================================================================
 [project]
 name = "macro-backend"
-version = "1.1.0"
+version = "1.2.0"
 description = "FastAPI serving the (unchanged) macro analysis core"
 requires-python = ">=3.12"
 dependencies = [

@@ -34,10 +34,10 @@ def test_derived_monthly_matches_db_load():
 
 
 def test_derived_monthly_date_slice():
-    resp = client.get("/api/v1/derived/monthly?start=2020-01-01&end=2020-12-31")
+    resp = client.get("/api/v1/derived/monthly?start=2024-01-01&end=2024-12-31")
     assert resp.status_code == 200
     dates = [r["date"] for r in resp.json()["records"]]
-    assert dates and min(dates) >= "2020-01-01" and max(dates) <= "2020-12-31"
+    assert dates and min(dates) >= "2024-01-01" and max(dates) <= "2024-12-31"
 
 
 def test_cycles_credit_returns_latest_phase():

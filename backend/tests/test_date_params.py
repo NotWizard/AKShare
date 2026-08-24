@@ -54,11 +54,11 @@ def test_monthly_valid_range_still_slices():
     assert full.status_code == 200
     full_rows = full.json()["records"]
 
-    resp = client.get("/api/v1/derived/monthly?start=2020-01-01&end=2020-12-31")
+    resp = client.get("/api/v1/derived/monthly?start=2024-01-01&end=2024-12-31")
     assert resp.status_code == 200
     dates = [r["date"] for r in resp.json()["records"]]
     assert dates, "valid range returned no rows"
-    assert min(dates) >= "2020-01-01" and max(dates) <= "2020-12-31"
+    assert min(dates) >= "2024-01-01" and max(dates) <= "2024-12-31"
     assert len(dates) < len(full_rows), "slice did not narrow the full table"
 
 
@@ -74,5 +74,5 @@ def test_db_load_slices_with_valid_date_string():
     """db.load stays lenient for internal callers passing valid ISO strings /
     date objects (no bare except needed)."""
     full = db.load("derived_monthly")
-    sliced = db.load("derived_monthly", "2020-01-01", "2020-12-31")
+    sliced = db.load("derived_monthly", "2024-01-01", "2024-12-31")
     assert 0 < len(sliced) < len(full)
