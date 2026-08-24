@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### 前端单测补齐：引入 vitest，覆盖 client/stores/composables/图表 builder（收口 G18 缺口）
+
+概述：v1.1.0 时 G18 唯一的诚实缺口——前端无 test runner、`client.ts`/`options.ts` 等逻辑无单测——现已补齐：引入 **vitest**（唯一新增 devDep），对本轮审计改动过的前端逻辑热区写了 **42 个单测**，并接入 CI。
+
+变更：
+  1. [基建] 新增 `frontend/vitest.config.ts`（复用 vite 的 `@` alias、node 环境；**不引入 jsdom**——待测逻辑用 mock `fetch` + stub `rAF` 即可，避免多余依赖）；`package.json` 加 `test`/`test:run`；`.github/workflows/ci.yml` 的 frontend job 在 typecheck 与 build 之间插入 `npm run test:run`（逻辑回归先于慢构建暴露）。
+  2. [测试｜42 例] `client.ts`：GET 指数退避重试(408/429/5xx)、4xx 不重试、传输失败重试到上限、错误分类(`unreachable/timeout/aborted/server/client`)、TTL 缓存 + `invalidateCache`、in-flight 去重、`NO_CACHE` 端点、POST 带令牌与 **401→重取令牌重放一次**、`qs` 丢弃 undefined；`filters`(FE-L1 时区：`setSystemTime` 到 7 月锁定，断言按本地日历部件构造、日恒 `01`)；`useCountUp`(FE-L6：`0` 显示 `0.0` 而非 `—`)；`useAsyncData`(FE-H2：`ok/error`、自身 `aborted` 不算错、superseded 与作用域销毁后不改态)；`refresh` store(FE-H4/L2：SSE 分帧、progress、`done→markRefreshed`、macro/crcl 独立 bump、`job_id=null` 不订阅、单个畸形事件不杀流、无 `done` 不谎报成功)；`options` 9 个 builder(FE-L7：`markLine` 挂到**每个** series 而非仅 `[0]`；phase 分组；缺字段回退)。
+  3. [有牙实证] 变异测试三处关键点各精确打中 1 例并 FAIL：`useCountUp` 退化为 truthy 判空、`markLine` 仅挂 `series[0]`、禁用 401 重放——恢复后 42 passed。
+验证：`vitest` 42 passed（7 文件）；`vue-tsc` 0；后端 311 passed；`_pipeline_test.py` ALL CHECKS PASSED。
+
+### frontend unit tests added: vitest covering client/stores/composables/chart builders (closes G18's gap)
+
+Summary: G18's one honest gap at v1.1.0 — the frontend had no test runner, so `client.ts`/`options.ts` and friends had no unit tests — is now closed: **vitest** was introduced (the single new devDep), **42 unit tests** cover the frontend logic this audit touched, and they run in CI.
+
+Changes:
+  1. [infra] Adds `frontend/vitest.config.ts` (reuses vite's `@` alias, node environment; **no jsdom** — the logic under test is exercised with a mocked `fetch` + stubbed `rAF`, so no extra dependency); `package.json` gains `test`/`test:run`; the frontend CI job runs `npm run test:run` between type-check and build (logic regressions fail before the slower build).
+  2. [tests｜42] `client.ts`: GET exponential-backoff retry (408/429/5xx), no retry on 4xx, retry-to-limit on transport failure, error classification (`unreachable/timeout/aborted/server/client`), TTL cache + `invalidateCache`, in-flight dedupe, `NO_CACHE` endpoints, POST token + **401→refetch-token-and-replay-once**, `qs` dropping undefined; `filters` (FE-L1 timezone: `setSystemTime` to July, asserting local-calendar-part construction with the day always `01`); `useCountUp` (FE-L6: `0` renders `0.0`, not `—`); `useAsyncData` (FE-H2: `ok/error`, a self-inflicted `aborted` is not an error, superseded/disposed runs don't mutate state); `refresh` store (FE-H4/L2: SSE framing, progress, `done→markRefreshed`, independent macro/crcl bumps, `job_id=null` doesn't subscribe, one malformed event doesn't kill the stream, no `done` doesn't fake success); the 9 `options` builders (FE-L7: `markLine` attached to **every** series, not just `[0]`; phase grouping; missing-field fallback).
+  3. [proven to have teeth] Mutation-testing three key points each failed exactly one case: `useCountUp` degraded to a truthy check, `markLine` attached only to `series[0]`, and the 401 replay disabled — restored → 42 passed.
+Verification: `vitest` 42 passed (7 files); `vue-tsc` 0; backend 311 passed; `_pipeline_test.py` ALL CHECKS PASSED.
+
 ### 收口 v1.1.0 遗留：联网 e2e 全年重放（G30 / P-L）
 
 概述：v1.1.0 发布时唯一挂账的「联网 e2e 全年重放未复跑」现已**真实执行完毕**，并顺带修掉验证器自身两处缺陷与一处 gitignore 漏项。

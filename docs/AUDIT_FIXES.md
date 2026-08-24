@@ -176,12 +176,12 @@ resume 协议：`git status --short` → 按上表把每个在飞文件归到 G2
 - reviewer: orchestrator 独立复核（暂存集逐项核对无边车/scratch/dist 混入；真库在场跑全套确认 conftest 为 no-op）· commit: `3691cbc` · evidence: 漂移门禁 fail→pass（从已提交 schema 删 `/health` → 1 failed，`gen_openapi.py` 重生 → 3 passed）；全套 299 passed
 - 未做（据实）：`scripts/*_test.py` 未收编进 backend/tests（`_pipeline_test.py` 由 CI 独立步骤直跑，刻意不被 pytest 收集）。
 
-### G18 · 量化/契约/前端测试补齐 · ✅（前端项为诚实缺口）
+### G18 · 量化/契约/前端测试补齐 · ✅
 - findings: O-H4 + O-H7 + O-H8
 - 根治: 量化相位测试**已存在不重复**（`test_merrill_phase.py` 8 例中位数趋势+迟滞；`test_signal_robustness.py` 覆盖债务净部门方向 / 库存 PMI 前推 / 信贷死区+持续）；新增 `test_api_contract.py` 契约测试（`/signals`→`SignalSummary`、`/derived/monthly`、`/cycles/{name}`×4、`/crcl/overview` + 运行时↔openapi `$ref` 校验，夹具复制到 tmp_path、DB 路径 monkeypatch，全程 hermetic）。
-- files: backend/tests/test_api_contract.py(新)、test_merrill_phase.py / test_signal_robustness.py（既有）
-- reviewer: orchestrator 独立复核 · commit: `3691cbc` · evidence: 契约 8 例 passed；全套 299 passed
-- ⚠️ **未做（诚实缺口）**：前端单测——`frontend/package.json` 无任何 test runner（无 vitest/jest），按「不擅自新增依赖」约束未引入，故 `client.ts`/`options.ts` 无单测覆盖。若要补，需先决策引入 vitest。
+- files: backend/tests/test_api_contract.py(新)、test_merrill_phase.py / test_signal_robustness.py（既有）；frontend/vitest.config.ts(新)、frontend/src/__tests__/*.spec.ts(新 7 文件)
+- reviewer: orchestrator 独立复核 · commit: `3691cbc`（后端契约）+ 前端单测本批 · evidence: 契约 8 例 passed；全套 299→311 passed
+- **前端单测缺口已收口**：引入 **vitest**（唯一新增 devDep，无 jsdom——mock `fetch` + stub `rAF` 即可）；**42 例**覆盖 `client.ts`（重试/退避/错误分类/TTL 缓存/in-flight 去重/POST 令牌与 401 重放）、`filters`(FE-L1 时区)、`useCountUp`(FE-L6 零值)、`useAsyncData`(FE-H2 四态机 + abort 语义)、`refresh` store(FE-H4/L2 SSE 分帧与 done)、`options` 9 个 builder(FE-L7 markLine 挂每个 series)。**变异实证有牙**：truthy 判空 / markLine 仅挂 `[0]` / 禁用 401 重放三处各精确 FAIL 1 例，恢复后 42 passed。已接入 CI（frontend job typecheck→**test:run**→build）。
 
 ### G17 · Python 依赖锁定 + 单一 venv · ⬜
 - findings: O-H2 (`requirements.txt`,`pyproject.toml`)

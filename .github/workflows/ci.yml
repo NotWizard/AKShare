@@ -35,7 +35,7 @@ jobs:
         run: python scripts/_pipeline_test.py
 
   frontend:
-    name: frontend (typecheck + build)
+    name: frontend (typecheck + vitest + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +54,12 @@ jobs:
       - name: Type-check
         working-directory: frontend
         run: npm run typecheck
+
+      # Logic regressions (client retry/dedupe/token replay, SSE parsing, store
+      # state, chart builders) fail here before the slower build runs.
+      - name: Unit tests
+        working-directory: frontend
+        run: npm run test:run
 
       - name: Build
         working-directory: frontend
