@@ -69,6 +69,32 @@ Verification: backend pytest 375 passed; 31 pipeline checks green; vitest 42/42;
 vite build ✓; openapi drift gate passes; live uvicorn smoke (session token, /ai/*, /commentary
 empty+hint, 401 without / 404 with token) all correct.
 
+### 移植回归修复：AI 设置页路由缺失
+
+概述：M4 移植时 `frontend/src/router/index.ts` 的 `/ai-settings` 路由漏提交（工具调用中一次
+编辑被整体回滚而未察觉），侧栏「AI 设置」点中后被 catch-all 重定向回 /overview——页面
+表现为「打不开」。vue-tsc 0 error 但纯增路由无法被类型检查覆盖，真机点击才发现。
+
+变更：
+  1. **[前端]** router/index.ts 补上 `/ai-settings` 路由（懒加载 AISettings.vue，
+     dateFilter=false、refreshKind=null）。
+
+验证：构建产物包含 AISettings chunk 且路由字面量在 index chunk 中；真机 /ai-settings 200，
+页面正常渲染。
+
+### Port regression fix: missing /ai-settings route (English)
+
+Summary: the M4 port lost the `/ai-settings` route (a batched edit was rolled back unnoticed);
+the sidebar link hit the catch-all redirect to /overview, so the page appeared broken. Type-level
+checks can't cover a purely additive route — only a real click caught it.
+
+Changes:
+  1. **[frontend]** router/index.ts registers `/ai-settings` (lazy AISettings.vue,
+     dateFilter=false, refreshKind=null).
+
+Verification: the build emits an AISettings chunk and the route literal is in the index chunk;
+/ai-settings serves 200 and renders.
+
 ### 审计修复二次扫描（基于 1.2.0 基线）
 
 概述：对 1.2.0 基线做全仓复审，把首轮审计（本地遗留批次）中远端仍缺的修复重做手术；远端已覆盖的同类项（多粒度闸门、日期参数 422、flock 锁、非零退出、sign-selection 等）不重复造轮子。

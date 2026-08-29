@@ -29,6 +29,7 @@ export const router = createRouter({
     // CRCL reads its own DB and ignores the macro date filter → the global bar
     // hides those controls instead of showing dead ones (FE-H4).
     { path: '/crcl-monitor', component: () => import('../pages/CrclMonitor.vue'), meta: { title: 'CRCL 监控', icon: '◒', dateFilter: false, refreshKind: 'crcl' } },
+    { path: '/ai-settings', component: () => import('../pages/AISettings.vue'), meta: { title: 'AI 设置', icon: '⚙', dateFilter: false, refreshKind: null } },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
 })
