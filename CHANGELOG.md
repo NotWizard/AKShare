@@ -2,6 +2,58 @@
 
 ## [Unreleased]
 
+### UI 重设计：Observatory Dark（全站视觉/交互/排版重构）
+
+概述：Web 端整体重设计。深 slate 底 + 发丝边框 + cyan 单强调色（刻意避开 AI 紫俗套，且不与相位语义色冲突）；等宽数字、KPI 环比、综合信号 hero 卡、图表轴跨度感知抽稀；过程中逐页浏览器实测并顺手修掉三个真实 bug。
+
+变更：
+  1. **[设计系统]** `tokens.css`/`tailwind.config.ts`/`style.css`/echarts 主题全套换为 Observatory Dark：bg #070b12、card #101a2b、accent cyan #22d3ee（hover #67e8f9、on-accent 深青）、全局 :focus-visible 焦点环、::selection、滚动条、tnum 等宽数字 utility、prefers-reduced-motion 全局降级。
+  2. **[布局]** Sidebar 216px 重构（品牌点标 + 分组导航「宏观分析/追踪与配置」+ 激活态左侧指示条）；RefreshBar 改分段控件 + 主按钮实心 accent + CSS spinner；GraphCard/MetricTile 精化（更大字号的等宽数字、delta 行、hover 态）。
+  3. **[Overview 重构]** 综合信号升级为 hero 卡：大号带符号分数 + [-4,+4] 渐变刻度尺（marker 定位）+ 四框架相位芯片 + 中文解读（后端英文解读按得分带前端映射）；KPI 网格改 6 瓦片 × 等宽数字 + 较上期 delta；新增「数据截至」页头读数（按各指标列最新非空日期，不吃 outer join 尾部空行）；跨指标领先改双 stat 卡。
+  4. **[图表]** 轴标签跨度感知：>8 年在「每年首个出现的类目」标年份（interval 0 + formatter 门控；写死 1 月会因 NBS 1 月不发布而整年丢标签）、2.5–8 年到月、更短全日；tooltip 毛玻璃圆角；dataZoom 细化；图例圆点；美林四象限加相位色微染 + 角落标注（复苏/过热/滞胀/衰退）。
+  5. **[交互]** 预设按钮改分段控件（含 aria-pressed）；刷新按钮 active:scale 触感；页面导航/焦点环统一 cyan。
+
+修复（浏览器实测中发现的真实 bug）：
+  1. **[修复]** 房价图单位错误：NBS 70 城「同比」是指数口径（上年同月=100），前端原样画成「同比 %」——已换算为涨跌 %（v−100），tip 注明口径。
+  2. **[修复]** 美林散点分类边界线丢失：`buildScatterQuadrant` 用 `if (vline)` 判空，vline=0（零线）被 falsy 吞掉；改 null 语义判空，美林零线恢复。
+  3. **[修复]** 库存象限参考线参数错误：hline=50 把 PMI 荣枯线画成了「工业增加值 50%」横线；改 vline=50（PMI 竖线），y 边界为动态趋势不画单线。
+  4. **[修复]** 双轴图右轴名向右越界被裁（「工业增加值同…」）；右轴名改右对齐收进图区。
+
+验证：vitest 42/42；vue-tsc 0 error；vite build ✓；浏览器逐页截图核验（Overview/美林/信用/库存/债务/房地产/人口/财政外需/CRCL/AI 设置）。
+
+### UI Redesign: Observatory Dark (English)
+
+Summary: full web-UI redesign. Deep slate base + hairline borders + a single cyan accent
+(deliberately not AI-purple, and never colliding with phase-semantic colors); tabular numerals,
+KPI deltas, a composite-signal hero card, span-aware axis labels; every page verified in a real
+browser, and three real bugs found and fixed along the way.
+
+Changes:
+  1. **[design system]** tokens/tailwind/style/echarts theme moved to Observatory Dark
+     (#070b12 bg, #101a2b card, #22d3ee accent), global focus ring, selection, scrollbar,
+     .tnum utility, prefers-reduced-motion degrade.
+  2. **[layout]** Sidebar 216px with grouped nav + active indicator; RefreshBar segmented
+     presets + solid accent primary button + CSS spinner; refined GraphCard/MetricTile.
+  3. **[Overview]** composite-signal hero (big signed score + [-4,+4] gradient scale with
+     marker + four framework phase chips + Chinese interpretation mapped from score bands);
+     6-tile KPI grid with vs-previous deltas; data-as-of header readout; cross-lag stat cards.
+  4. **[charts]** span-aware axis labels (year at first-present-category over 8y spans —
+     hardcoding January loses years when NBS doesn't publish in January); frosted tooltips;
+     slimmer dataZoom; circle legends; Merrill quadrant phase tints + corner labels.
+  5. **[interaction]** segmented presets with aria-pressed; tactile active states on buttons.
+
+Fixes (found via real browser inspection):
+  1. **[fix]** house-price yoy is an index (100 = flat), previously plotted raw as "%" — now
+     converted to change %, tip documents the unit.
+  2. **[fix]** Merrill scatter lost its vline=0 classification boundary (falsy-0 bug) — null
+     semantics now, zero line restored.
+  3. **[fix]** inventory quadrant drew the PMI 50 line horizontally at ip_yoy=50 — now a
+     vertical PMI=50 line (the y boundary is a dynamic trend, no single line possible).
+  4. **[fix]** dual-axis right-axis name clipped at the container edge — right-aligned inward.
+
+Verification: vitest 42/42; vue-tsc 0 errors; vite build ✓; every page screenshot-verified in a
+real browser (Overview/Merrill/Credit/Inventory/Debt/RealEstate/Demographics/Fiscal/CRCL/AI).
+
 ### M4 移植：AI 评论 v2（配置层 + 结构化分板块生成 + 呈现层）并入 1.2.0 基线
 
 概述：把本机遗留的 M4a/b/c 三个里程碑（此前从未推送，存于 archive/audit-fixes-local）

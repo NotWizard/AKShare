@@ -6,16 +6,38 @@
 html, body, #app {
   margin: 0;
   min-height: 100vh;
-  background: #0a0e17;
-  color: #f1f5f9;
+  background: var(--bg);
+  color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe UI', 'Noto Sans SC', sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0a0e17; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #64748b; }
+/* 数字排版：KPI/表格/图表读数一律等宽数字，纵向对齐不跳动 */
+.tnum { font-feature-settings: 'tnum' 1, 'ss01' 0; font-variant-numeric: tabular-nums; }
+
+::selection { background: rgba(34, 211, 238, 0.25); color: var(--text); }
+
+/* 全局键盘焦点环：cyan 细环 + 偏移，暗底上清晰且不喧宾夺主 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.18); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.32); }
+
+/* 减少动态偏好：一切过渡/动画关停（count-up 等 JS 侧已各自尊重） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* ChartTip (ⓘ) is now a Teleport-based component (controls/ChartTip.vue) — it
    renders to <body> with its own scoped .chart-tip-pop styles, so it can never

@@ -103,7 +103,9 @@ export function buildDualAxisLine(
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: [
       { type: 'value', name: aName ?? zh(a), scale: true, ...baseAxis() },
-      { type: 'value', name: bName ?? zh(b), scale: true, ...baseAxis({ splitLine: { show: false } }) },
+      { type: 'value', name: bName ?? zh(b), scale: true, ...baseAxis({ splitLine: { show: false } }),
+        // 右轴名默认向右越界被裁（「工业增加值同…」）；右对齐让文本向左收进图区
+        nameTextStyle: { align: 'right' } },
     ],
     series: [
       { name: aName ?? zh(a), type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
@@ -139,10 +141,13 @@ export function buildStackedArea(
 
 /** Scatter quadrant — x vs y coloured by phase (Merrill clock / inventory).
  *  Reference lines (PMI 50 / CPI 2% / …) live as markLine on an empty helper
- *  series — ECharts only renders markLine that is a child of a series. */
+ *  series — ECharts only renders markLine that is a child of a series.
+ *  hline/vline 用 null 表示「不画」（0 是合法值：美林的零线就是 vline=0）。
+ *  quadrantLabels: 四象限角落标注 {tl,tr,bl,br}（含相位色微染色底），不传则不画。 */
 export function buildScatterQuadrant(
   cycle: Rec[], xKey: string, yKey: string,
-  xLabel: string, yLabel: string, hline = 0, vline = 0,
+  xLabel: string, yLabel: string, hline: number | null = null, vline: number | null = null,
+  quadrantLabels?: { tl?: string; tr?: string; bl?: string; br?: string },
 ): EChartsOption {
   const byPhase = new Map<string, [number, number][]>()
   for (const r of cycle) {
@@ -154,27 +159,64 @@ export function buildScatterQuadrant(
     byPhase.get(p)!.push([x, y])
   }
   const refLines: Array<{ yAxis: number } | { xAxis: number }> = []
-  if (hline) refLines.push({ yAxis: hline })
-  if (vline) refLines.push({ xAxis: vline })
+  if (hline != null) refLines.push({ yAxis: hline })
+  if (vline != null) refLines.push({ xAxis: vline })
+
+  // 四象限染色 + 角落标注：基于数据范围 pad 出四个矩形，标签放在各自内侧角落
+  const helper: Record<string, unknown> = {
+    type: 'scatter', data: [], silent: true,
+    markLine: {
+      silent: true, symbol: 'none',
+      lineStyle: { type: 'dashed', color: COLORS.text3, width: 1 },
+      label: { show: false },   // 端点数值标签是噪声（零线/荣枯线无需标值）
+      data: refLines,
+    },
+  }
+  if (quadrantLabels && refLines.length === 2) {
+    const xs = cycle.map((r) => r[xKey] as number).filter((v) => typeof v === 'number')
+    const ys = cycle.map((r) => r[yKey] as number).filter((v) => typeof v === 'number')
+    if (xs.length && ys.length) {
+      const padX = (Math.max(...xs) - Math.min(...xs)) * 0.05 || 1
+      const padY = (Math.max(...ys) - Math.min(...ys)) * 0.08 || 1
+      const [x0, x1] = [Math.min(...xs) - padX, Math.max(...xs) + padX]
+      const [y0, y1] = [Math.min(...ys) - padY, Math.max(...ys) + padY]
+      const vx = vline as number, hy = hline as number
+      const areas = [
+        { key: 'tr', from: [vx, hy], to: [x1, y1], pos: 'insideTopRight', phase: quadrantLabels.tr },
+        { key: 'tl', from: [x0, hy], to: [vx, y1], pos: 'insideTopLeft', phase: quadrantLabels.tl },
+        { key: 'br', from: [vx, y0], to: [x1, hy], pos: 'insideBottomRight', phase: quadrantLabels.br },
+        { key: 'bl', from: [x0, y0], to: [vx, hy], pos: 'insideBottomLeft', phase: quadrantLabels.bl },
+      ].filter((a) => a.phase)
+      helper.markArea = {
+        silent: true,
+        data: areas.map((a) => [
+          {
+            coord: a.from,
+            name: phaseLabel(a.phase!),
+            itemStyle: { color: hexA(phaseColor(a.phase!), 0.05) },
+            label: {
+              show: true, position: a.pos, fontSize: 11, fontWeight: 600,
+              color: hexA(phaseColor(a.phase!), 0.75), padding: [6, 10],
+            },
+          },
+          { coord: a.to },
+        ]),
+      }
+    }
+  }
 
   return themed({
-    xAxis: { type: 'value', name: xLabel, ...baseAxis({ name: xLabel }) },
-    yAxis: { type: 'value', name: yLabel, ...baseAxis({ name: yLabel }) },
+    // x 轴名居中（旧默认在端点，长名被裁成「GI…」）；y 轴名保持默认端点位（顶部横排），
+    // 左对齐收进图区——value 轴 middle+旋转在中文字符下会裁边
+    xAxis: { type: 'value', name: xLabel, nameLocation: 'middle', nameGap: 28, ...baseAxis() },
+    yAxis: { type: 'value', name: yLabel, nameTextStyle: { align: 'left', padding: [0, 0, 0, 8] }, ...baseAxis() },
     tooltip: { trigger: 'item' },
     series: [
       ...Array.from(byPhase.entries()).map(([p, data]): ScatterSeriesOption => ({
         name: phaseLabel(p), type: 'scatter', data, symbolSize: 8,
         itemStyle: { color: phaseColor(p), opacity: 0.85 },
       })),
-      // invisible helper series carrying the threshold cross-hairs
-      {
-        type: 'scatter', data: [], silent: true,
-        markLine: {
-          silent: true, symbol: 'none',
-          lineStyle: { type: 'dashed', color: COLORS.text3, width: 1 },
-          data: refLines,
-        },
-      },
+      helper,
     ],
   })
 }

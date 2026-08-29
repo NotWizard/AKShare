@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
-import MetricTile from '@/components/layout/MetricTile.vue'
+import MetricTile, { type TileDelta } from '@/components/layout/MetricTile.vue'
 import CommentaryCard from '@/components/layout/CommentaryCard.vue'
 import PageState from '@/components/layout/PageState.vue'
 import ChartTip from '@/components/controls/ChartTip.vue'
@@ -41,17 +41,72 @@ const history = computed<SignalHistoryRow[]>(() => data.value?.history ?? [])
 const isEmpty = computed(() => !kpiDm.value.length && !signals.value)
 const onlyFlips = ref(false)
 
-function latest(col: string): number | null {
+/** 数据截止：各 KPI 列最新非空日期的最大者（YYYY-MM）。
+ *  不能用末行日期——outer join 后末行可能只有 bond_10y（KPI 全空）。 */
+const dataAsOf = computed(() => {
+  let best: string | null = null
+  for (const t of tiles) {
+    for (const r of kpiDm.value) {
+      if (typeof r[t.col] === 'number' && typeof r.date === 'string') {
+        if (!best || r.date > best) best = r.date
+        break
+      }
+    }
+  }
+  return best ? best.slice(0, 7) : null
+})
+
+// ── KPI：最新值 + 较上期 delta ───────────────────────────────────────────────
+function latestWithDelta(col: string, suffix: string): { value: number | null; delta: TileDelta | null } {
+  let latest: number | null = null
+  let prev: number | null = null
   for (const r of kpiDm.value) {           // kpiDm is latest-first
     const v = r[col]
-    if (typeof v === 'number') return v
+    if (typeof v !== 'number') continue
+    if (latest === null) latest = v
+    else { prev = v; break }
   }
-  return null
+  if (latest === null || prev === null) return { value: latest, delta: null }
+  const d = latest - prev
+  if (Math.abs(d) < 1e-9) return { value: latest, delta: { text: `较上期 持平`, dir: 'flat' } }
+  // 方向只表达数值增减，不预设好坏（CPI 升≠利好；剪刀差升≠利空）——避免误导
+  return { value: latest, delta: { text: `较上期 ${d > 0 ? '+' : ''}${d.toFixed(1)}${suffix}`, dir: d > 0 ? 'up' : 'down' } }
 }
 
 const FRAMEWORKS = ['merrill', 'credit', 'inventory', 'debt'] as const
 type Fw = typeof FRAMEWORKS[number]
 const FW: Record<Fw, string> = { merrill: '美林', credit: '信用', inventory: '库存', debt: '债务' }
+
+// ── 综合信号 hero ────────────────────────────────────────────────────────────
+// 后端 interpretation 是英文；前端按得分带映射为中文解读（不改 analysis 层）。
+const SCORE_ZH: [number, string][] = [
+  [3, '强烈看多 —— 多数周期处于扩张'],
+  [1, '温和看多 —— 增长信号占优'],
+  [0, '中性 —— 各框架信号相互冲突'],
+  [-2, '温和看空 —— 逆风正在积聚'],
+  [-99, '强烈看空 —— 多数周期处于收缩'],
+]
+const scoreZh = computed(() => {
+  const s = signals.value?.composite_score ?? 0
+  for (const [lo, text] of SCORE_ZH) if (s >= lo) return text
+  return SCORE_ZH[SCORE_ZH.length - 1][1]
+})
+const scoreTone = computed(() => {
+  const s = signals.value?.composite_score ?? 0
+  return s > 0 ? 'text-up' : s < 0 ? 'text-down' : 'text-text'
+})
+/** 刻度尺 marker 位置（-4..+4 → 0..100%）。 */
+const scorePos = computed(() => ((signals.value?.composite_score ?? 0) + 4) / 8 * 100)
+const fwChips = computed(() => {
+  const s = signals.value
+  if (!s) return []
+  return FRAMEWORKS.map((k) => {
+    const f = s[k] as { phase?: string } | undefined
+    const ph = f?.phase ?? ''
+    return { key: k, label: FW[k], phaseZh: phaseLabel(ph), color: phaseColor(ph) }
+  })
+})
+
 const historyRows = computed(() => onlyFlips.value ? history.value.filter(r => r.flips.length) : history.value)
 const isFlipped = (r: SignalHistoryRow, f: Fw) => r.flips.some(fl => fl.framework === f)
 const rowAria = (r: SignalHistoryRow) =>
@@ -84,9 +139,11 @@ const tiles = [
 取数：AKShare macro_china_supply_of_money → money_supply.m0_yoy（原始同比）→ 透传至 derived_monthly.m0_yoy → 取最近一期有效值，单位 %。` },
 ]
 
-const signalTip = `聚合四大周期（美林/信用/库存/债务）最新阶段的复合得分，范围 [-4, +4]，正值偏多、负值偏空；下方文字为对应解读。
+const signalTip = `聚合四大周期（美林/信用/库存/债务）最新阶段的复合得分，范围 [-4, +4]，正值偏多、负值偏空；右侧为四个框架的当前相位。
 
 取数：/api/v1/signals → analysis/signals.compute_signals：取四周期最新一期 phase 各查表映射为 −1/0/+1 后求和。`
+
+const kpiComputed = computed(() => new Map(tiles.map((t) => [t.col, latestWithDelta(t.col, t.suffix ?? '')])))
 
 const lagNum = (k: string): number | null => {
   const v = (signals.value?.cross_lags as Record<string, unknown> | undefined)?.[k]
@@ -97,10 +154,13 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
 </script>
 
 <template>
-  <div class="p-6 space-y-5">
-    <header>
-      <h1 class="text-xl font-bold text-text">综合概览</h1>
-      <p class="text-xs text-text-3 mt-1">关键宏观指标 + 综合信号</p>
+  <div class="p-6 max-w-[1400px] space-y-5">
+    <header class="flex items-end justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-text tracking-tight">综合概览</h1>
+        <p class="text-xs text-text-3 mt-1">关键宏观指标 + 综合信号</p>
+      </div>
+      <div v-if="dataAsOf" class="text-[11px] text-text-4">数据截至 <span class="tnum text-text-3">{{ dataAsOf }}</span></div>
     </header>
 
     <!-- 取数状态由 PageState 统一渲染：后端不可达 ≠ 数据库暂无数据 -->
@@ -110,23 +170,71 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
       :has-data="data != null"
       :empty="isEmpty"
       empty-title="数据库暂无宏观数据"
-      empty-hint="后端已连接，但 derived_monthly / signals 还没有记录。点击顶部「🔄 刷新数据」执行一次采集。"
+      empty-hint="后端已连接，但 derived_monthly / signals 还没有记录。点击顶部「刷新数据」执行一次采集。"
       min-height="320px"
       @retry="retry"
     >
       <div class="space-y-5">
-        <div class="grid grid-cols-5 gap-3">
-          <MetricTile v-for="t in tiles" :key="t.col" :label="t.label" :value="latest(t.col)" :suffix="t.suffix" :tip="t.tip" />
-          <MetricTile label="综合信号" :value="signals?.composite_score ?? null" accent :digits="0" :tip="signalTip" />
+        <!-- 综合信号 hero：分数 + 相位芯片 + 刻度尺，一眼读懂当前宏观姿态 -->
+        <section class="relative overflow-hidden bg-card border border-border rounded-2xl px-6 py-5">
+          <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div class="flex items-baseline gap-3">
+              <div class="text-[11px] font-semibold tracking-[0.14em] text-text-3 select-none">综合信号</div>
+              <div class="text-4xl font-extrabold tnum leading-none" :class="scoreTone">
+                {{ (signals?.composite_score ?? 0) > 0 ? '+' : '' }}{{ signals?.composite_score ?? '—' }}
+              </div>
+              <ChartTip :text="signalTip" />
+            </div>
+            <div class="flex-1 min-w-[220px] max-w-md">
+              <div class="relative h-1.5 rounded-full bg-gradient-to-r from-down/25 via-white/10 to-up/25">
+                <span
+                  class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-bg shadow transition-all duration-300"
+                  :class="(signals?.composite_score ?? 0) > 0 ? 'bg-up' : (signals?.composite_score ?? 0) < 0 ? 'bg-down' : 'bg-text-2'"
+                  :style="{ left: scorePos + '%' }"
+                />
+              </div>
+              <div class="flex justify-between mt-1.5 text-[10px] tnum text-text-4">
+                <span>-4 看空</span><span>0</span><span>+4 看多</span>
+              </div>
+            </div>
+            <div class="text-sm text-text-2 font-medium">{{ scoreZh }}</div>
+          </div>
+          <div v-if="fwChips.length" class="flex flex-wrap gap-2 mt-4">
+            <span
+              v-for="c in fwChips" :key="c.key"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-surface text-[11px] text-text-2"
+            >
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ background: c.color }" />
+              {{ c.label }}<span class="text-text">{{ c.phaseZh }}</span>
+            </span>
+          </div>
+        </section>
+
+        <!-- KPI 网格：等宽数字 + 环比上期 -->
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <MetricTile
+            v-for="t in tiles" :key="t.col" :label="t.label"
+            :value="kpiComputed.get(t.col)?.value ?? null"
+            :suffix="t.suffix" :tip="t.tip"
+            :deltas="kpiComputed.get(t.col)?.delta ? [kpiComputed.get(t.col)!.delta!] : []"
+          />
         </div>
-        <p v-if="signals" class="text-xs text-text-2">{{ signals.interpretation }}</p>
 
         <CommentaryCard />
 
-        <div v-if="signals?.cross_lags" class="text-xs text-text-2 space-y-1 px-4 py-3 rounded-lg bg-card border border-border">
-          <div class="text-text-3 uppercase tracking-wide">跨指标领先</div>
-          <div>M1 → PPI 领先约 <b class="text-text">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('m1_ppi_max_corr') }}）</div>
-          <div>剪刀差 → CPI 领先约 <b class="text-text">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月（相关 r = {{ fmtCorr('spread_cpi_max_corr') }}）</div>
+        <div v-if="signals?.cross_lags" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="px-4 py-3.5 rounded-xl bg-card border border-border">
+            <div class="text-[11px] text-text-3 mb-1">M1 → PPI</div>
+            <div class="text-sm text-text-2">领先约 <b class="text-text tnum text-base">{{ fmtLag('m1_ppi_best_lag') }}</b> 个月
+              <span class="text-text-3 text-xs ml-1">相关 r = {{ fmtCorr('m1_ppi_max_corr') }}</span>
+            </div>
+          </div>
+          <div class="px-4 py-3.5 rounded-xl bg-card border border-border">
+            <div class="text-[11px] text-text-3 mb-1">剪刀差 → CPI</div>
+            <div class="text-sm text-text-2">领先约 <b class="text-text tnum text-base">{{ fmtLag('spread_cpi_best_lag') }}</b> 个月
+              <span class="text-text-3 text-xs ml-1">相关 r = {{ fmtCorr('spread_cpi_max_corr') }}</span>
+            </div>
+          </div>
         </div>
 
         <section class="bg-card border border-border rounded-2xl p-5">
@@ -138,18 +246,18 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
           </div>
           <ol role="list" class="space-y-1">
             <li v-for="r in historyRows" :key="r.ts"
-                class="grid grid-cols-[5.5rem_2.5rem_1fr] items-center gap-3 px-2 py-1.5 rounded-lg"
-                :class="r.flips.length ? 'ring-1 ring-warn/40 bg-warn/5' : ''"
+                class="grid grid-cols-[5.5rem_2.5rem_1fr] items-center gap-3 px-2.5 py-1.5 rounded-lg transition-colors"
+                :class="r.flips.length ? 'ring-1 ring-warn/40 bg-warn/5' : 'hover:bg-white/[0.02]'"
                 :tabindex="r.flips.length ? 0 : undefined"
                 :aria-label="rowAria(r)">
-              <span class="text-xs text-text-3">{{ r.ts.slice(0, 10) }}</span>
-              <span class="text-xs font-bold text-center"
+              <span class="text-xs text-text-3 tnum">{{ r.ts.slice(0, 10) }}</span>
+              <span class="text-xs font-bold text-center tnum"
                     :class="r.composite > 0 ? 'text-up' : r.composite < 0 ? 'text-down' : 'text-text-2'">
                 {{ r.composite > 0 ? '+' : '' }}{{ r.composite }}
               </span>
               <span class="flex flex-wrap gap-1">
                 <span v-for="f in FRAMEWORKS" :key="f"
-                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-surface text-[11px] text-text-2"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border bg-surface text-[11px] text-text-2"
                       :class="isFlipped(r, f) ? 'border-warn/60 text-text' : 'border-border'">
                   <span class="w-1.5 h-1.5 rounded-full" :style="{ background: phaseColor(r[f]) }" />
                   {{ FW[f] }}·{{ phaseLabel(r[f]) }}

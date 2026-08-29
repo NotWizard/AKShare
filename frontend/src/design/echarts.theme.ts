@@ -1,23 +1,21 @@
-// ECharts theme — the Terminal Fintech chart defaults (mirror config.py
-// CHART_LAYOUT + CHART_DEFAULTS). Merged into each chart's option via
-// `baseGrid()` / `applyTheme()`.
+// ECharts theme — Observatory Dark 图表默认。经 `applyTheme()` 合入每个 option。
 
-export const PALETTE = ['#6366f1', '#10b981', '#ef4444', '#f59e0b', '#a78bfa', '#06b6d4', '#f97316', '#ec4899']
+export const PALETTE = ['#22d3ee', '#a78bfa', '#fbbf24', '#34d399', '#f87171', '#60a5fa', '#f97316', '#ec4899']
 
 export const COLORS = {
-  bg: '#0a0e17',
-  card: '#1a2332',
-  grid: 'rgba(148,163,184,0.05)',
-  gridHi: 'rgba(148,163,184,0.08)',
-  border: 'rgba(255,255,255,0.06)',
-  text: '#f1f5f9',
-  text2: '#94a3b8',
-  text3: '#8294a8',
-  accent: '#6366f1',
-  up: '#10b981',
-  down: '#ef4444',
-  warn: '#f59e0b',
-  info: '#3b82f6',
+  bg: '#070b12',
+  card: '#101a2b',
+  grid: 'rgba(148,163,184,0.06)',
+  gridHi: 'rgba(148,163,184,0.10)',
+  border: 'rgba(148,163,184,0.14)',
+  text: '#e8eef7',
+  text2: '#9baac0',
+  text3: '#7c8da5',
+  accent: '#22d3ee',
+  up: '#34d399',
+  down: '#f87171',
+  warn: '#fbbf24',
+  info: '#60a5fa',
 }
 
 // Common axis style — equivalent to CHART_DEFAULTS.xaxis (spike crosshair etc.)
@@ -37,6 +35,33 @@ export function fmtDate(v: unknown): string {
   const s = v instanceof Date ? v.toISOString() : String(v)
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
   return m ? `${m[1]}-${m[2]}-${m[3]}` : s
+}
+
+// 轴刻度日期按时间跨度抽稀：>8 年标年份，且标在「每年第一个出现的类目」上——
+// 不能写死 1 月：NBS 月度财政等序列 1 月不发布（无 2019-01 类目），写死会整年丢标签。
+// interval 必须为 0（让 formatter 看到每个类目；auto 抽样会漏掉首月）。空串标签零宽度。
+// 2.5–8 年标到月（月月唯一）；更短保留全日。tooltip 表头始终全日。
+function axisDateFormatter(data: unknown[]): (v: unknown) => string {
+  const ts = data.map((d) => Date.parse(String(d))).filter((t) => !Number.isNaN(t))
+  const spanYears = ts.length > 1 ? (Math.max(...ts) - Math.min(...ts)) / (365.25 * 864e5) : 0
+  const idxOf = new Map(data.map((d, i) => [fmtDate(d), i]))
+  return (v: unknown) => {
+    const s = fmtDate(v)
+    if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s
+    if (spanYears > 8) {
+      const i = idxOf.get(s) ?? 0
+      const prev = i > 0 ? String(fmtDate(data[i - 1])) : ''
+      return prev.slice(0, 4) === s.slice(0, 4) ? '' : s.slice(0, 4)
+    }
+    if (spanYears > 2.5) return s.slice(0, 7)
+    return s
+  }
+}
+
+/** >8 年跨度走 interval:0 + formatter 门控（见 axisDateFormatter 注释）。 */
+function isLongSpan(data: unknown[]): boolean {
+  const ts = data.map((d) => Date.parse(String(d))).filter((t) => !Number.isNaN(t))
+  return ts.length > 1 && (Math.max(...ts) - Math.min(...ts)) / (365.25 * 864e5) > 8
 }
 
 // Axis tooltip formatter — forces the date header to YYYY-MM-DD (no H:M:S,
@@ -67,11 +92,12 @@ const dataZoomForCategory = (option: Record<string, any>) => {
   if (!isCategory) return undefined
   return [
     {
-      type: 'slider', xAxisIndex: 0, bottom: 6, height: 16,
-      borderColor: 'transparent', backgroundColor: 'transparent',
-      fillerColor: 'rgba(99,102,241,0.15)',
-      handleStyle: { color: COLORS.accent, borderColor: COLORS.accent },
-      moveHandleStyle: { color: 'rgba(99,102,241,0.4)' },
+      type: 'slider', xAxisIndex: 0, bottom: 6, height: 14,
+      borderColor: 'transparent', backgroundColor: 'rgba(148,163,184,0.05)',
+      fillerColor: 'rgba(34,211,238,0.12)',
+      handleStyle: { color: COLORS.accent, borderColor: 'transparent' },
+      moveHandleStyle: { color: 'rgba(34,211,238,0.35)' },
+      dataBackground: { lineStyle: { color: 'rgba(148,163,184,0.25)' }, areaStyle: { color: 'rgba(148,163,184,0.08)' } },
       textStyle: { color: COLORS.text3, fontSize: 9 },
       labelFormatter: (v: unknown) => fmtDate(v),
     },
@@ -85,13 +111,20 @@ const dataZoomForCategory = (option: Record<string, any>) => {
   ]
 }
 
-// Force category axes whose data looks date-like to render as YYYY-MM-DD.
+// Force category axes whose data looks date-like to render with span-aware labels.
 const applyDateFormat = (merged: Record<string, any>) => {
   const xa = merged.xAxis
   const fmt = (ax: any) => {
     if (!ax || ax.type !== 'category' || !Array.isArray(ax.data) || !ax.data.length) return
     if (!/^\d{4}-\d{2}-\d{2}/.test(String(ax.data[0]))) return
-    ax.axisLabel = { ...(ax.axisLabel || {}), formatter: fmtDate }
+    ax.axisLabel = {
+      ...(ax.axisLabel || {}),
+      formatter: axisDateFormatter(ax.data),
+      // interval:0 让 formatter 看到每个类目（auto 抽样会跳过首月导致整年丢标签）；
+      // hideOverlap 再把过密的年份标签抽稀（空串零宽度不参与重叠计算）。
+      ...(isLongSpan(ax.data) ? { interval: 0 } : {}),
+      hideOverlap: true,
+    }
   }
   if (Array.isArray(xa)) xa.forEach(fmt)
   else fmt(xa)
@@ -124,20 +157,26 @@ export function applyTheme(option: Record<string, any>): Record<string, any> {
       trigger: 'axis',
       confine: true,        // keep tooltip inside the chart container (fix: clipped tooltips)
       appendToBody: true,    // render to <body> so ancestor overflow can't clip it
-      backgroundColor: '#1e293b',
-      borderColor: 'rgba(255,255,255,0.10)',
+      backgroundColor: 'rgba(12,19,34,0.92)',
+      borderColor: 'rgba(148,163,184,0.18)',
+      borderWidth: 1,
+      padding: [8, 12],
+      extraCssText: 'border-radius:10px;backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,0.35);font-variant-numeric:tabular-nums;',
       textStyle: { color: COLORS.text, fontSize: 12 },
       axisPointer: {
         type: 'cross',
-        lineStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' },
-        crossStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' },
+        lineStyle: { color: 'rgba(34,211,238,0.35)', type: 'dashed' },
+        crossStyle: { color: 'rgba(34,211,238,0.35)', type: 'dashed' },
+        label: { backgroundColor: '#0c1322', borderColor: 'rgba(148,163,184,0.18)', color: COLORS.text2 },
       },
     },
     legend: {
       textStyle: { color: COLORS.text2, fontSize: 11 },
       top: 0,
-      itemWidth: 12,
-      itemHeight: 12,
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      inactiveColor: '#4b5a70',
     },
     aria: {
       enabled: true,

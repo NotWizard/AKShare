@@ -33,7 +33,7 @@ const cycle = computed<CycleFrame | null>(() => data.value?.cycle ?? null)
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).
 const ipOpt = computed(() => markRaw(buildDualAxisLine(ipDm.value, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')))
-const quadOpt = computed(() => markRaw(buildScatterQuadrant(cycle.value?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)))
+const quadOpt = computed(() => markRaw(buildScatterQuadrant(cycle.value?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', null, 50)))
 const pmiOpt = computed(() => markRaw(buildMultiLine(pmiDm.value, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)))
 </script>
 

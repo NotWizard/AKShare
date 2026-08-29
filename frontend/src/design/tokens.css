@@ -1,16 +1,22 @@
-/* Terminal Fintech design tokens — global CSS variables (mirror tailwind config). */
+/* Observatory Dark design tokens — global CSS variables (mirror tailwind config).
+   更深的 slate 底 + 发丝边框 + cyan 单强调（避开 AI 紫；与相位语义色零冲突）。 */
 :root {
-  --bg: #0a0e17;
-  --surface: #111827;
-  --card: #1a2332;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-hi: rgba(255, 255, 255, 0.10);
-  --accent: #6366f1;
-  --up: #10b981;
-  --down: #ef4444;
-  --warn: #f59e0b;
-  --text: #f1f5f9;
-  --text-2: #94a3b8;
-  --text-3: #8294a8;
+  --bg: #070b12;
+  --surface: #0c1322;
+  --card: #101a2b;
+  --card-hover: #152236;
+  --border: rgba(148, 163, 184, 0.10);
+  --border-hi: rgba(148, 163, 184, 0.18);
+  --accent: #22d3ee;
+  --accent-hi: #67e8f9;
+  --accent-ink: #052531;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --up: #34d399;
+  --down: #f87171;
+  --warn: #fbbf24;
+  --info: #60a5fa;
+  --text: #e8eef7;
+  --text-2: #9baac0;
+  --text-3: #7c8da5;
   --text-4: #7f90a4; /* dimmest tier that still passes WCAG AA at 10px */
 }

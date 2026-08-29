@@ -12,7 +12,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      // VITE_API_TARGET 覆盖：worktree/并行开发时指向另一个后端端口（如 :8001）
+      '/api': { target: process.env.VITE_API_TARGET || 'http://localhost:8000', changeOrigin: true },
     },
   },
   preview: {

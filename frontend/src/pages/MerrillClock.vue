@@ -43,7 +43,7 @@ const quadrant = computed(() =>
         : null,
   })),
 )
-const clockOpt = computed(() => markRaw(buildScatterQuadrant(quadrant.value, 'gdp_gap', 'cpi_yoy', 'GDP同比−潜在增长(pp)', 'CPI同比(%)', 2, 0)))
+const clockOpt = computed(() => markRaw(buildScatterQuadrant(quadrant.value, 'gdp_gap', 'cpi_yoy', 'GDP同比−潜在增长(pp)', 'CPI同比(%)', 2, 0, { tr: 'overheating', tl: 'stagflation', br: 'recovery', bl: 'recession' })))
 const cpiPpiOpt = computed(() => markRaw(buildDualAxisLine(cpiPpi.value, 'cpi_yoy', 'ppi_yoy')))
 const cpiMomOpt = computed(() => markRaw(buildDualAxisLine(cpiMom.value, 'cpi_mom', 'ppi_mom')))
 </script>
