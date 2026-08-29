@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### 审计修复二次扫描（基于 1.2.0 基线）
+
+概述：对 1.2.0 基线做全仓复审，把首轮审计（本地遗留批次）中远端仍缺的修复重做手术；远端已覆盖的同类项（多粒度闸门、日期参数 422、flock 锁、非零退出、sign-selection 等）不重复造轮子。
+
+变更：
+  1. **[分析｜方向性 bug]** `analysis/cross_indicator.py`：`_best_lag_corr` 旧实现位移的是 lead 列（`lead.shift(-k)`），实测的是「目标领先 lead」——真实 k₀ 个月领先在该口径下变为 autocorr(k+k₀)、最大值落在 k=0，领先结构性不可报。修为位移目标列（`corr(lead(t), lag(t+k))`），signed-selection 保持不变。实证：M1→PPI 由「领先 0 月 r=0.21」修正为「领先 9 月 r=0.51」。新增 `test_cross_indicator.py` 4 例方向回归；`test_cross_lag_semantics.py` 的正向用例改躲正弦周期混叠（y=x.shift(−3) 在 12 周期下混叠，改用非周期低通序列，期望 lag=3 语义不变）。
+  2. **[管道｜竞态]** `scripts/_pipeline.py`：`commit_staging` 新增 `_preserve_live_tables()`——commentary / signal_history 由后端直写 live，抓取窗口内的写入此前会被 `os.replace` 静默回滚；现在替换前按原 DDL 把 live 的这两张表并入 staging（id 保留，WAL 由随后的 checkpoint 落盘）。`_pipeline_test.py` 新增第 4 节 4 例回归（窗口内写入存活、主键保留、闸管表照常更新、fresh install 无表不炸）。
+  3. **[派生]** `scripts/02_compute_derived.py`：`m1_lead_6m` 位移方向 shift(−6)→shift(6)（旧方向既反向又属 look-ahead）；8 处月度合并 left→outer join 成日期并集，发布错位期（CPI 9 日、M2 10–15 日）新月不再被锚点丢弃（重算 583→584 行，纳入 2026-08 bond_10y 先行值）；`main()` 独立运行改走同一套闸门管道（备份→staging→原子切换），不再直写 live 库。
+  4. **[性能]** `GET /api/v1/real-estate` 新增 `frames` 参数（默认 true 兼容）：`frames=false` 仅返回 assessment（~0.5KB），不再白传三张全表帧（~199KB）；前端 `getRealEstate` 默认摘要模式。`test_golden.py` 新增摘要模式用例；`shared/openapi.json` 经 `scripts/gen_openapi.py` 重导。
+  5. **[性能]** `fetch_bond_yield` 增量抓取：staging 继承历史月频，仅重抓去年+今年（~20 年度页请求→~2，吸收近期修订）；首装无旧表仍全量。
+  6. **[前端]** 美林时钟散点横轴改画 `gdp_yoy − gdp_trend`（潜在增长缺口）——分类边界（±0.5pp 死区中心）即零线，相位颜色与视觉象限不再矛盾；CreditCycle 页请求 6→5（M2 主图复用 m1m2 组）；buildMultiLine 参考线标签只在首个 series 绘制（消除 N 层原位叠印）；FiscalExternal 的 ISM tip 去掉过时的「其后为 NaN」。
+  7. **[文档]** `analysis/real_estate.py` docstring「median since 2019」实为全历史 expanding median；`rate_deviation_bp` 注明实为 pp（字段名保留兼容契约）；README 同步（美林口径、derived 列数与日期并集、bond_yield 增量、real-estate frames、管道检查计数 27→31）。
+
+验证：后端 pytest 325 passed（基线 320 + 新增 5）；`_pipeline_test.py` 31 项检查全过；vitest 42/42；vue-tsc 0 error；`vite build` ✓；openapi drift 门禁通过；derived golden 测试随 live 库重算回绿。
+
+### Second audit pass on the 1.2.0 baseline (English)
+
+Summary: Re-audited the 1.2.0 baseline and re-applied the fixes from the earlier local audit batch that the remote line still lacked; items the remote already covered (multi-grain gates, 422 date params, flock locking, non-zero fetch exit, signed-selection) were not duplicated.
+
+Changes:
+  1. **[analysis｜direction bug]** `cross_indicator._best_lag_corr` shifted the LEAD series, measuring "target leads lead" — a true k₀-month lead became autocorr(k+k₀), maximal at k=0, so a real lead was structurally unreportable. Now shifts the TARGET (`corr(lead(t), lag(t+k))`); signed selection unchanged. Empirically M1→PPI goes from "lag 0, r=0.21" to "leads 9 months, r=0.51". New `test_cross_indicator.py` (4 direction regressions); the positive-pair case in `test_cross_lag_semantics.py` now avoids sinusoid aliasing.
+  2. **[pipeline｜race]** `commit_staging` now merges live-only tables (commentary, signal_history) into staging before the atomic replace — writes landing during the fetch window were silently rolled back. 4 new pipeline checks.
+  3. **[derived]** `m1_lead_6m` shift(−6)→shift(6) (old direction was both inverted and look-ahead); all 8 monthly merges are outer joins (release-window-skew months survive; 583→584 rows); standalone `main()` runs the gated pipeline instead of writing the live DB directly.
+  4. **[perf]** `/api/v1/real-estate` gains `frames` (default true); `frames=false` returns the ~0.5KB assessment only, skipping the ~199KB frames the page never used. openapi.json regenerated via `scripts/gen_openapi.py`.
+  5. **[perf]** `fetch_bond_yield` fetches incrementally (staging history + last/current year; ~20 yearly page requests → ~2).
+  6. **[frontend]** Merrill scatter x-axis now plots `gdp_yoy − gdp_trend` so the zero line is the classification boundary; CreditCycle requests 6→5; buildMultiLine draws the markLine label on the first series only; ISM tip de-staled.
+  7. **[docs]** real_estate.py docstring (full-history median; rate_deviation_bp annotated as pp); README synced.
+
+Verification: backend pytest 325 passed (320 baseline + 5 new); `_pipeline_test.py` 31 checks green; vitest 42/42; vue-tsc clean; `vite build` ✓; openapi drift gate passes; derived golden back to green after the live-DB recompute.
+
 ## [1.2.0] — 2026-08-24 — 空图表/报错修复 + 数据全量刷新至最新 + 前端单测基建
 
 ### CI 绿灯修复 + 版本号四处对齐（发布前置）

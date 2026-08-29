@@ -60,3 +60,19 @@ def test_refresh_status():
     resp = client.get("/api/v1/refresh/status")
     assert resp.status_code == 200
     assert resp.json()["status"] in ("ok", "busy", "error", "unknown")
+
+
+def test_real_estate_summary_mode_skips_frames():
+    """frames=false → 仅 assessment（雷达/摘要所需全部）；默认仍返回完整三维帧。"""
+    slim = client.get("/api/v1/real-estate?frames=false")
+    assert slim.status_code == 200
+    body = slim.json()
+    assert set(body.keys()) == {"assessment"}
+    assert "composite_score" in body["assessment"]
+
+    full = client.get("/api/v1/real-estate")
+    assert full.status_code == 200
+    full_body = full.json()
+    assert {"assessment", "leverage_df", "price_df", "lpr_df"} <= set(full_body.keys())
+    # 摘要模式响应体必须远小于完整模式（帧不再白传）
+    assert len(slim.content) < len(full.content) // 10

@@ -41,6 +41,12 @@ def _cycle(period: int = 12, n: int = _N) -> pd.Series:
     return pd.Series(np.sin(2 * np.pi * np.arange(n) / period))
 
 
+def _smooth_wave(n: int = _N, seed: int = 7) -> pd.Series:
+    """非周期平滑序列（滑动平均低通的噪声）——方向性用例必须躲开正弦的周期混叠。"""
+    rng = np.random.default_rng(seed)
+    return pd.Series(rng.normal(0, 1, n)).rolling(9, min_periods=1).mean()
+
+
 def test_inverse_pair_reports_the_positive_peak():
     """Strongest |r| is negative → the reported (lag, r) must be the positive peak."""
     x = _cycle()
@@ -62,9 +68,15 @@ def test_inverse_pair_reports_the_positive_peak():
 
 
 def test_positive_pair_unchanged():
-    """No regression for the ordinary case: the positive peak was already picked."""
-    x = _cycle()
-    y = x.shift(-3)            # peak at lag 3 under this module's alignment
+    """No regression for the ordinary case: the positive peak was already picked.
+
+    2026-08-17 方向修正后注意：本模块的对齐口径已更正为「lag k = 第一序列领先 k 个月」
+    （corr(lead(t), lag(t+k))）。旧测试用 `x.shift(-3)`（y(t)=x(t+3)，实为 y 领先 x 3 个月）
+    在旧口径下恰好得 3；对周期信号，x(t+3) ≡ x(t−9)，新口径下同一关系如实报 9。
+    为躲开正弦混叠，本用例改用非周期序列：y 滞后 x 3 个月（x 领先 y 3 个月）。
+    """
+    x = _smooth_wave()          # 非周期（低通噪声），领先方向无混叠歧义
+    y = x.shift(3).fillna(0.0)  # y(t) = x(t−3)：x 领先 y 整整 3 个月
 
     lag, r, table = _best_lag_corr(x, y)
 

@@ -73,7 +73,9 @@ def compute_derived(conn):
     bond = load_table(conn, "bond_yield")
 
     # ─── 构建月度主表 ───
-    # 以 money_supply 的日期为锚（月度，最长序列）
+    # 以 money_supply 为起点（月度，最长序列），各源一律 outer join 成日期并集：
+    # 发布窗口错位期（CPI 9 日发布、M2 10–15 日）新月份不再被 left join 丢掉，
+    # KPI/图表能提前 ~5 天看到先行指标（缺失列自然为 NaN，前端 connectNulls 跨接）。
     monthly = money[["date", "m1", "m1_yoy", "m2", "m2_yoy", "m0", "m0_yoy"]].copy()
     monthly["date"] = pd.to_datetime(monthly["date"])
 
@@ -84,14 +86,14 @@ def compute_derived(conn):
     if not cpi.empty:
         cpi_m = cpi.copy()
         cpi_m["date"] = pd.to_datetime(cpi_m["date"])
-        monthly = monthly.merge(cpi_m[["date", "cpi_yoy", "cpi_mom"]], on="date", how="left")
+        monthly = monthly.merge(cpi_m[["date", "cpi_yoy", "cpi_mom"]], on="date", how="outer")
 
     # 合并 PPI
     if not ppi.empty:
         ppi_m = ppi.copy()
         ppi_m["date"] = pd.to_datetime(ppi_m["date"])
         ppi_cols = ["date", "ppi_yoy"] + (["ppi_mom"] if "ppi_mom" in ppi_m.columns else [])
-        monthly = monthly.merge(ppi_m[ppi_cols], on="date", how="left")
+        monthly = monthly.merge(ppi_m[ppi_cols], on="date", how="outer")
 
     # 合并 PMI
     if not pmi.empty:
@@ -99,20 +101,20 @@ def compute_derived(conn):
         pmi_m["date"] = pd.to_datetime(pmi_m["date"])
         monthly = monthly.merge(
             pmi_m[["date", "pmi_official", "pmi_caixin", "pmi_non_mfg", "pmi_caixin_svc"]],
-            on="date", how="left"
+            on="date", how="outer"
         )
 
     # 合并工业增加值
     if not industrial.empty:
         ind_m = industrial.copy()
         ind_m["date"] = pd.to_datetime(ind_m["date"])
-        monthly = monthly.merge(ind_m[["date", "ip_yoy", "ip_cumulative"]], on="date", how="left")
+        monthly = monthly.merge(ind_m[["date", "ip_yoy", "ip_cumulative"]], on="date", how="outer")
 
     # 合并 LPR
     if not lpr.empty:
         lpr_m = lpr.copy()
         lpr_m["date"] = pd.to_datetime(lpr_m["date"])
-        monthly = monthly.merge(lpr_m[["date", "lpr_1y", "lpr_5y"]], on="date", how="left")
+        monthly = monthly.merge(lpr_m[["date", "lpr_1y", "lpr_5y"]], on="date", how="outer")
 
     # 实际利率 = LPR 1Y - CPI
     if "lpr_1y" in monthly.columns and "cpi_yoy" in monthly.columns:
@@ -133,7 +135,7 @@ def compute_derived(conn):
         )
         # monthly 锚点是每月 1 号；国债月末值 forward-fill 对齐到该月
         b_m["date"] = b_m["date"].values.astype("datetime64[M]")  # 月初归一
-        monthly = monthly.merge(b_m[["date", "bond_10y"]], on="date", how="left")
+        monthly = monthly.merge(b_m[["date", "bond_10y"]], on="date", how="outer")
     else:
         # 采集失败时仍预创建列（全 NaN），保证 derived_monthly 列结构稳定，
         # 前端始终能请求到 bond_10y（值全空 → 图表无线，优雅降级而非缺列报错）
@@ -155,7 +157,7 @@ def compute_derived(conn):
 
         monthly = monthly.merge(
             sfm.reset_index()[["date"] + sf_cols + ["sf_stock_yoy", "sf_impulse"]],
-            on="date", how="left"
+            on="date", how="outer"
         )
 
     # ─── 新增人民币贷款（社融的补充信用指标）───
@@ -170,7 +172,7 @@ def compute_derived(conn):
         ncm["loan_stock_yoy"] = ncm["loan_12m"].pct_change(12) * 100
         monthly = monthly.merge(
             ncm.reset_index()[["date", "new_rmb_loan", "loan_yoy", "loan_stock_yoy"]],
-            on="date", how="left"
+            on="date", how="outer"
         )
 
     # ─── PMI 均线 ───
@@ -183,7 +185,9 @@ def compute_derived(conn):
 
     # ─── M1 领先 PPI 标记 ───
     if "m1_yoy" in monthly.columns and "ppi_yoy" in monthly.columns:
-        monthly["m1_lead_6m"] = monthly["m1_yoy"].shift(-6)  # M1 领先 6 个月
+        # 展示口径：date=t 处放 M1(t-6)，与 ppi_yoy(t) 同图即可直读「M1 领先 6 个月」。
+        # shift(-6) 方向相反（把 6 个月后的 M1 拉到当前行）且属 look-ahead。
+        monthly["m1_lead_6m"] = monthly["m1_yoy"].shift(6)
 
     # ─── 排序并保存 ───
     monthly = monthly.sort_values("date").reset_index(drop=True)
@@ -291,17 +295,31 @@ def compute_derived(conn):
 
 
 def main():
+    """独立运行：与 01 同一套闸门管道（备份 → staging 重算 → 原子切换），
+    不再直写 live 库；commentary/signal_history 由 commit_staging 自动并入保留。"""
+    # allow `import _pipeline` when run as a script（同 01_fetch_data.py）
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _pipeline import backup_db, commit_staging, discard_staging, open_staging
+
     if not os.path.exists(DB_PATH):
         print(f"❌ 数据库不存在: {DB_PATH}")
         print("   请先运行: python scripts/01_fetch_data.py")
         sys.exit(1)
 
-    conn = sqlite3.connect(DB_PATH)
-    monthly, quarterly = compute_derived(conn)
-    conn.close()
+    backup_db()
+    staging = open_staging()
+    try:
+        conn = sqlite3.connect(staging)
+        monthly, quarterly = compute_derived(conn)
+        conn.commit()
+        conn.close()
+    except Exception:
+        discard_staging()
+        raise
+    commit_staging()
 
     log("=" * 50)
-    log("衍生指标计算完成！")
+    log("衍生指标计算完成（staging → 原子切换）！")
     log(f"月度表列: {monthly.columns.tolist()}")
     if not quarterly.empty:
         log(f"季度表列: {quarterly.columns.tolist()}")

@@ -27,11 +27,14 @@ def _jsonable(obj):
 
 
 @router.get("")
-def real_estate(cities: list[str] | None = Query(default=None)):
+def real_estate(cities: list[str] | None = Query(default=None),
+                frames: bool = Query(default=True)):
     """3D real-estate assessment (leverage space / rate / price momentum).
 
     Accepts repeated ``?cities=A&cities=B`` params (robust vs proxies that
     don't decode commas); defaults to the 10 default cities when omitted.
+    ``frames=false`` → only the assessment dict (the page's radar/summary needs
+    nothing else; full frames are ~199KB, assessment ~0.5KB).
     """
     city_list = cities or _DEFAULT_CITIES
     # Validate city names against the known set
@@ -39,4 +42,6 @@ def real_estate(cities: list[str] | None = Query(default=None)):
     if invalid:
         raise HTTPException(400, f"unknown cities: {invalid}")
     result = analyze_real_estate(str(db.DB_PATH), city_list)
+    if not frames:
+        return {"assessment": result["assessment"]}
     return _jsonable(result)

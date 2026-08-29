@@ -51,7 +51,7 @@ const ismOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'us_ism_
     <GraphCard title="贸易差额" tip="进出口差额当期值（亿美元）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="balanceOpt" height="300px" />
     </GraphCard>
-    <GraphCard title="美国 ISM 制造业 PMI" tip="外需景气代理；荣枯线 50。日期由发布日归一到数据月（Jin10 源冻结于 2025-08 数据月，其后为 NaN）。" :loading="loading" :error="error" @retry="load">
+    <GraphCard title="美国 ISM 制造业 PMI" tip="外需景气代理；荣枯线 50。日期由发布日归一到数据月。Jin10 源冻结于 2025-08 数据月，其后由 ISM 官方发布值按月人工/Agent 补充（见 docs/data-supplement-runbook.md）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ismOpt" height="300px" />
     </GraphCard>
   </div>

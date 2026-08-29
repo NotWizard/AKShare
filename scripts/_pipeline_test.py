@@ -171,6 +171,57 @@ with tempfile.TemporaryDirectory() as d:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 4) live 直写表（commentary/signal_history）在 commit 前并入 staging
+#    回归场景：抓取窗口内写入 live 的 AI 评论批次不得被原子替换静默回滚
+# ──────────────────────────────────────────────────────────────────────────────
+print("\n=== 4. live-only tables preserved across commit ===")
+with tempfile.TemporaryDirectory() as d:
+    live = os.path.join(d, "macro_data.db")
+    staging = os.path.join(d, "macro_data.db.staging")
+    vintage_dir = os.path.join(d, "vintages")
+
+    c0 = sqlite3.connect(live)
+    good_money(500).to_sql("money_supply", c0, if_exists="replace", index=False)
+    c0.execute("CREATE TABLE commentary (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, text TEXT NOT NULL)")
+    c0.execute("INSERT INTO commentary (ts, text) VALUES ('2026-08-01T00:00:00', 'old batch')")
+    c0.commit(); c0.close()
+
+    P.open_staging(live, staging)
+    # 抓取窗口开始 → staging 已有旧评论；此时 live 又写入新批次（模拟生成完成于窗口内）
+    c1 = sqlite3.connect(live)
+    c1.execute("INSERT INTO commentary (ts, text) VALUES ('2026-08-17T00:00:00.123', 'fresh batch mid-fetch')")
+    c1.commit(); c1.close()
+    # staging 侧照常替换闸管表（模拟本轮抓到的 money_supply 更新）
+    c2 = sqlite3.connect(staging)
+    good_money(520).to_sql("money_supply", c2, if_exists="replace", index=False)
+    c2.commit(); c2.close()
+
+    P.commit_staging(staging, live, vintage_dir)
+
+    c3 = sqlite3.connect(live)
+    texts = [r[0] for r in c3.execute("SELECT text FROM commentary ORDER BY id")]
+    ids = [r[0] for r in c3.execute("SELECT id FROM commentary ORDER BY id")]
+    n_money = P.table_distinct_dates(c3, "money_supply")
+    pk_ok = c3.execute("INSERT INTO commentary (ts, text) VALUES ('2099-01-01T00:00:00','post-commit')").rowcount == 1
+    c3.commit(); c3.close()
+
+    check("mid-fetch commentary batch survives atomic commit", texts == ["old batch", "fresh batch mid-fetch"])
+    check("commentary PK/ids preserved (autoincrement semantics intact)", ids == [1, 2] and pk_ok)
+    check("gated table still updated by commit", n_money == 520)
+
+    # live 无 commentary 表（fresh install）→ commit 不炸
+    with tempfile.TemporaryDirectory() as d2:
+        live2 = os.path.join(d2, "macro_data.db")
+        staging2 = os.path.join(d2, "macro_data.db.staging")
+        c = sqlite3.connect(live2)
+        good_money(500).to_sql("money_supply", c, if_exists="replace", index=False)
+        c.commit(); c.close()
+        P.open_staging(live2, staging2)
+        P.commit_staging(staging2, live2, os.path.join(d2, "vintages"))
+        check("commit fine when live lacks preserve-tables", not os.path.exists(staging2))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 print("\n=== RESULT ===")
 if _failures:
     print(f"❌ {len(_failures)} FAILED: {_failures}")

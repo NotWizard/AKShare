@@ -351,6 +351,40 @@ def open_staging(db_path=DB_PATH, staging_path=STAGING_PATH):
     return staging_path
 
 
+# 不经闸门的 live 直写表：后端 AI 评论（commentary）与信号历史（signal_history）
+# 在抓取窗口内可能被写入 live；若不在 commit 前并入 staging，原子替换会把这些
+# 行静默回滚掉（抓取窗口可达数十秒~数分钟，生成中的评论批次会整批丢失）。
+PRESERVE_TABLES = ("commentary", "signal_history")
+
+
+def _preserve_live_tables(staging_path=STAGING_PATH, db_path=DB_PATH):
+    """把 live 中 PRESERVE_TABLES 的最新行并入 staging（覆盖 staging 里的旧副本）。
+
+    staging 副本是 open_staging 时刻的快照；live 版本恒 ≥ staging 版本（这两张表
+    只被 live 直写/追加），因此整体覆盖 staging 副本是安全的。保留原表 DDL
+    （含主键），行级 id 原样保留。ATTACH 读 live 可看到其 WAL 中已提交事务；
+    写 staging 落在其 WAL，由 commit_staging 随后的 _checkpoint_wal 落盘。
+    """
+    staging_path, db_path = Path(staging_path), Path(db_path)
+    if not db_path.exists():
+        return
+    conn = sqlite3.connect(staging_path)
+    try:
+        conn.execute("ATTACH DATABASE ? AS live", (str(db_path),))
+        for t in PRESERVE_TABLES:
+            ddl = conn.execute(
+                "SELECT sql FROM live.sqlite_master WHERE type='table' AND name=?",
+                (t,)).fetchone()
+            if not ddl:
+                continue  # live 还没有这张表（fresh install）
+            conn.execute(f"DROP TABLE IF EXISTS [{t}]")
+            conn.execute(ddl[0])
+            conn.execute(f'INSERT INTO [{t}] SELECT * FROM live.[{t}]')
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def commit_staging(staging_path=STAGING_PATH, db_path=DB_PATH, vintage_dir=VINTAGE_DIR):
     """Snapshot the live DB as a vintage (pre-commit audit copy), then atomically
     promote staging → live (POSIX rename is atomic, same FS). Removes staging on
@@ -364,6 +398,10 @@ def commit_staging(staging_path=STAGING_PATH, db_path=DB_PATH, vintage_dir=VINTA
     except Exception as e:  # 快照失败（如 ENOSPC）不丢整轮成果：照常提交
         print(f"  ⚠️ vintage 快照失败（跳过快照，照常提交）: {e}")
         vintage = None
+    try:
+        _preserve_live_tables(staging_path, db_path)
+    except Exception as e:  # 并入失败不阻断提交（这两张表非关键路径）
+        print(f"  ⚠️ live 直写表并入失败（commentary/signal_history 可能回滚）: {e}")
     _checkpoint_wal(staging_path)      # staging 自己的 -wal 必须先落盘
     _drop_wal_sidecars(staging_path)
     os.replace(staging_path, db_path)  # atomic overwrite

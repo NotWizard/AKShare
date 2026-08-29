@@ -6,7 +6,7 @@ Dimensions scored 0–100 (100 = most favourable for housing demand):
 1. Leverage space:  headroom = 70% − household leverage  (more headroom → higher score)
 2. Price momentum:  12-month rolling mean of new_mom across selected cities
                      (positive and rising → higher score)
-3. Rate environment: lpr_5y vs its own historical median since 2019
+3. Rate environment: lpr_5y vs its expanding historical median (full history)
                      (below median → higher score = cheaper credit)
 
 A dimension with no data scores NEUTRAL and is EXCLUDED from the composite (which
@@ -176,6 +176,7 @@ def _analyze_real_estate_impl(
         "as_of_lpr": latest_lpr["date"].strftime("%Y-%m") if latest_lpr is not None else None,
         "lpr_5y": float(latest_lpr["lpr_5y"]) if latest_lpr is not None else None,
         "lpr_5y_median": float(latest_lpr["lpr_5y_median"]) if latest_lpr is not None else None,
+        # 单位实为百分点（pp），非 bp；字段名保留以兼容既有契约（commentary 快照字段）
         "rate_deviation_bp": float(latest_lpr["rate_deviation"]) if latest_lpr is not None else None,
         "rate_env_score": (
             _score_rate_env(float(latest_lpr["rate_deviation"]))

@@ -30,22 +30,33 @@ def _best_lag_corr(
     max_lag: int = MAX_LAG,
 ) -> tuple:
     """Find the lag (in months) with the highest positive full-sample Pearson r
-    between lead(+k) and lag_var.
+    between lead(t) and lag_var(t+k).
 
     Returns (best_lag, best_corr, corr_series). A positive lag means the first
-    series LEADS by that many months. Selection is by the highest SIGNED r (most
-    positive), consistent with the "leading indicator co-moves with its target"
-    framing — so the returned sign always matches the reported relationship (an
-    inverse pair is never mislabelled as the leading one). The full signed
-    corr_series is returned unchanged for callers that want to inspect inverses.
+    series LEADS by that many months: the TARGET (lag_var) is shifted backward
+    by k so that each t compares lead(t) against lag_var(t+k) — a peak at lag k
+    means today's lead predicts the target k months ahead.
+
+    (Shifting the LEAD series instead — the pre-2026-08-17 implementation —
+    computes corr(lead(t+k), lag_var(t)), which measures "the target leads the
+    lead series by k": with a true k₀-month lead (lag_var(t) ≈ lead(t−k₀)) the
+    corr at k becomes autocorr(k+k₀), maximised at k=0 — a real lead is
+    structurally unreportable. Direction regression is locked by
+    backend/tests/test_cross_indicator.py.)
+
+    Selection is by the highest SIGNED r (most positive), consistent with the
+    "leading indicator co-moves with its target" framing — so the returned sign
+    always matches the reported relationship (an inverse pair is never
+    mislabelled as the leading one). The full signed corr_series is returned
+    unchanged for callers that want to inspect inverses.
 
     This is an in-sample, full-sample descriptive statistic, not a real-time
     signal (see the module docstring).
     """
     records = []
     for k in range(0, max_lag + 1):
-        shifted_lead = lead.shift(-k)  # lead moved earlier → it "leads" by k months
-        aligned = pd.DataFrame({"x": shifted_lead, "y": lag_var}).dropna()
+        shifted_lag = lag_var.shift(-k)  # 目标列前移 k：t 处对齐 (lead(t), lag(t+k))
+        aligned = pd.DataFrame({"x": lead, "y": shifted_lag}).dropna()
         if len(aligned) < 24:
             records.append({"lag": k, "corr": np.nan})
             continue

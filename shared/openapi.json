@@ -520,7 +520,7 @@
           "real-estate"
         ],
         "summary": "Real Estate",
-        "description": "3D real-estate assessment (leverage space / rate / price momentum).\n\nAccepts repeated ``?cities=A&cities=B`` params (robust vs proxies that\ndon't decode commas); defaults to the 10 default cities when omitted.",
+        "description": "3D real-estate assessment (leverage space / rate / price momentum).\n\nAccepts repeated ``?cities=A&cities=B`` params (robust vs proxies that\ndon't decode commas); defaults to the 10 default cities when omitted.\n``frames=false`` → only the assessment dict (the page's radar/summary needs\nnothing else; full frames are ~199KB, assessment ~0.5KB).",
         "operationId": "real_estate_api_v1_real_estate_get",
         "parameters": [
           {
@@ -540,6 +540,16 @@
                 }
               ],
               "title": "Cities"
+            }
+          },
+          {
+            "name": "frames",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Frames"
             }
           }
         ],

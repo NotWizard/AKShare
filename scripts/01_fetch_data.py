@@ -824,7 +824,23 @@ def fetch_bond_yield(conn):
 
     from datetime import datetime
     current_year = datetime.now().year
-    years = list(range(2006, current_year + 1))
+
+    # 增量模式：staging 里已继承 live 的历史月频表（闸门管道保证完整），
+    # 只重抓 去年+今年 吸收近期修订/新值；首装无旧表 → 2006 起全量。
+    # 中债年度页 1 请求/年：增量把 20+ 次请求降到 ~2 次。
+    prev = pd.DataFrame()
+    try:
+        prev = pd.read_sql("SELECT date, y_10y FROM bond_yield", conn)
+    except Exception:
+        prev = pd.DataFrame()
+    if not prev.empty:
+        max_year = int(pd.to_datetime(prev["date"]).dt.year.max())
+        start_year = max(2006, max_year - 1)
+        years = list(range(start_year, current_year + 1))
+        log(f"  增量: 重抓 {start_year}–{current_year}（旧表至 {max_year} 年）")
+    else:
+        years = list(range(2006, current_year + 1))
+        log("  全量: 无旧表，2006 年起全抓")
 
     with ThreadPoolExecutor(max_workers=6) as ex:
         frames = list(ex.map(_fetch_year, years))
@@ -844,6 +860,16 @@ def fetch_bond_yield(conn):
     )
     monthly["date"] = monthly["date"].dt.strftime("%Y-%m-01")
     result = monthly[["date", "y_10y"]].sort_values("date").reset_index(drop=True)
+
+    if not prev.empty:
+        # 拼接：旧表 cutoff 之前的历史 + 新抓的近两年（重叠段以新值为准）
+        cutoff = result["date"].min()
+        result = (
+            pd.concat([prev[prev["date"] < cutoff], result], ignore_index=True)
+            .drop_duplicates(subset=["date"], keep="last")
+            .sort_values("date")
+            .reset_index(drop=True)
+        )
 
     save_to_db(result, "bond_yield", conn)
     return result

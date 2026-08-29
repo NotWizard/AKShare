@@ -19,8 +19,8 @@ type Rec = Record<string, string | number | null>
 
 // useAsyncData owns loading/error/abort; `load` is still the retry handler.
 const { data, errorText: error, loading, retry: load } = useAsyncData(async (signal) => {
-  const [m2, m12, sp, sf, nc, cc] = await Promise.all([
-    api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_yoy', true, { signal }),
+  // M2 主图复用 m1m2 组（m2_yoy 覆盖相同、align_start 口径一致），不再单列请求
+  const [m12, sp, sf, nc, cc] = await Promise.all([
     api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m1_yoy,m2_yoy', true, { signal }),
     api.getDerivedMonthly(filters.start ?? '1996-12-01', filters.end ?? undefined, 'date,m2_m1_spread', true, { signal }),
     api.getDerivedMonthly(filters.start ?? undefined, filters.end ?? undefined, 'date,total,sf_stock_yoy', true, { signal }),
@@ -28,12 +28,11 @@ const { data, errorText: error, loading, retry: load } = useAsyncData(async (sig
     api.getCycle('credit', filters.start ?? undefined, filters.end ?? undefined, { signal }),
   ])
   return {
-    m2: markRaw(m2.records), m1m2: markRaw(m12.records), spread: markRaw(sp.records),
+    m1m2: markRaw(m12.records), spread: markRaw(sp.records),
     sf: markRaw(sf.records), nc: markRaw(nc.records), credit: markRaw(cc),
   }
 }, { watch: [() => filters.start, () => filters.end, () => refresh.lastRefreshedAt] })
 
-const m2Dm = computed<Rec[]>(() => data.value?.m2 ?? [])           // date,m2_yoy        → 1991-12
 const m1m2Dm = computed<Rec[]>(() => data.value?.m1m2 ?? [])       // date,m1_yoy,m2_yoy → 1991-12
 const spreadDm = computed<Rec[]>(() => data.value?.spread ?? [])   // date,m2_m1_spread  → 1991-12
 const sfDm = computed<Rec[]>(() => data.value?.sf ?? [])           // date,total,sf_stock_yoy → 2016-01
@@ -42,7 +41,7 @@ const credit = computed<CycleFrame | null>(() => data.value?.credit ?? null)
 
 // Options are built in computeds (not the template) so each rebuild yields one
 // markRaw'd object that ECharts merges into the live instance (preserves zoom).
-const m2Opt = computed(() => markRaw(buildCreditM2Chart(m2Dm.value, credit.value?.series ?? [])))
+const m2Opt = computed(() => markRaw(buildCreditM2Chart(m1m2Dm.value, credit.value?.series ?? [])))
 const m1m2Opt = computed(() => markRaw(buildDualAxisLine(m1m2Dm.value, 'm1_yoy', 'm2_yoy')))
 const spreadOpt = computed(() => markRaw(buildSpreadChart(spreadDm.value, 'm2_m1_spread')))
 const impulseOpt = computed(() => markRaw(buildCreditImpulseChart(credit.value?.series ?? [])))

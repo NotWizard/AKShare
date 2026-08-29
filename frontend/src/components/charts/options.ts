@@ -262,15 +262,19 @@ export function buildMultiLine(
     // Attach the reference line to EVERY series, not just [0], so toggling any
     // one off in the legend still leaves the line on the others. It only
     // disappears when all series are hidden — which is correct.
+    // The LABEL, however, is drawn only on the first series: N identical labels
+    // at the same spot over-print (alpha stacks) and look bolder than designed.
     // Subdued reference styling (same vocabulary as quadrant cross-hairs &
     // spread zero line): thin dashed slate at reduced alpha — a background
     // dimension, not a data-bright line (the old amber solid clashed with the
     // amber 服务 series and out-shouted the data).
-    series.forEach((s) => {
+    series.forEach((s, i) => {
       s.markLine = {
         silent: true, symbol: ['none', 'none'],
         lineStyle: { color: hexA(COLORS.text3, 0.8), type: 'dashed', width: 1 },
-        label: { formatter: `${markLineName} {c}`, color: hexA(COLORS.text3, 0.9), fontSize: 10, position: 'insideEndTop' },
+        label: i === 0
+          ? { formatter: `${markLineName} {c}`, color: hexA(COLORS.text3, 0.9), fontSize: 10, position: 'insideEndTop' }
+          : { show: false },
         data: [{ yAxis: markLineAt }],
       }
     })

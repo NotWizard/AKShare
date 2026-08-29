@@ -282,11 +282,13 @@ export const api = {
   getSignalHistory: (limit?: number, opts?: ReqOpts) =>
     getJSON<SignalHistory>(`/signals/history${qs([['limit', limit?.toString()]])}`, opts),
   // cities as repeated query params (?cities=北京&cities=上海) — robust vs proxies.
-  getRealEstate: (cities?: string[], opts?: ReqOpts) => {
-    if (!cities?.length) return getJSON<RealEstateResponse>('/real-estate', opts)
+  // frames=false → 仅 assessment（三维帧 ~199KB 白传；雷达/摘要只需 assessment）
+  getRealEstate: (cities?: string[], opts?: ReqOpts, frames = false) => {
     const q = new URLSearchParams()
-    for (const c of cities) q.append('cities', c)
-    return getJSON<RealEstateResponse>(`/real-estate?${q.toString()}`, opts)
+    for (const c of cities ?? []) q.append('cities', c)
+    if (frames) q.set('frames', 'true')
+    const s = q.toString()
+    return getJSON<RealEstateResponse>(`/real-estate${s ? '?' + s : ''}`, opts)
   },
   getRefreshStatus: (opts?: ReqOpts) => getJSON<RefreshResult>('/refresh/status', { ...NO_CACHE, ...opts }),
   // Starts the job and returns its id; progress comes from /refresh/stream?job_id=…

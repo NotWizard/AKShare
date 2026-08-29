@@ -55,7 +55,7 @@
 
 | 框架 | 分析维度 | 阶段 | 信号来源 |
 |---|---|---|---|
-| **美林时钟** | GDP vs 通胀 | 复苏 / 过热 / 滞胀 / 衰退 | GDP 同比 vs 4 年趋势；CPI 同比 vs 2% |
+| **美林时钟** | GDP vs 通胀 | 复苏 / 过热 / 滞胀 / 衰退 | GDP 同比 vs 潜在增长（5 期中位数趋势 + 死区/迟滞）；CPI 同比 vs 2% |
 | **信用周期** | 货币松紧 | 宽松 / 紧缩 / 中性 | M2 同比 vs 12 月均线（credit impulse） |
 | **库存周期** | 供需与生产 | 主动补库 / 被动补库 / 主动去库 / 被动去库 | PMI vs 50；工业增加值 vs 6 月均线 |
 | **债务周期** | 各部门杠杆率变化 | 加杠杆 / 去杠杆 / 稳定 / 美丽去杠杆 / 丑陋去杠杆等 | 家庭/企业/政府杠杆率 4 季度变化 + GDP 增速 |
@@ -148,7 +148,7 @@ AKShare/
 │
 ├── scripts/                     # 采集与衍生计算（后端复用）
 │   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
-│   ├── _pipeline_test.py        # 管道自查脚本（27 项 check；无 test_* 函数，pytest 不收集）
+│   ├── _pipeline_test.py        # 管道自查脚本（31 项 check；无 test_* 函数，pytest 不收集）
 │   ├── 01_fetch_data.py         # 宏观数据采集（16 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
 │   └── 02_compute_derived.py    # 衍生指标计算
 │
@@ -244,7 +244,7 @@ cd frontend && npm run dev
 | 10 | `house_price` | 70 城房价指数（新建/二手 同比/环比/定基）| 月 |
 | 11 | `new_credit` | 新增人民币贷款 | 月 |
 | 12 | `household_income` | 居民可支配收入（NBS；2026-03 改版曾失效，2026-08-09 已修复为 akshare 1.18 新路径）| 年 |
-| 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样）| 月 |
+| 13 | `bond_yield` | 10 年国债收益率（中债信息网直连，日频→月末重采样；增量：仅重抓近 2 年）| 月 |
 | 14 | `demographics` | 总人口/城镇化率（NBS 官方优先、WB 长历史回退）+ 出生率/自然增长率（WB + 2025 统计公报补充）| 年 |
 | 15 | `fiscal` | 国家财政预算收入/支出累计值 + 累计增长（NBS 月度，2015- 起）| 月 |
 | 16 | `external_demand` | 货物进出口美元口径（NBS 月度）+ 美国 ISM 制造业 PMI | 月 |
@@ -266,7 +266,7 @@ cd frontend && npm run dev
 
 `scripts/02_compute_derived.py` 合并原始表，生成两张核心表：
 
-**`derived_monthly`**（月度主表，30 列）
+**`derived_monthly`**（月度主表，32 列；各源 outer join 成日期并集，发布错位期新月不丢失）
 - M2-M1 剪刀差、实际利率（LPR1Y - CPI）、PMI 6 月均线、工业增加值趋势
 - 社融存量增速、信贷脉冲、新增贷款同比、贷款存量增速、M1 领先 PPI 标记
 
@@ -307,7 +307,7 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 | `GET /api/v1/cycles/{merrill\|credit\|inventory\|debt}` | 周期分类 + 最新阶段 |
 | `GET /api/v1/signals` | 综合信号 `[-4,+4]` + 各框架阶段 |
 | `GET /api/v1/signals/history` | 信号快照历史（倒序 + 相位翻转标注 flips）|
-| `GET /api/v1/real-estate?cities=…` | 房地产三维评估（雷达数据）|
+| `GET /api/v1/real-estate?cities=…&frames=false` | 房地产三维评估（frames=false 仅 assessment，~0.5KB；默认完整三维帧 ~199KB）|
 | `GET /api/v1/refresh/status` | 上次刷新 manifest |
 | `POST /api/v1/refresh` | 触发闸门管道（阻塞）|
 | `GET /api/v1/refresh/stream` | SSE 流式真进度 |
