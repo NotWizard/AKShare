@@ -65,15 +65,73 @@ export interface RealEstateResponse {
   [k: string]: unknown
 }
 
-export interface Commentary {
-  ts: string | null
-  data_as_of: string | null
-  composite_score: number | null
-  text: string
+export interface CommentaryProvenance {
   model: string | null
-  stale: boolean
+  endpoint: string | null
+  template_hash: string | null
+  data_as_of: Record<string, string | null> | null
+  profile: string | null
+  generated_at: string | null
+}
+
+// M4 批次形状（overall + 6 板块 sections + 出处）；regenerating=true 表示生成在途、
+// 展示的是上一批（F10 语义）。
+export interface Commentary {
   status: 'ok' | 'generating' | 'empty' | 'error'
   msg: string | null
+  hint: string | null
+  stale: boolean
+  regenerating: boolean
+  overall: string
+  sections: Record<string, string>
+  provenance: CommentaryProvenance | null
+}
+
+export interface AiProfile {
+  name: string
+  preset: 'dashscope' | 'deepseek' | 'openrouter' | 'custom'
+  endpoint: 'chat_completions' | 'responses'
+  base_url: string
+  model: string
+  temperature: number
+  source: 'user' | 'env'
+  has_key: boolean
+}
+
+export interface AiProfileList {
+  active_profile: string | null
+  profiles: AiProfile[]
+}
+
+export interface AiTestResult {
+  ok: boolean
+  latency_ms: number | null
+  error: string | null
+}
+
+export interface AiTemplatesOut {
+  defaults: Record<string, string>
+  overrides: Record<string, string>
+  template_hash: string
+}
+
+export interface AiTemplatesSaved {
+  overrides: Record<string, string>
+  template_hash: string
+}
+
+export interface CommentaryHistoryItem {
+  generated_at: string
+  model: string | null
+  profile: string | null
+  template_hash: string | null
+  status: string
+  stale: boolean
+  overall_preview: string
+}
+
+export interface CommentaryHistoryIndex {
+  items: CommentaryHistoryItem[]
 }
 
 export interface PhaseFlip {

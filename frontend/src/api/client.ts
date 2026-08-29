@@ -16,7 +16,7 @@
 //     TTL, invalidated by invalidateCache() on every successful data refresh;
 //   · failures throw ApiError with a machine-readable `kind` so the UI can name
 //     the category instead of dumping `500 {"detail":...}` at the user.
-import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth, CrclOverview, CrclMetric, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals } from './types'
+import type { DerivedFrame, CycleFrame, SignalSummary, SignalHistory, RefreshResult, RealEstateResponse, Commentary, SourcesHealth, CrclOverview, CrclMetric, CrclEvent, CrclAlertRule, CrclLogRow, CrclFundamentals, AiProfile, AiProfileList, AiTestResult, AiTemplatesOut, AiTemplatesSaved, CommentaryHistoryIndex } from './types'
 
 export const BASE = '/api/v1'
 
@@ -58,6 +58,8 @@ export interface ReqOpts {
   /** 0 disables the response cache for this call (polling endpoints). */
   ttlMs?: number
   retries?: number
+  /** JSON-serialisable request body (POST/PUT). */
+  body?: unknown
 }
 
 // ── error mapping ───────────────────────────────────────────────────────────
@@ -140,7 +142,7 @@ function forgetToken(): void {
 }
 
 // ── single attempt ──────────────────────────────────────────────────────────
-async function attempt<T>(path: string, method: 'GET' | 'POST', opts: ReqOpts): Promise<T> {
+async function attempt<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', opts: ReqOpts): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const external = opts.signal
   // One merged signal for headers AND body: the deadline no longer stops at the
@@ -150,8 +152,16 @@ async function attempt<T>(path: string, method: 'GET' | 'POST', opts: ReqOpts): 
     : AbortSignal.timeout(timeoutMs)
   try {
     // GETs stay header-free: they are read-only, so they need no capability.
-    const headers = method === 'POST' ? { [TOKEN_HEADER]: await apiToken() } : undefined
-    const resp = await fetch(`${BASE}${path}`, { method, signal, headers })
+    // Every mutation (POST/PUT/DELETE) carries the token; a JSON body is attached
+    // when the caller supplies one.
+    const headers: Record<string, string> = {}
+    if (method !== 'GET') headers[TOKEN_HEADER] = await apiToken()
+    if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+    const resp = await fetch(`${BASE}${path}`, {
+      method, signal,
+      headers: Object.keys(headers).length ? headers : undefined,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    })
     if (!resp.ok) throw httpError(resp.status, await resp.text().catch(() => ''))
     return (await resp.json()) as T
   } catch (e) {
@@ -229,20 +239,32 @@ async function getJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
   return p as Promise<T>
 }
 
-// POST is never retried, never cached, never deduped (not idempotent). The ONE
+// Mutations are never retried, never cached, never deduped (not idempotent). The ONE
 // exception is a REJECTED TOKEN: the backend mints a new token on every restart,
 // so a long-open tab holds a stale one. A 401/403 is raised by the dependency
-// BEFORE the endpoint body runs, so re-reading /session and replaying the POST
+// BEFORE the endpoint body runs, so re-reading /session and replaying the call
 // once cannot double-fire a refresh or a paid LLM call.
-async function postJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+async function mutateJSON<T>(path: string, method: 'POST' | 'PUT' | 'DELETE', opts: ReqOpts): Promise<T> {
   try {
-    return await attempt<T>(path, 'POST', opts)
+    return await attempt<T>(path, method, opts)
   } catch (e) {
     const err = e as ApiError
     if (err.status !== 401 && err.status !== 403) throw err
     forgetToken()
-    return attempt<T>(path, 'POST', opts)
+    return attempt<T>(path, method, opts)
   }
+}
+
+async function postJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  return mutateJSON(path, 'POST', opts)
+}
+
+async function putJSON<T>(path: string, body: unknown, opts: ReqOpts = {}): Promise<T> {
+  return mutateJSON(path, 'PUT', { ...opts, body })
+}
+
+async function delJSON<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  return mutateJSON(path, 'DELETE', opts)
 }
 
 // build "?a=..&b=.." from defined pairs (URLSearchParams drops undefined
@@ -297,7 +319,26 @@ export const api = {
   triggerCrclRefresh: (opts?: ReqOpts) => postJSON<JobStarted>('/crcl/refresh', opts),
   getSourcesHealth: (opts?: ReqOpts) => getJSON<SourcesHealth>('/sources/health', opts),
   getCommentary: (opts?: ReqOpts) => getJSON<Commentary>('/commentary', { ...NO_CACHE, ...opts }),
+  // 同步重新生成：最坏 9 次串行模型调用，前端 30s abort 后后端仍在跑——调用方需按
+  // 超时→轮询处理（CommentaryCard 已内置该逻辑）
   regenerateCommentary: (opts?: ReqOpts) => postJSON<Commentary>('/commentary/regenerate', opts),
+  // 评论批次历史（M4c）：索引 / 单批详情
+  getCommentaryHistory: (opts?: ReqOpts) => getJSON<CommentaryHistoryIndex>('/commentary/history', opts),
+  getCommentaryBatch: (ts: string, opts?: ReqOpts) =>
+    getJSON<Commentary>(`/commentary/history${qs([['ts', ts]])}`, opts),
+  // AI 配置（M4a）：profiles CRUD / 连接测试 / 默认项；M4c：模板覆盖
+  getAiProfiles: (opts?: ReqOpts) => getJSON<AiProfileList>('/ai/profiles', opts),
+  createAiProfile: (p: unknown, opts?: ReqOpts) => postJSON<AiProfile>('/ai/profiles', { ...opts, body: p }),
+  updateAiProfile: (name: string, p: unknown, opts?: ReqOpts) =>
+    putJSON<AiProfile>(`/ai/profiles/${encodeURIComponent(name)}`, p, opts),
+  deleteAiProfile: (name: string, opts?: ReqOpts) =>
+    delJSON<{ status: string }>(`/ai/profiles/${encodeURIComponent(name)}`, opts),
+  testAiProfile: (name: string, opts?: ReqOpts) =>
+    postJSON<AiTestResult>(`/ai/profiles/${encodeURIComponent(name)}/test`, opts),
+  setAiActive: (name: string, opts?: ReqOpts) => postJSON<AiProfileList>('/ai/active', { ...opts, body: { name } }),
+  getAiTemplates: (opts?: ReqOpts) => getJSON<AiTemplatesOut>('/ai/templates', opts),
+  saveAiTemplates: (templates: Record<string, string>, opts?: ReqOpts) =>
+    putJSON<AiTemplatesSaved>('/ai/templates', { templates }, opts),
   // CRCL 监控
   getCrclOverview: (opts?: ReqOpts) => getJSON<CrclOverview>('/crcl/overview', opts),
   getCrclMetrics: (keys?: string, opts?: ReqOpts) =>

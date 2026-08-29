@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
+import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import { buildDualAxisLine, buildScatterQuadrant, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -48,6 +49,7 @@ const pmiOpt = computed(() => markRaw(buildMultiLine(pmiDm.value, [{ col: 'pmi_o
     <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ipOpt" height="320px" />
     </GraphCard>
+    <SectionCommentary section="inventory" />
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading" :error="error" @retry="load">
       <EChart :option="quadOpt" :not-merge="true" height="360px" />
     </GraphCard>

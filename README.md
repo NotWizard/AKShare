@@ -46,7 +46,7 @@
 - **图例中文化**：所有图表图例/轴名统一中文（NBS/央行/NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等特有名词保留英文缩语），见 `options.ts` `COL_ZH`
 - **居民真实杠杆空间**：债务周期页「杠杆率 vs 债务收入比」图——杠杆率看似 ~60%，债务收入比已 ~120-140%，更真实反映居民加杠杆空间
 - **通胀环比图**：美林页「CPI vs PPI 环比」+「PPI 同比」图，与同比图呼应
-- **AI 宏观评论**：OpenAI-compatible 模型对数据快照生成三段式评论（未配置模型时优雅降级）
+- **AI 宏观评论**：OpenAI-compatible 模型对分板块数据快照生成结构化评论（Overview 总评 + 6 细分页板块切片；配套 AI 设置页：profiles 多配置 + 密钥入 macOS 钥匙串 + 提示词模板编辑器 + 生成历史；未配置时优雅降级并给出引导）
 - **本地 SQLite**：采集一次后离线运行，无需重复联网
 
 ---
@@ -100,7 +100,7 @@
 ```
 
 - `backend/` — FastAPI：薄包装 `analysis/`，Pydantic schema + OpenAPI 契约 + golden test
-- `frontend/` — Vue 3 SPA：6 页视图、Pinia 全局联动、ECharts 图表组件
+- `frontend/` — Vue 3 SPA：10 页视图、Pinia 全局联动、ECharts 图表组件
 - **单进程托管**：`frontend/dist` 由 FastAPI 在 `:8000` 上挂载（`/assets` + 404 回落到 `index.html`），`run_app.sh` 不再起 `vite preview`；`:5173` 只在 `npm run dev` 热重载时存在
 - `analysis/`、`scripts/_pipeline.py`、`scripts/01_fetch_data.py`、`02_compute_derived.py` — **核心保值，原样复用**
 
@@ -297,7 +297,7 @@ scripts/schedule/schedule_uninstall.sh  # 卸载
 
 FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://localhost:8000/docs`。
 
-> ⚠️ `shared/openapi.json` 是**手工导出的陈旧快照**：只有 14 条路径，缺全部 8 条 `/crcl/*`（overview / metrics / events / fundamentals / alerts / logs / refresh / refresh/stream）。以运行中的 `http://localhost:8000/openapi.json` 为准；改契约后需重新导出该文件。
+> `shared/openapi.json` 由 `scripts/gen_openapi.py` 从运行中的应用导出，并有 `test_openapi_drift` 守门（漂移即 CI 红）；改契约后必须重新导出。
 
 | 方法 路径 | 作用 |
 |---|---|
@@ -308,6 +308,14 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 | `GET /api/v1/signals` | 综合信号 `[-4,+4]` + 各框架阶段 |
 | `GET /api/v1/signals/history` | 信号快照历史（倒序 + 相位翻转标注 flips）|
 | `GET /api/v1/real-estate?cities=…&frames=false` | 房地产三维评估（frames=false 仅 assessment，~0.5KB；默认完整三维帧 ~199KB）|
+| `GET /api/v1/commentary` | AI 评论当前批（overall + 6 板块 + 出处；ok/generating/empty/error）|
+| `POST /api/v1/commentary/regenerate` | 同步重新生成（🔒 令牌守门）|
+| `GET /api/v1/commentary/history` | 评论批次历史索引（?ts=… 单批详情）|
+| `GET/POST/PUT/DELETE /api/v1/ai/profiles[…]` | AI 配置 profiles（写操作 🔒；密钥只进钥匙串）|
+| `POST /api/v1/ai/active` | 设默认 profile（🔒）|
+| `GET/PUT /api/v1/ai/templates` | 提示词模板默认全文 + 覆盖（PUT 🔒）|
+| `GET /api/v1/session` | 本机能力令牌（F4；同源页面自取，跨站页面读不到响应体）|
+| `GET /api/v1/crcl/*` | CRCL 监控（overview / metrics / events / fundamentals / alerts / logs / refresh 🔒）|
 | `GET /api/v1/refresh/status` | 上次刷新 manifest |
 | `POST /api/v1/refresh` | 触发闸门管道（阻塞）|
 | `GET /api/v1/refresh/stream` | SSE 流式真进度 |
@@ -320,7 +328,7 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 
 ## 前端架构
 
-- **8 页视图**（`pages/`）：Overview / MerrillClock / CreditCycle / InventoryCycle / DebtCycle / RealEstate / Demographics / FiscalExternal（财政与外需）
+- **10 页视图**（`pages/`）：Overview / MerrillClock / CreditCycle / InventoryCycle / DebtCycle / RealEstate / Demographics / FiscalExternal（财政与外需）/ CrclMonitor（CRCL 监控）/ AISettings（AI 设置）
 - **Pinia stores**：`filters`（全局日期联动——改一处全图重取）、`refresh`（SSE 进度消费）
 - **图表层**（`components/charts/options.ts`）：纯函数 builder——`buildDualAxisLine` / `buildStackedArea` / `buildBarLineCombo` / `buildMultiLine` / `buildScatterQuadrant` / `buildCreditM2Chart` / `buildCreditImpulseChart` / `buildSpreadChart` / `buildRadar`
 - **EChart.vue**：vue-echarts 封装，按需注册（Line/Bar/Scatter/Radar + 组件）

@@ -2,6 +2,73 @@
 
 ## [Unreleased]
 
+### M4 移植：AI 评论 v2（配置层 + 结构化分板块生成 + 呈现层）并入 1.2.0 基线
+
+概述：把本机遗留的 M4a/b/c 三个里程碑（此前从未推送，存于 archive/audit-fixes-local）
+移植到含 G01–G30 加固与 F4 令牌鉴权的新基线；冲突采「M4 功能 × 新基线加固」双向合并，
+非简单覆盖。
+
+变更：
+  1. **[配置层 M4a]** 新增 `core/ai_config.py`（data/ai_config.json + COMMENTARY_* env 兜底）
+     与 `core/keychain.py`（macOS security CLI；`MACRO_AI_KEYCHAIN=off` 进程内兜底）；
+     `core/ai_client.py` 双端点适配器（chat_completions / responses）；`api/v1/ai.py`
+     profiles CRUD + 连接测试 + 默认项 + 模板覆盖（M4c）。
+  2. **[生成层 M4b]** `core/commentary.py` 重写为分板块快照 + 结构化生成（校验→带错误反馈
+     重试一次→逐板块补调降级）+ 7 行批次持久化 + 出处（model/endpoint/template_hash/profile）。
+     合并新基线加固：连接改走 `core/db.connect()` 工厂（WAL + busy_timeout，A-M1）；删除
+     `_busy` 旗标，busy 由 `_gen_lock.locked()` 派生（F10）；生成在途时 `get_current` 返回
+     上一批 + `regenerating: True` 而不是清空卡片；读取只豁免「no such table」，其余冒泡（F13）。
+  3. **[呈现层 M4c]** 前端新增 `AISettings.vue`（profiles + 模板编辑器 + 生成历史）、
+     `SectionCommentary.vue`（6 细分页首图后的板块切片）、`useCommentary.ts`（模块级单飞 +
+     adopt() 同步）；`CommentaryCard.vue` 换 M4 形状（overall + provenance 出处行 + hint CTA），
+     保留新基线的轮询引擎（setTimeout 链 + 2 分钟 deadline + abort + 软提示）。
+  4. **[鉴权整合 F4]** M4 的全部 9 个变更端点（含 AI profiles CRUD / 模板保存）挂
+     `Depends(require_token)`；`client.ts` 传输层扩展 PUT/DELETE + JSON body，变更一律携带
+     `X-API-Token`（401/403 自动重取重放一次）。
+  5. **[测试]** M4 的 test_commentary.py（21 例）/ test_ai_client.py / test_ai_profiles_api.py
+     并入并适配令牌；重写 test_commentary_busy / errors / response_shape 到新批次形状；
+     test_db_factory_callers 的 persist 用例改对 `_persist_batch`；test_mutation_auth 新增
+     AI 端点拒绝用例 + **全路由守门清扫**（任何 POST/PUT/DELETE/PATCH 未挂 require_token 即红）。
+  6. **[契约]** `shared/openapi.json` 重导（23 → 29 paths：/ai/* ×8 + /commentary/history）。
+
+验证：后端 pytest 375 passed；_pipeline_test 31 项全过；vitest 42/42；vue-tsc 0 error；
+`vite build` ✓；openapi drift 门禁通过；uvicorn 真机冒烟（/session 令牌、/ai/profiles、
+/ai/templates 8 默认模板、/commentary 空态 hint、无令牌 401 / 带令牌 404 语义正确）。
+
+### M4 port: AI commentary v2 onto the 1.2.0 baseline (English)
+
+Summary: Ports the three never-pushed M4 milestones (kept in archive/audit-fixes-local) onto the
+new baseline with G01–G30 hardening and F4 token auth. Conflicts were merged both ways
+(M4 features × baseline hardening), never overwritten.
+
+Changes:
+  1. **[config M4a]** new core/ai_config.py (data/ai_config.json + COMMENTARY_* env fallback),
+     core/keychain.py (macOS security CLI; in-process fallback via MACRO_AI_KEYCHAIN=off),
+     core/ai_client.py (chat_completions/responses dialects), api/v1/ai.py (profiles CRUD,
+     connection test, active selection, template overrides).
+  2. **[generation M4b]** core/commentary.py rewritten: per-section snapshot + structured
+     generation (validate → one feedback retry → per-section fallback) + 7-row batches +
+     provenance. Baseline hardening merged in: connections via the core/db.connect factory
+     (WAL + busy_timeout), the racy `_busy` Event deleted (busy derived from `_gen_lock.locked()`),
+     get_current returns the previous batch with `regenerating: True` while busy, and only
+     "no such table" is swallowed (everything else bubbles).
+  3. **[presentation M4c]** new AISettings.vue (profiles + template editor + generation history),
+     SectionCommentary.vue (per-section slice after each detail page's first chart),
+     useCommentary.ts (module-level single-flight + adopt()); CommentaryCard.vue takes the M4
+     shape (overall + provenance + hint CTA) while keeping the baseline's polling engine
+     (setTimeout chain + 2-min deadline + abort + soft notes).
+  4. **[auth F4]** all 9 mutating endpoints (incl. AI profile CRUD/template saves) require the
+     capability token; client.ts gains PUT/DELETE + JSON bodies, with one token-refetch replay
+     on 401/403.
+  5. **[tests]** M4 suites ported and token-adapted; busy/errors/response_shape rewritten to the
+     batch shape; test_mutation_auth gains AI-endpoint refusals + a full-route sweep that fails
+     on ANY unguarded mutating endpoint.
+  6. **[contract]** shared/openapi.json regenerated (23 → 29 paths).
+
+Verification: backend pytest 375 passed; 31 pipeline checks green; vitest 42/42; vue-tsc clean;
+vite build ✓; openapi drift gate passes; live uvicorn smoke (session token, /ai/*, /commentary
+empty+hint, 401 without / 404 with token) all correct.
+
 ### 审计修复二次扫描（基于 1.2.0 基线）
 
 概述：对 1.2.0 基线做全仓复审，把首轮审计（本地遗留批次）中远端仍缺的修复重做手术；远端已覆盖的同类项（多粒度闸门、日期参数 422、flock 锁、非零退出、sign-selection 等）不重复造轮子。

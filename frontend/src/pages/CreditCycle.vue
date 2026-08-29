@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
+import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import { buildCreditM2Chart, buildCreditImpulseChart, buildBarLineCombo, buildDualAxisLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -67,6 +68,7 @@ const ncOpt = computed(() => markRaw(buildBarLineCombo(ncDm.value, 'new_rmb_loan
     <GraphCard title="M2 同比与趋势" tip="M2（广义货币）同比增速 vs 12 月均线趋势；背景色为信用周期宽松/紧缩阶段。1992–1996 仅年度结存。" :loading="loading" :error="error" @retry="load">
       <EChart :option="m2Opt" height="360px" />
     </GraphCard>
+    <SectionCommentary section="credit" />
 
     <GraphCard title="M1 vs M2 同比" tip="M2-M1 剪刀差扩大常预示需求偏弱；M1 反映企业活期存款与资金活化。" :loading="loading" :error="error" @retry="load">
       <EChart :option="m1m2Opt" height="300px" />

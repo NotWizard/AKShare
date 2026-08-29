@@ -12,6 +12,7 @@ const items = [
   { to: '/demographics', label: '人口与城镇化', icon: '◎' },
   { to: '/fiscal-external', label: '财政与外需', icon: '◫' },
   { to: '/crcl-monitor', label: 'CRCL 监控', icon: '◒' },
+  { to: '/ai-settings', label: 'AI 设置', icon: '⚙' },
 ]
 // Plain function, not a computed factory: the template re-evaluates on every
 // route change anyway, so wrapping each call in computed() only created 9 new

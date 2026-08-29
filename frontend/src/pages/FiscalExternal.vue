@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
+import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import { buildMultiLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -42,6 +43,7 @@ const ismOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'us_ism_
     <GraphCard title="财政收支累计同比" tip="国家财政收入/支出累计增长（%）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revYoyOpt" height="320px" />
     </GraphCard>
+    <SectionCommentary section="fiscal_external" />
     <GraphCard title="财政收支累计值" tip="国家财政收入/支出累计值（亿元）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revCumOpt" height="320px" />
     </GraphCard>

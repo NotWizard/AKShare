@@ -78,23 +78,29 @@ def test_read_history_still_reads_rows(tmp_path):
 
 
 def test_persist_still_commits(tmp_path, monkeypatch):
-    """回归：换工厂后 `_persist` 的建表/INSERT/commit 仍然落盘。"""
+    """回归：换工厂后 `_persist_batch`（M4 起为 7 行一批）的建表/INSERT/commit 仍然落盘。"""
     db_file = tmp_path / "macro.db"
     monkeypatch.setattr(commentary, "DB_PATH", db_file)
     monkeypatch.setattr(commentary, "_table_ready", False)
 
-    row = commentary._persist(
-        {"data_as_of": "2026-06", "composite_score": 2}, "评论正文", "test-model")
-    assert row["status"] == "ok" and row["text"] == "评论正文"
+    snapshot = {"data_as_of": {"derived_monthly": "2026-06"}, "sections": {}}
+    parts = {name: f"{name} 文本" for name in (*commentary.SECTIONS, "overall")}
+    profile = {"name": "p1", "model": "test-model", "endpoint": "chat_completions"}
+    batch = commentary._persist_batch(snapshot, parts, profile, commentary.DEFAULT_TEMPLATES)
+
+    assert batch["status"] == "ok" and batch["overall"] == "overall 文本"
+    assert set(batch["sections"]) == set(commentary.SECTIONS)
 
     conn = sqlite3.connect(db_file)       # 全新裸连接读回 → 证明 commit 生效
     try:
         got = conn.execute(
-            f"SELECT data_as_of, composite_score, text, model, stale "
-            f"FROM {commentary.COMMENTARY_TABLE}").fetchall()
+            f"SELECT section, text, model, stale FROM {commentary.COMMENTARY_TABLE} "
+            f"ORDER BY id").fetchall()
     finally:
         conn.close()
-    assert got == [("2026-06", 2, "评论正文", "test-model", 0)]
+    assert len(got) == 7                                   # 6 板块 + overall
+    assert all(model == "test-model" and stale == 0 for _, _, model, stale in got)
+    assert ("overall", "overall 文本") in [(s, t) for s, t, _, _ in got]
 
 
 def test_live_db_files_are_only_ever_copied():

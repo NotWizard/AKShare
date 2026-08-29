@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
+import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
@@ -78,6 +79,7 @@ const radarOpt = computed(() => markRaw(buildRadar(scores())))
     <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading" :error="error" @retry="load">
       <EChart :option="priceOpt" height="380px" />
     </GraphCard>
+    <SectionCommentary section="real_estate" />
     <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading" :error="error" @retry="load">
       <EChart :option="rateOpt" height="300px" />
     </GraphCard>

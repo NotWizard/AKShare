@@ -55,6 +55,15 @@ REFRESH_STREAM = "/api/v1/refresh/stream"
 CRCL_REFRESH = "/api/v1/crcl/refresh"
 CRCL_STREAM = "/api/v1/crcl/refresh/stream"
 REGENERATE = "/api/v1/commentary/regenerate"
+# M4 移植新增的 AI 变更端点（F4 同规则：令牌拒绝必须发生在端点体之前，零副作用）
+AI_MUTATIONS = [
+    ("POST", "/api/v1/ai/profiles"),
+    ("PUT", "/api/v1/ai/profiles/p1"),
+    ("DELETE", "/api/v1/ai/profiles/p1"),
+    ("POST", "/api/v1/ai/profiles/p1/test"),
+    ("POST", "/api/v1/ai/active"),
+    ("PUT", "/api/v1/ai/templates"),
+]
 
 
 @pytest.fixture
@@ -101,7 +110,7 @@ def drivers(monkeypatch):
     def fake_generate(blocking=False):
         calls.append("llm_generate")
         started.set()
-        return {"status": "ok", "text": "生成的评论", "ts": None, "msg": ""}
+        return {"status": "ok", "overall": "生成的评论", "msg": None}
 
     monkeypatch.setattr(refresh, "run_refresh", fake_run_refresh)
     monkeypatch.setattr(crcl_collect, "collect_all", fake_collect_all)
@@ -151,6 +160,41 @@ def test_refusals_are_401_403_never_500(drivers, token):
     assert auth.HEADER_NAME in body["detail"], "the message must name the header"
 
 
+@pytest.mark.parametrize("method,path", AI_MUTATIONS)
+def test_ai_mutations_refused_without_token(method, path, token):
+    """M4 新增的 AI 变更端点：无令牌/错令牌一律 401/403，鉴权依赖先于端点体执行。"""
+    assert client.request(method, path).status_code == 401
+    assert client.request(method, path, headers=auth_header("wrong")).status_code == 403
+
+
+def test_every_mutating_route_is_token_guarded():
+    """全路由清扫：任何 POST/PUT/DELETE/PATCH 端点都必须挂 require_token——
+    防未来新增变更端点忘了守门（本仓已因此类遗漏被 CSRF 过一次）。
+
+    检测两处：route.dependencies 的原始 Depends 列表（.dependency）与
+    dependant 的子依赖（新版 FastAPI 里属性名是 .call，不再是 .dependency）。
+    """
+    def _guarded(r) -> bool:
+        raw = getattr(r, "dependencies", None) or []
+        if any(getattr(d, "dependency", None) is auth.require_token for d in raw):
+            return True
+        dependant = getattr(r, "dependant", None)
+        deps = getattr(dependant, "dependencies", []) if dependant else []
+        return any(
+            (getattr(d, "dependency", None) or getattr(d, "call", None)) is auth.require_token
+            for d in deps
+        )
+
+    unguarded = []
+    for r in _walk(app.routes):
+        methods = getattr(r, "methods", None) or set()
+        if not methods & {"POST", "PUT", "DELETE", "PATCH"}:
+            continue
+        if not _guarded(r):
+            unguarded.append(f"{sorted(methods)} {getattr(r, 'path', '?')}")
+    assert unguarded == [], f"未守门的变更端点: {unguarded}"
+
+
 # ═══════════════ 2. with the token the flow proceeds as before ══════════════
 def test_post_refresh_with_token_starts_the_job(drivers, token):
     calls, started = drivers
@@ -174,7 +218,7 @@ def test_post_crcl_refresh_with_token_starts_the_job(drivers, token):
 def test_post_regenerate_with_token_still_returns_the_commentary(drivers, token):
     calls, _ = drivers
     body = client.post(REGENERATE, headers=auth_header(token)).json()
-    assert body["text"] == "生成的评论"
+    assert body["overall"] == "生成的评论"
     assert calls == ["llm_generate"]
 
 

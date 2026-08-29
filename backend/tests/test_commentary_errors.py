@@ -8,6 +8,9 @@
 `sqlite3.OperationalError` 且消息含 "no such table" 这一个良性分支（fresh install
 不 500），其余一律冒泡。
 
+M4 移植后：`get_current` 读的是 `_latest_batch`（不再是 `_latest_row`），空表回
+`_empty()`（status=empty + 无配置时附 hint）；良性/冒泡口径不变。
+
 Run:  .venv312/bin/python -m pytest backend/tests/test_commentary_errors.py -q
 """
 
@@ -37,7 +40,7 @@ def test_programming_error_propagates(monkeypatch, tmp_path):
     def boom(conn):
         raise AttributeError("'NoneType' object has no attribute 'fetchone'")
 
-    monkeypatch.setattr(commentary, "_latest_row", boom)
+    monkeypatch.setattr(commentary, "_latest_batch", boom)
 
     with pytest.raises(AttributeError):
         commentary.get_current()
@@ -51,7 +54,7 @@ def test_non_benign_sqlite_error_propagates(monkeypatch, tmp_path):
     def drift(conn):
         raise sqlite3.OperationalError("no such column: ts")
 
-    monkeypatch.setattr(commentary, "_latest_row", drift)
+    monkeypatch.setattr(commentary, "_latest_batch", drift)
 
     with pytest.raises(sqlite3.OperationalError):
         commentary.get_current()
@@ -63,7 +66,8 @@ def test_missing_table_still_returns_benign_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(commentary, "_table_ready", True)   # 跳过 CREATE TABLE
 
     out = commentary.get_current()
-    assert out == {"status": "empty", "msg": "暂无评论", "text": ""}
+    assert out["status"] == "empty"
+    assert out["msg"] == "暂无评论"
 
 
 def test_fresh_install_creates_table_and_reports_empty(monkeypatch, tmp_path):

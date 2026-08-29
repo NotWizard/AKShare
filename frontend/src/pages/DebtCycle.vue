@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
 import { useFiltersStore } from '@/stores/filters'
 import { useRefreshStore } from '@/stores/refresh'
+import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import { buildStackedArea, buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
@@ -54,6 +55,7 @@ const hhOpt = computed(() => markRaw(buildMultiLine(dqi.value, [{ col: 'househol
     <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="stackedOpt" height="380px" />
     </GraphCard>
+    <SectionCommentary section="debt" />
     <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="govOpt" height="320px" />
     </GraphCard>

@@ -647,6 +647,54 @@
         }
       }
     },
+    "/api/v1/commentary/history": {
+      "get": {
+        "tags": [
+          "commentary"
+        ],
+        "summary": "History",
+        "description": "批次索引（ts 倒序）；带 ?ts=… 返回该批完整详情，未知 ts → 404。",
+        "operationId": "history_api_v1_commentary_history_get",
+        "parameters": [
+          {
+            "name": "ts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sources/health": {
       "get": {
         "tags": [
@@ -959,6 +1007,403 @@
         }
       }
     },
+    "/api/v1/ai/profiles": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "List Profiles",
+        "operationId": "list_profiles_api_v1_ai_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Create Profile",
+        "operationId": "create_profile_api_v1_ai_profiles_post",
+        "parameters": [
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/profiles/{name}": {
+      "put": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Update Profile",
+        "operationId": "update_profile_api_v1_ai_profiles__name__put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Delete Profile",
+        "operationId": "delete_profile_api_v1_ai_profiles__name__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/profiles/{name}/test": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Test Profile",
+        "operationId": "test_profile_api_v1_ai_profiles__name__test_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/active": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Set Active",
+        "operationId": "set_active_api_v1_ai_active_post",
+        "parameters": [
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActiveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/templates": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Get Templates",
+        "description": "默认 8 模板全文 + 当前覆盖（规范化）+ template_hash。",
+        "operationId": "get_templates_api_v1_ai_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatesOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Save Templates",
+        "description": "整 map 保存覆盖（空串 = 移除）；经 _save 钩子 mark_stale。",
+        "operationId": "save_templates_api_v1_ai_templates_put",
+        "parameters": [
+          {
+            "name": "X-API-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatesSaved"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -995,61 +1440,21 @@
   },
   "components": {
     "schemas": {
+      "ActiveIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ActiveIn"
+      },
       "Commentary": {
         "properties": {
-          "ts": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ts"
-          },
-          "data_as_of": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data As Of"
-          },
-          "composite_score": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Composite Score"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "stale": {
-            "type": "boolean",
-            "title": "Stale",
-            "default": false
-          },
           "status": {
             "type": "string",
             "title": "Status",
@@ -1065,12 +1470,53 @@
               }
             ],
             "title": "Msg"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "default": false
+          },
+          "regenerating": {
+            "type": "boolean",
+            "title": "Regenerating",
+            "default": false
+          },
+          "overall": {
+            "type": "string",
+            "title": "Overall",
+            "default": ""
+          },
+          "sections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Sections",
+            "default": {}
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Provenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
-        "required": [
-          "text"
-        ],
         "title": "Commentary"
       },
       "CycleFrame": {
@@ -1202,6 +1648,329 @@
           "framework"
         ],
         "title": "PhaseFlip"
+      },
+      "ProfileCreate": {
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "dashscope",
+              "deepseek",
+              "openrouter",
+              "custom"
+            ],
+            "title": "Preset",
+            "default": "custom"
+          },
+          "endpoint": {
+            "type": "string",
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Endpoint",
+            "default": "chat_completions"
+          },
+          "base_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Base Url"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model"
+          },
+          "temperature": {
+            "type": "number",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "default": 0.3
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "title": "Name"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_url",
+          "model",
+          "name"
+        ],
+        "title": "ProfileCreate"
+      },
+      "ProfileList": {
+        "properties": {
+          "active_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Profile"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileOut"
+            },
+            "type": "array",
+            "title": "Profiles",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ProfileList"
+      },
+      "ProfileOut": {
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "dashscope",
+              "deepseek",
+              "openrouter",
+              "custom"
+            ],
+            "title": "Preset",
+            "default": "custom"
+          },
+          "endpoint": {
+            "type": "string",
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Endpoint",
+            "default": "chat_completions"
+          },
+          "base_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Base Url"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model"
+          },
+          "temperature": {
+            "type": "number",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "default": 0.3
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user",
+              "env"
+            ],
+            "title": "Source",
+            "default": "user"
+          },
+          "has_key": {
+            "type": "boolean",
+            "title": "Has Key",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_url",
+          "model",
+          "name"
+        ],
+        "title": "ProfileOut"
+      },
+      "ProfileUpdate": {
+        "properties": {
+          "preset": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dashscope",
+                  "deepseek",
+                  "openrouter",
+                  "custom"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "chat_completions",
+                  "responses"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 2.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "title": "ProfileUpdate"
+      },
+      "Provenance": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "template_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Hash"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "title": "Provenance"
       },
       "RefreshResult": {
         "properties": {
@@ -1578,6 +2347,107 @@
           "status"
         ],
         "title": "SourcesHealth"
+      },
+      "TemplatesOut": {
+        "properties": {
+          "defaults": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Defaults"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Overrides"
+          },
+          "template_hash": {
+            "type": "string",
+            "title": "Template Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "defaults",
+          "overrides",
+          "template_hash"
+        ],
+        "title": "TemplatesOut"
+      },
+      "TemplatesSaved": {
+        "properties": {
+          "overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Overrides"
+          },
+          "template_hash": {
+            "type": "string",
+            "title": "Template Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overrides",
+          "template_hash"
+        ],
+        "title": "TemplatesSaved"
+      },
+      "TemplatesUpdate": {
+        "properties": {
+          "templates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Templates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "templates"
+        ],
+        "title": "TemplatesUpdate"
+      },
+      "TestResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "TestResult"
       },
       "ValidationError": {
         "properties": {

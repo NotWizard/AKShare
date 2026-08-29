@@ -21,6 +21,7 @@ data/backups/
 data/vintages/*
 !data/vintages/macro_data_20260824_181018.db
 data/last_run.json
+data/ai_config.json*
 data/.dashcache/
 # 单飞锁：宏观刷新用 .refresh.lock、CRCL 采集用 .crcl_collect.lock（G09 新增），
 # 都是 flock 的运行期文件，用通配一并忽略，避免每次跑完冒出未跟踪文件。
