@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // AI 设置 — profiles 管理 + 连接测试（M4a 配置层）+ 模板编辑器 + 生成历史（M4c 呈现层）。
 // 纯页面内局部 ref，不建 pinia store（设置页无跨组件共享态，YAGNI）。
+// 布局（UI 重设计）：三大块从全宽平铺改为分区 tab；模板编辑器改主-从布局（左键列表 · 右编辑面板）。
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { api } from '@/api/client'
 import type { AiProfile, AiProfileList, AiTestResult, Commentary, CommentaryHistoryItem } from '@/api/types'
@@ -14,8 +15,13 @@ const PRESETS: Record<AiProfile['preset'], string> = {
 const PRESET_LABELS: Record<AiProfile['preset'], string> = {
   dashscope: '通义 DashScope', deepseek: 'DeepSeek', openrouter: 'OpenRouter', custom: '自定义',
 }
-const btnCls = 'text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2'
+const btnCls = 'text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors disabled:opacity-50'
 const inputCls = 'w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-sm text-text placeholder:text-text-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'
+
+// ── 页内分区（平铺三大块改 tab）─────────────────────────────────────────────
+type Section = 'profiles' | 'templates' | 'history'
+const section = ref<Section>('profiles')
+const SECTIONS: [Section, string][] = [['profiles', 'Profiles 配置'], ['templates', '提示词模板'], ['history', '生成历史']]
 
 const active = ref<string | null>(null)
 const profiles = ref<AiProfile[]>([])
@@ -48,7 +54,7 @@ async function remove(name: string) {
   catch (e) { pageError.value = (e as Error).message }
 }
 
-// ── 模板编辑器（M4c）────────────────────────────────────────────────────────
+// ── 模板编辑器（M4c；主-从布局）─────────────────────────────────────────────
 const TPL_ORDER = ['system', 'merrill', 'credit', 'inventory', 'debt', 'real_estate', 'fiscal_external', 'overall']
 const TPL_LABELS: Record<string, string> = {
   system: '系统提示', merrill: '美林时钟', credit: '信用周期', inventory: '库存周期',
@@ -61,6 +67,7 @@ const tplHash = ref('')
 const tplSaving = ref(false)
 const tplMsg = ref<string | null>(null)
 const tplMsgOk = ref(true)
+const tplSel = ref('system')   // 主-从布局当前选中的模板键
 // 无改动不保存：避免误触 _save 造成假 stale
 const tplDirty = computed(() => JSON.stringify(tplDraft.value) !== JSON.stringify(tplInitial.value))
 
@@ -165,14 +172,27 @@ async function submit() {
 <template>
   <div class="p-6 space-y-5">
     <header>
-      <h1 class="text-xl font-bold text-text">AI 设置</h1>
+      <h1 class="text-xl font-bold text-text tracking-tight">AI 设置</h1>
       <p class="text-xs text-text-3 mt-1">AI 生成配置 profiles — 密钥存 macOS 钥匙串，配置文件零密钥</p>
     </header>
 
-    <!-- profile 列表卡 -->
-    <div class="bg-card border border-border rounded-xl p-4">
+    <!-- 分区 tab（与全局日期分段控件同一语汇） -->
+    <div class="flex items-center rounded-lg border border-border p-0.5 gap-0.5 w-fit" role="tablist" aria-label="AI 设置分区">
+      <button
+        v-for="t in SECTIONS"
+        :key="t[0]"
+        role="tab"
+        :aria-selected="section === t[0]"
+        class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150"
+        :class="section === t[0] ? 'bg-accent-soft text-accent' : 'text-text-3 hover:text-text-2'"
+        @click="section = t[0]"
+      >{{ t[1] }}</button>
+    </div>
+
+    <!-- ═══ Profiles 配置 ═══ -->
+    <div v-if="section === 'profiles'" class="bg-card border border-border rounded-xl p-4" role="tabpanel">
       <div class="flex items-center justify-between mb-3">
-        <div class="text-xs text-text-3 uppercase tracking-wide">Profiles</div>
+        <div class="text-[11px] font-semibold tracking-[0.14em] text-text-3 select-none">PROFILES</div>
         <button :class="btnCls" @click="openCreate($event.target)">＋ 新增</button>
       </div>
 
@@ -181,7 +201,7 @@ async function submit() {
         暂无配置——新增 profile 或设置 COMMENTARY_BASE_URL / COMMENTARY_API_KEY / COMMENTARY_MODEL 环境变量
       </div>
 
-      <div v-for="p in profiles" :key="p.name" class="py-2 border-b border-border last:border-0">
+      <div v-for="p in profiles" :key="p.name" class="py-3 border-b border-border last:border-0">
         <div class="flex items-center gap-2 text-sm">
           <span v-if="active === p.name" class="text-warn" aria-label="当前默认">★</span>
           <span class="font-medium text-text">{{ p.name }}</span>
@@ -191,7 +211,7 @@ async function submit() {
           <span v-if="p.has_key" class="text-xs text-up">✓ 密钥已存</span>
           <span v-else class="text-xs text-down">✗ 无密钥</span>
         </div>
-        <div class="text-[11px] text-text-3 mt-0.5">{{ p.preset }} · {{ p.endpoint }} · {{ p.model }}</div>
+        <div class="text-[11px] text-text-3 mt-0.5 tnum">{{ p.preset }} · {{ p.endpoint }} · {{ p.model }}</div>
         <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
           <button :class="btnCls" :disabled="testing === p.name" @click="runTest(p.name)">
             {{ testing === p.name ? '测试中…' : '测试' }}
@@ -207,7 +227,7 @@ async function submit() {
           </template>
           <button v-if="active !== p.name" :class="btnCls" @click="setActive(p.name)">设为默认</button>
           <span role="status">
-            <span v-if="testResults[p.name]?.ok" class="text-xs text-up">✓ {{ testResults[p.name].latency_ms }}ms</span>
+            <span v-if="testResults[p.name]?.ok" class="text-xs text-up tnum">✓ {{ testResults[p.name].latency_ms }}ms</span>
             <span v-else-if="testResults[p.name]" class="text-xs text-down" :title="testResults[p.name].error ?? ''">
               ✗ {{ testResults[p.name].error }}
             </span>
@@ -216,36 +236,63 @@ async function submit() {
       </div>
     </div>
 
-    <!-- 模板编辑器卡（M4c） -->
-    <div class="bg-card border border-border rounded-xl p-4">
-      <div class="flex items-center justify-between mb-3">
-        <div class="text-xs text-text-3 uppercase tracking-wide">提示词模板</div>
-        <div v-if="tplHash" class="text-xs text-text-3">当前 tpl {{ tplHash.slice(0, 8) }}</div>
+    <!-- ═══ 提示词模板：主-从布局（左键列表 · 右编辑面板） ═══ -->
+    <div v-else-if="section === 'templates'" class="bg-card border border-border rounded-xl overflow-hidden" role="tabpanel">
+      <div class="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border">
+        <div class="text-[11px] font-semibold tracking-[0.14em] text-text-3 select-none">提示词模板</div>
+        <div v-if="tplHash" class="text-[11px] text-text-4 tnum">当前 tpl {{ tplHash.slice(0, 8) }}</div>
       </div>
-      <div class="space-y-3">
-        <div v-for="k in TPL_ORDER" :key="k">
-          <div class="flex items-center gap-2 mb-1">
-            <label :for="'tpl-' + k" class="text-xs text-text-2">{{ TPL_LABELS[k] }}</label>
-            <span v-if="tplDraft[k]?.trim()" class="text-[10px] text-accent border border-border rounded px-1.5 py-0.5">已覆盖</span>
-            <span class="flex-1"></span>
-            <button :class="btnCls" :disabled="!tplDraft[k]" @click="tplDraft[k] = ''">重置默认</button>
-          </div>
-          <textarea :id="'tpl-' + k" v-model="tplDraft[k]" rows="3" :placeholder="tplDefaults[k]" :class="inputCls"></textarea>
+      <div class="grid grid-cols-[200px_1fr] min-h-[420px]">
+        <!-- 左：模板键列表 -->
+        <div class="border-r border-border py-2 bg-surface/50" role="tablist" aria-label="模板键" aria-orientation="vertical">
+          <button
+            v-for="k in TPL_ORDER" :key="k"
+            role="tab"
+            :aria-selected="tplSel === k"
+            class="relative w-full text-left px-3.5 py-2 text-xs transition-colors duration-150 flex items-center gap-2"
+            :class="tplSel === k ? 'bg-accent-soft text-text font-medium' : 'text-text-3 hover:bg-white/[0.04] hover:text-text-2'"
+            @click="tplSel = k"
+          >
+            <span
+              class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-accent transition-opacity"
+              :class="tplSel === k ? 'opacity-100' : 'opacity-0'"
+              aria-hidden="true"
+            />
+            <span class="flex-1">{{ TPL_LABELS[k] }}</span>
+            <span v-if="tplDraft[k]?.trim()" class="w-1.5 h-1.5 rounded-full bg-accent" title="已覆盖默认" />
+          </button>
         </div>
-      </div>
-      <div class="flex items-center gap-2 mt-3">
-        <button :class="btnCls" :disabled="!tplDirty || tplSaving" @click="saveTpl">
-          {{ tplSaving ? '保存中…' : '保存全部' }}
-        </button>
-        <span role="status">
-          <span v-if="tplMsg" :class="tplMsgOk ? 'text-xs text-up' : 'text-xs text-down'">{{ tplMsg }}</span>
-        </span>
+        <!-- 右：当前模板编辑 -->
+        <div class="p-4 flex flex-col">
+          <div class="flex items-center gap-2 mb-2">
+            <label :for="'tpl-' + tplSel" class="text-sm font-medium text-text">{{ TPL_LABELS[tplSel] }}</label>
+            <span v-if="tplDraft[tplSel]?.trim()" class="text-[10px] text-accent border border-border rounded px-1.5 py-0.5">已覆盖</span>
+            <span v-else class="text-[10px] text-text-4">使用默认</span>
+            <span class="flex-1"></span>
+            <button :class="btnCls" :disabled="!tplDraft[tplSel]" @click="tplDraft[tplSel] = ''">重置默认</button>
+          </div>
+          <textarea
+            :id="'tpl-' + tplSel" v-model="tplDraft[tplSel]" rows="10"
+            :placeholder="tplDefaults[tplSel]"
+            class="flex-1 w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-text leading-relaxed placeholder:text-text-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent resize-y font-mono"
+          ></textarea>
+          <div class="flex items-center gap-3 mt-3">
+            <button
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+              :class="tplDirty ? 'bg-accent text-accent-ink hover:bg-accent-hi' : 'border border-border text-text-3'"
+              :disabled="!tplDirty || tplSaving"
+              @click="saveTpl"
+            >{{ tplSaving ? '保存中…' : '保存全部' }}</button>
+            <span v-if="tplDirty" class="text-[11px] text-warn">有未保存改动</span>
+            <span v-if="tplMsg" role="status" :class="tplMsgOk ? 'text-xs text-up' : 'text-xs text-down'">{{ tplMsg }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- 生成历史卡（M4c） -->
-    <div class="bg-card border border-border rounded-xl p-4">
-      <div class="text-xs text-text-3 uppercase tracking-wide mb-3">生成历史</div>
+    <!-- ═══ 生成历史 ═══ -->
+    <div v-else class="bg-card border border-border rounded-xl p-4" role="tabpanel">
+      <div class="text-[11px] font-semibold tracking-[0.14em] text-text-3 select-none mb-3">生成历史</div>
       <div v-if="historyError" class="text-xs text-down mb-2">{{ historyError }}</div>
       <div v-else-if="!batches.length" class="text-sm text-text-3 py-3">暂无生成记录</div>
       <details
@@ -255,8 +302,8 @@ async function submit() {
         @toggle="toggleBatch(b, $event)"
       >
         <summary class="cursor-pointer text-sm text-text-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-          {{ b.generated_at }}<template v-if="b.model"> · {{ b.model }}</template><template v-if="b.profile"> · {{ b.profile }}</template><template v-if="b.template_hash"> · tpl {{ b.template_hash.slice(0, 8) }}</template> · {{ b.status }}
-          <span v-if="b.stale" class="text-xs px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400">已过期</span>
+          <span class="tnum">{{ b.generated_at }}</span><template v-if="b.model"> · {{ b.model }}</template><template v-if="b.profile"> · {{ b.profile }}</template><template v-if="b.template_hash"> · tpl {{ b.template_hash.slice(0, 8) }}</template> · {{ b.status }}
+          <span v-if="b.stale" class="text-xs px-1.5 py-0.5 rounded bg-warn-soft text-warn">已过期</span>
         </summary>
         <div v-if="batchLoading[b.generated_at]" class="text-xs text-text-3 mt-2">加载中…</div>
         <div v-else-if="batchErrors[b.generated_at]" class="text-xs text-down mt-2">{{ batchErrors[b.generated_at] }}</div>

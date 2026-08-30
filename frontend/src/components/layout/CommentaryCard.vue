@@ -116,7 +116,7 @@ watch(() => refresh.lastRefreshedAt, pull)
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-2">
         <div class="text-xs text-text-3 uppercase tracking-wide">AI 宏观分析评论</div>
-        <span v-if="data.status === 'ok' && data.stale" class="text-xs px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400">数据已更新</span>
+        <span v-if="data.status === 'ok' && data.stale" class="text-xs px-1.5 py-0.5 rounded bg-warn-soft text-warn">数据已更新</span>
       </div>
       <button
         class="text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
@@ -141,7 +141,7 @@ watch(() => refresh.lastRefreshedAt, pull)
           class="ml-2 inline-block text-xs px-2.5 py-1 rounded-lg border border-border hover:border-border-hi text-text-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         >前往 AI 设置</RouterLink>
       </div>
-      <div v-else-if="data.status === 'error'" class="text-sm text-red-400 py-3">
+      <div v-else-if="data.status === 'error'" class="text-sm text-down py-3">
         {{ data.msg || '生成失败' }}
       </div>
 

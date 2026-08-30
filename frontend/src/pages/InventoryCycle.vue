@@ -10,6 +10,7 @@ import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
+import { themedOption } from '@/composables/useThemedOption'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
@@ -32,9 +33,9 @@ const cycle = computed<CycleFrame | null>(() => data.value?.cycle ?? null)
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).
-const ipOpt = computed(() => markRaw(buildDualAxisLine(ipDm.value, 'pmi_official', 'ip_yoy', '#6366f1', '#f59e0b')))
-const quadOpt = computed(() => markRaw(buildScatterQuadrant(cycle.value?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', 50, 0)))
-const pmiOpt = computed(() => markRaw(buildMultiLine(pmiDm.value, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)))
+const ipOpt = themedOption(() => (buildDualAxisLine(ipDm.value, 'pmi_official', 'ip_yoy')))
+const quadOpt = themedOption(() => (buildScatterQuadrant(cycle.value?.series ?? [], 'pmi_official', 'ip_yoy', 'PMI', '工业增加值同比(%)', null, 50)))
+const pmiOpt = themedOption(() => (buildMultiLine(pmiDm.value, [{ col: 'pmi_official', name: '官方' }, { col: 'pmi_caixin', name: '财新' }, { col: 'pmi_non_mfg', name: '非制造业' }, { col: 'pmi_caixin_svc', name: '服务' }], '', 50)))
 </script>
 
 <template>
@@ -49,12 +50,13 @@ const pmiOpt = computed(() => markRaw(buildMultiLine(pmiDm.value, [{ col: 'pmi_o
     <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ipOpt" height="320px" />
     </GraphCard>
-    <SectionCommentary section="inventory" />
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading" :error="error" @retry="load">
       <EChart :option="quadOpt" :not-merge="true" height="360px" />
     </GraphCard>
     <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading" :error="error" @retry="load">
       <EChart :option="pmiOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="inventory" />
+
   </div>
 </template>

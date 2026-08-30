@@ -7,7 +7,7 @@ import { useRefreshStore } from '@/stores/refresh'
 import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
-import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
+import { applyTheme, baseAxis, chartTheme } from '@/design/echarts.theme'
 import { buildRadar, buildMultiLine } from '@/components/charts/options'
 
 // Register RadarChart only on this page (lazy-loaded via router) — keeps
@@ -15,6 +15,7 @@ import { buildRadar, buildMultiLine } from '@/components/charts/options'
 import { use as echartsUse } from 'echarts/core'
 import { RadarChart } from 'echarts/charts'
 import { RadarComponent } from 'echarts/components'
+import { themedOption } from '@/composables/useThemedOption'
 echartsUse([RadarChart, RadarComponent])
 
 type Rec = Record<string, string | number | null>
@@ -38,17 +39,21 @@ const rate = computed<Rec[]>(() => data.value?.rate ?? [])   // lpr_5y, real_rat
 const assessment = computed<Record<string, any>>(() => data.value?.assessment ?? {})
 
 // pivot house_price rows → series per city (new_yoy)
-const priceOpt = computed(() => {
+// NBS 70 城「同比」实为指数口径（上年同月=100）——换算为涨跌 % 再画，
+// 否则 97.9 会被读成 97.9%（实际 −2.1%）。
+const priceOpt = themedOption(() => {
   const byDate = new Map<string, Record<string, number | null>>()
   for (const r of hp.value) {
     const d = r.date as string
     const c = r.city as string
     if (!byDate.has(d)) byDate.set(d, {})
-    byDate.get(d)![c] = r.new_yoy as number | null
+    const v = r.new_yoy
+    byDate.get(d)![c] = typeof v === 'number' ? +(v - 100).toFixed(2) : null
   }
   const dates = Array.from(byDate.keys())
+  const { palette } = chartTheme()
   const series = CITIES.map((c, i) => {
-    const color = PALETTE[i % PALETTE.length]
+    const color = palette[i % palette.length]
     return {
       name: c, type: 'line', connectNulls: true, symbol: 'none',
       itemStyle: { color }, lineStyle: { width: 1.5, color },
@@ -57,7 +62,7 @@ const priceOpt = computed(() => {
   })
   return markRaw(applyTheme({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
-    yAxis: { type: 'value', ...baseAxis({ name: '同比%' }) },
+    yAxis: { type: 'value', ...baseAxis({ name: '同比 %' }) },
     series,
   }))
 })
@@ -67,8 +72,8 @@ const scores = () => assessment.value.assessment ?? assessment.value
 
 // Remaining options built in computeds (not the template) → one markRaw'd
 // object per rebuild that ECharts merges into the live instance.
-const rateOpt = computed(() => markRaw(buildMultiLine(rate.value, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')))
-const radarOpt = computed(() => markRaw(buildRadar(scores())))
+const rateOpt = themedOption(() => (buildMultiLine(rate.value, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')))
+const radarOpt = themedOption(() => (buildRadar(scores())))
 </script>
 
 <template>
@@ -76,10 +81,9 @@ const radarOpt = computed(() => markRaw(buildRadar(scores())))
     <header><h1 class="text-xl font-bold text-text">房地产市场</h1>
       <p class="text-xs text-text-3 mt-1">多城市新房价格同比 + 三维评估（杠杆空间/利率环境/价格动能）</p>
     </header>
-    <GraphCard title="新建商品住宅价格指数同比（多城市）" tip="70 城房价指数同比；城市可后续多选。" :loading="loading" :error="error" @retry="load">
+    <GraphCard title="新建商品住宅价格同比（多城市）" tip="70 城房价指数同比；NBS 发布为指数口径（上年同月=100），图中已换算为涨跌 %，0 为持平。" :loading="loading" :error="error" @retry="load">
       <EChart :option="priceOpt" height="380px" />
     </GraphCard>
-    <SectionCommentary section="real_estate" />
     <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading" :error="error" @retry="load">
       <EChart :option="rateOpt" height="300px" />
     </GraphCard>
@@ -91,5 +95,7 @@ const radarOpt = computed(() => markRaw(buildRadar(scores())))
         </span>
       </p>
     </GraphCard>
+    <SectionCommentary section="real_estate" />
+
   </div>
 </template>

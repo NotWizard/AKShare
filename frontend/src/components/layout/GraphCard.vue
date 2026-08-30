@@ -22,7 +22,7 @@ defineEmits<{ retry: [] }>()
         加载中…
       </div>
       <div v-else-if="error" role="alert"
-           class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-card/80 text-red-400 text-xs">
+           class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-card/80 text-down text-xs">
         <span>{{ error }}</span>
         <button type="button"
                 class="px-3 py-1 rounded-lg border border-border text-text-2 hover:border-accent transition-colors"

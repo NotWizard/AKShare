@@ -8,6 +8,7 @@ import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import { buildMultiLine, buildSpreadChart } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
+import { themedOption } from '@/composables/useThemedOption'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
@@ -28,11 +29,11 @@ const ext = computed<Rec[]>(() => data.value?.ext ?? [])
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).
-const revYoyOpt = computed(() => markRaw(buildMultiLine(fiscal.value, [{ col: 'revenue_cum_yoy', name: '财政收入累计同比' }, { col: 'expenditure_cum_yoy', name: '财政支出累计同比' }], '%')))
-const revCumOpt = computed(() => markRaw(buildMultiLine(fiscal.value, [{ col: 'revenue_cum', name: '财政收入(累计)' }, { col: 'expenditure_cum', name: '财政支出(累计)' }], '亿元')))
-const tradeYoyOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'exports_yoy', name: '出口同比(美元)' }, { col: 'imports_yoy', name: '进口同比(美元)' }], '%', 0, '零线')))
-const balanceOpt = computed(() => markRaw(buildSpreadChart(ext.value, 'trade_balance', '贸易差额', '亿美元', 0)))
-const ismOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'us_ism_pmi', name: '美国ISM制造业PMI' }], '', 50)))
+const revYoyOpt = themedOption(() => (buildMultiLine(fiscal.value, [{ col: 'revenue_cum_yoy', name: '财政收入累计同比' }, { col: 'expenditure_cum_yoy', name: '财政支出累计同比' }], '%')))
+const revCumOpt = themedOption(() => (buildMultiLine(fiscal.value, [{ col: 'revenue_cum', name: '财政收入(累计)' }, { col: 'expenditure_cum', name: '财政支出(累计)' }], '亿元')))
+const tradeYoyOpt = themedOption(() => (buildMultiLine(ext.value, [{ col: 'exports_yoy', name: '出口同比(美元)' }, { col: 'imports_yoy', name: '进口同比(美元)' }], '%', 0, '零线')))
+const balanceOpt = themedOption(() => (buildSpreadChart(ext.value, 'trade_balance', '贸易差额', '亿美元', 0)))
+const ismOpt = themedOption(() => (buildMultiLine(ext.value, [{ col: 'us_ism_pmi', name: '美国ISM制造业PMI' }], '', 50)))
 </script>
 
 <template>
@@ -43,7 +44,6 @@ const ismOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'us_ism_
     <GraphCard title="财政收支累计同比" tip="国家财政收入/支出累计增长（%）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revYoyOpt" height="320px" />
     </GraphCard>
-    <SectionCommentary section="fiscal_external" />
     <GraphCard title="财政收支累计值" tip="国家财政收入/支出累计值（亿元）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revCumOpt" height="320px" />
     </GraphCard>
@@ -56,5 +56,7 @@ const ismOpt = computed(() => markRaw(buildMultiLine(ext.value, [{ col: 'us_ism_
     <GraphCard title="美国 ISM 制造业 PMI" tip="外需景气代理；荣枯线 50。日期由发布日归一到数据月。Jin10 源冻结于 2025-08 数据月，其后由 ISM 官方发布值按月人工/Agent 补充（见 docs/data-supplement-runbook.md）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ismOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="fiscal_external" />
+
   </div>
 </template>

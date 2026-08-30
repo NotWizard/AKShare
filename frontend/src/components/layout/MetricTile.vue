@@ -23,16 +23,16 @@ const display = useCountUp(toRef(() => props.value), 600, props.digits)
 </script>
 
 <template>
-  <div class="bg-card border border-border rounded-xl p-4 transition-colors hover:border-border-hi">
-    <div class="text-xs text-text-3">{{ label }}<ChartTip v-if="tip" :text="tip" /></div>
-    <div class="text-2xl font-bold mt-1" :class="accent ? 'text-accent' : 'text-text'">
-      {{ display }}<span v-if="suffix" class="text-sm text-text-3 ml-0.5">{{ suffix }}</span>
+  <div class="bg-card border border-border rounded-xl px-4 pt-3.5 pb-3 transition-colors duration-150 hover:border-border-hi hover:bg-card-hover">
+    <div class="text-[11px] font-medium text-text-3 tracking-wide">{{ label }}<ChartTip v-if="tip" :text="tip" /></div>
+    <div class="text-[26px] font-extrabold tnum leading-tight mt-1.5" :class="accent ? 'text-accent' : 'text-text'">
+      {{ display }}<span v-if="suffix" class="text-[13px] font-medium text-text-3 ml-0.5">{{ suffix }}</span>
     </div>
-    <div v-if="deltas?.length" class="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[10px] tabular-nums leading-tight">
+    <div v-if="deltas?.length" class="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[10px] tnum leading-tight">
       <span
         v-for="(d, i) in deltas"
         :key="i"
-        :class="d.dir === 'up' ? 'text-emerald-400' : d.dir === 'down' ? 'text-red-400' : 'text-text-3'"
+        :class="d.dir === 'up' ? 'text-up' : d.dir === 'down' ? 'text-down' : 'text-text-4'"
       >{{ d.dir === 'up' ? '▲' : d.dir === 'down' ? '▼' : '·' }} {{ d.text }}</span>
     </div>
   </div>

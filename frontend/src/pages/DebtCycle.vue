@@ -10,6 +10,7 @@ import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
+import { themedOption } from '@/composables/useThemedOption'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
@@ -37,10 +38,10 @@ const cycle = computed<CycleFrame | null>(() => data.value?.cycle ?? null)
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance (preserves zoom/legend).
-const stackedOpt = computed(() => markRaw(buildStackedArea(dq.value, ['household', 'non_fin_corp', 'gov_total'])))
-const govOpt = computed(() => markRaw(buildStackedArea(dq.value, ['gov_central', 'gov_local'])))
-const rateOpt = computed(() => markRaw(buildMultiLine(rateDm.value, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10年期国债' }], '%')))
-const hhOpt = computed(() => markRaw(buildMultiLine(dqi.value, [{ col: 'household', name: '居民部门杠杆率' }, { col: 'hh_debt_to_income', name: '居民债务收入比' }], '%')))
+const stackedOpt = themedOption(() => (buildStackedArea(dq.value, ['household', 'non_fin_corp', 'gov_total'])))
+const govOpt = themedOption(() => (buildStackedArea(dq.value, ['gov_central', 'gov_local'])))
+const rateOpt = themedOption(() => (buildMultiLine(rateDm.value, [{ col: 'lpr_1y', name: 'LPR 1年' }, { col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }, { col: 'bond_10y', name: '10年期国债' }], '%')))
+const hhOpt = themedOption(() => (buildMultiLine(dqi.value, [{ col: 'household', name: '居民部门杠杆率' }, { col: 'hh_debt_to_income', name: '居民债务收入比' }], '%')))
 </script>
 
 <template>
@@ -55,7 +56,6 @@ const hhOpt = computed(() => markRaw(buildMultiLine(dqi.value, [{ col: 'househol
     <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="stackedOpt" height="380px" />
     </GraphCard>
-    <SectionCommentary section="debt" />
     <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="govOpt" height="320px" />
     </GraphCard>
@@ -65,5 +65,7 @@ const hhOpt = computed(() => markRaw(buildMultiLine(dqi.value, [{ col: 'househol
     <GraphCard title="居民真实杠杆空间：杠杆率 vs 债务收入比" tip="居民部门杠杆率（占GDP%）vs 居民债务/可支配收入（%）。杠杆率看似仅~60%，但债务收入比已>120%，更真实反映居民加杠杆空间。债务=居民杠杆率×年化GDP（Q1×4近似）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="hhOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="debt" />
+
   </div>
 </template>

@@ -7,6 +7,7 @@ import { useRefreshStore } from '@/stores/refresh'
 import { buildMultiLine } from '@/components/charts/options'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
+import { themedOption } from '@/composables/useThemedOption'
 
 type Rec = Record<string, string | number | null>
 const filters = useFiltersStore()
@@ -31,9 +32,9 @@ function latest(col: string): number | null {
 
 // Options built in computeds (not the template) → one markRaw'd object per
 // rebuild that ECharts merges into the live instance.
-const urbanOpt = computed(() => markRaw(buildMultiLine(dm.value, [{ col: 'urbanization_rate', name: '城镇化率' }], '%')))
-const popOpt = computed(() => markRaw(buildMultiLine(dm.value, [{ col: 'population', name: '年末总人口' }], '万人')))
-const birthOpt = computed(() => markRaw(buildMultiLine(dm.value, [{ col: 'birth_rate', name: '出生率' }, { col: 'natural_growth_rate', name: '自然增长率' }], '‰', 0, '零线')))
+const urbanOpt = themedOption(() => (buildMultiLine(dm.value, [{ col: 'urbanization_rate', name: '城镇化率' }], '%')))
+const popOpt = themedOption(() => (buildMultiLine(dm.value, [{ col: 'population', name: '年末总人口' }], '万人')))
+const birthOpt = themedOption(() => (buildMultiLine(dm.value, [{ col: 'birth_rate', name: '出生率' }, { col: 'natural_growth_rate', name: '自然增长率' }], '‰', 0, '零线')))
 </script>
 
 <template>
