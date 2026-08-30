@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### README 全文一致性审查修正
+
+概述：项目定名 MACRO + 双主题 + M4 + CRCL 后，README 多处仍为旧口径，本次逐节核对现状修正。
+变更：
+  1. 功能特性：六大视图 → 八大分析视图 + CRCL 监控；新增双主题换肤条目；KPI 指标瓦描述补「环比 delta」。
+  2. 技术架构图 + 目录结构：页面 6→10、api/v1 与 core 模块清单补全、scripts 补 nifd_leverage/pbc_shrzgm/03/04/dual_sources/gen_openapi、tests 计数 375、管道 31 项、changeLog.md 正名 CHANGELOG.md、openapi.json 陈旧警示改为 drift 门禁说明、新增 docs/design/。
+  3. 设计系统：旧 Terminal Fintech 色值表 → 双主题 token 表（暗/亮双列）+ 相位色与 chartTheme 机制说明。
+  4. 测试与质量：golden 6/6 → 全量 375 + vitest 42；删除已过时的「契约守门（当前未生效）」段（drift 门禁已生效）。
+  5. 性能优化：缓存描述改为版本键控（db_versioned_cache，与 G03 实现一致）。
+
+### README full consistency pass (English)
+
+Summary: after the MACRO rename + dual theme + M4 + CRCL, multiple README sections still described
+the old state; this pass reconciles every section with reality.
+Changes:
+  1. Features: 6 → 8 analysis views + CRCL monitor; new dual-theme entry; KPI tiles mention deltas.
+  2. Architecture diagram + tree: 10 pages, full api/v1 + core module lists, scripts additions,
+     test counts, CHANGELOG.md naming, openapi drift-gate note, docs/design/.
+  3. Design system: dual-theme token table replacing the old Terminal Fintech hex list.
+  4. Testing: 375 pytest + 42 vitest; dropped the stale "contract guard not in effect" note.
+  5. Performance: cache description now matches the version-keyed implementation.
+
 ### 项目正式命名为 MACRO
 
 概述：项目定名 **MACRO**（macroeconomics 词根，与侧边栏品牌字标一致）；GitHub 仓库 NotWizard/AKShare → NotWizard/MACRO，本地目录同步改名。

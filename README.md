@@ -33,15 +33,16 @@
 
 ## 功能特性
 
-- **六大分析视图**：综合概览、美林时钟、信用周期、库存周期、债务周期、房地产市场
+- **八大分析视图 + CRCL 监控**：综合概览、美林时钟、信用周期、库存周期、债务周期、房地产市场、人口与城镇化、财政与外需，外加 CRCL（Circle）投资论点监控页
 - **综合宏观信号**：聚合四大周期框架生成 `[-4, +4]` composite score 与解读
 - **交互式图表**：双轴折线、堆叠面积、柱+折线组合、四象限散点、阶段时间条、雷达图
-- **阶段背景着色**：自动识别经济阶段并以半透明背景连续段高亮
+- **双主题换肤**：Obsidian Blue 暗色 × Paper 亮色，顶栏 ☾/☀ 一键切换（含全部图表联动换肤），跟随系统偏好并记忆选择
 - **日期范围控制**：全局工具栏 5Y / 10Y / 20Y / 全部 快捷按钮 + 图表缩放条（拖拽缩放，滚轮已禁用防误触）
 - **起点对齐**：`align_start` 让图表从各值列同时有数据的日期起，省去手动拖周期
 - **城市对比**：房地产页多城市房价同比 + 三维评估雷达图
 - **一键刷新**：看板内按钮触发采集管道，SSE 流式真进度，完成后自动重载
-- **KPI 指标瓦 + tooltip**：概览页关键指标 count-up 动画 + ⓘ 说明浮窗（含义 + 取数逻辑）
+- **KPI 指标瓦**：概览页关键指标 count-up 动画 + 较上期环比涨跌 + ⓘ 说明浮窗（含义 + 取数逻辑）
+- **阶段背景着色**：自动识别经济阶段并以半透明背景连续段高亮
 - **PMI 荣枯线**：50 线以隐晦灰色细虚线 + 同色小标注呈现（仅维度参考，不与数据序列争焦；与四象限十字线/剪刀差零线同一参考线语汇）
 - **图例中文化**：所有图表图例/轴名统一中文（NBS/央行/NIFD 官方术语；CPI/PPI/M2/PMI/LPR/GDP 等特有名词保留英文缩语），见 `options.ts` `COL_ZH`
 - **居民真实杠杆空间**：债务周期页「杠杆率 vs 债务收入比」图——杠杆率看似 ~60%，债务收入比已 ~120-140%，更真实反映居民加杠杆空间
@@ -77,16 +78,18 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Frontend  (Vue 3 + Vite + TS + ECharts + Pinia, build)     │
-│  pages/ (6 视图) ─ router ─ stores (filters/refresh)         │
+│  pages/ (10 视图) ─ router ─ stores (filters/refresh/theme)  │
 │  components/charts/ (EChart + option builders)  design/      │
 │  api/ (typed client ← OpenAPI)                               │
 └─────────────────────────────────────────────────────────────┘
                       │  HTTP / SSE  (/api/v1/*)
 ┌─────────────────────────────────────────────────────────────┐
 │  Backend   (FastAPI + Pydantic, :8000)                      │
-│  api/v1/ (data · cycles · signals · real-estate · refresh)   │
-│  schemas/ (契约真相源)   core/ (db · cache · refresh · serial)│
-│  tests/ (golden test)                                       │
+│  api/v1/ (data·cycles·signals·real-estate·refresh·commentary│
+│           ·sources·ai·crcl·session)                          │
+│  schemas/ (契约真相源)   core/ (db·auth·refresh·commentary·  │
+│           ai_config/ai_client/keychain·crcl_collect·serial)  │
+│  tests/ (pytest 375 项)                                      │
 └─────────────────────────────────────────────────────────────┘
                       │  同进程直接 import（无序列化边界）
 ┌─────────────────────────────────────────────────────────────┐
@@ -122,24 +125,24 @@ MACRO/
 ├── backend/                     # FastAPI 后端
 │   ├── app/
 │   │   ├── main.py              # FastAPI 实例 + CORS + 路由挂载
-│   │   ├── api/v1/              # 端点：data · cycles · signals · real_estate · refresh
-│   │   ├── schemas/             # Pydantic 契约（CycleFrame/SignalSummary/RefreshResult…）
-│   │   ├── core/                # db(lru_cache) · cache(clear_all) · refresh(子进程+SSE) · serial
+│   │   ├── api/v1/              # 端点：data·cycles·signals·real_estate·refresh·commentary·sources·ai·crcl·session
+│   │   ├── schemas/             # Pydantic 契约（CycleFrame/SignalSummary/RefreshResult/Commentary/ProfileList…）
+│   │   ├── core/                # db(版本键缓存) · auth(本机令牌) · refresh(任务+SSE) · commentary · ai_* · keychain · crcl_*
 │   │   └── deps.py
-│   ├── tests/test_golden.py     # golden test：API 输出 == db.load
+│   ├── tests/                   # pytest 375 项（golden/契约/闸门/auth/评论/CRCL…）
 │   └── pyproject.toml           # 后端最小依赖（fastapi/uvicorn/pydantic/httpx）+ pytest 配置
 │                                #   分析依赖不在此重述，以根 requirements.txt/.lock 为准
 │
 ├── frontend/                    # Vue 3 SPA
 │   ├── src/
-│   │   ├── pages/               # Overview · MerrillClock · CreditCycle · InventoryCycle · DebtCycle · RealEstate
+│   │   ├── pages/               # Overview · 美林 · 信用 · 库存 · 债务 · 房地产 · 人口 · 财政外需 · CrclMonitor · AISettings
 │   │   ├── components/
 │   │   │   ├── charts/          # EChart.vue + options.ts(builder) + utils.ts
-│   │   │   ├── layout/          # Sidebar · GraphCard · MetricTile · RefreshBar
+│   │   │   ├── layout/          # Sidebar · GraphCard · MetricTile · RefreshBar · CommentaryCard · SectionCommentary · HealthLight · PageState
 │   │   │   └── controls/        # ChartTip (Teleport 浮窗)
-│   │   ├── stores/              # Pinia: filters(全局联动) · refresh(SSE)
+│   │   ├── stores/              # filters(全局联动) · refresh(SSE) · theme(亮暗换肤)
 │   │   ├── api/                 # client.ts + types.ts（← OpenAPI）
-│   │   ├── composables/         # useCountUp
+│   │   ├── composables/         # useAsyncData · useCommentary · useThemedOption · useCountUp
 │   │   ├── design/              # tokens.css · echarts.theme.ts · phases.ts
 │   │   └── router/
 │   ├── public/manifest.webmanifest  # PWA
@@ -147,10 +150,15 @@ MACRO/
 │   └── package.json
 │
 ├── scripts/                     # 采集与衍生计算（后端复用）
-│   ├── _pipeline.py             # 暂存快照 + 校验闸门 + 原子切换 + 备份 + 审计
+│   ├── _pipeline.py             # 暂存快照 + 校验闸门（多粒度）+ 原子切换 + 备份 + 审计 + live 直写表并入
 │   ├── _pipeline_test.py        # 管道自查脚本（31 项 check；无 test_* 函数，pytest 不收集）
 │   ├── 01_fetch_data.py         # 宏观数据采集（16 fetcher：AKShare 为主 + 东方财富/中债/世行直连，走闸门管道）
-│   └── 02_compute_derived.py    # 衍生指标计算
+│   ├── 02_compute_derived.py    # 衍生指标计算
+│   ├── nifd_leverage.py         # NIFD 杠杆率补充数据单一真相源（01/03 共用）
+│   ├── pbc_shrzgm.py            # PBoC 社融 XLSX 备用源（01/04 共用）
+│   ├── 03_supplement_leverage.py / 04_supplement_social_finance.py  # 独立补数脚本
+│   ├── dual_sources.py          # 双源交叉比对   · diff_vintage.py  # vintage 快照比对
+│   └── gen_openapi.py           # OpenAPI 契约导出（shared/openapi.json）
 │
 ├── data/                        # SQLite 数据库（gitignored）
 │   ├── macro_data.db            # 16 张原始表 + derived_monthly/derived_quarterly + commentary + signal_history
@@ -159,8 +167,9 @@ MACRO/
 │   ├── logs/                    # 运行日志：fetch.log（采集，轮转）· api.log（uvicorn，超 5MB 转存 .1）
 │   └── last_run.json            # 上次采集审计 manifest
 │
-├── shared/openapi.json          # OpenAPI 契约快照（**已陈旧**：缺 8 个 /crcl/* 路由，需重新导出）
+├── shared/openapi.json          # OpenAPI 契约快照（gen_openapi.py 导出，test_openapi_drift 守门）
 ├── docs/architecture-upgrade.md # 架构升级方案文档
+├── docs/design/                 # 设计方案（dual-theme-plan.md 双主题色彩体系）
 ├── docs/data-sources-guide.md   # 数据源现状与实测记录
 ├── docs/data-supplement-runbook.md # 数据补充运行手册（发布窗口+手动触发+校验）
 ├── run_app.sh                   # 一键启动（单进程 FastAPI:8000，同时托管 API 与 Vue 构建产物）
@@ -168,7 +177,7 @@ MACRO/
 ├── requirements.txt             # 直接依赖（人读，akshare 精确锁定）
 ├── requirements.lock            # 逐包精确锁（63 包传递闭包，源自 .venv312 实测）
 ├── .env.example                 # 环境变量模板（复制为 .env；.env 已 gitignored）
-├── changeLog.md                 # 变更日志
+├── CHANGELOG.md                 # 变更日志
 ├── CLAUDE.md / AGENTS.md        # 开发规范
 └── README.md                    # 本文件
 ```
@@ -344,16 +353,18 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 
 ### 色彩体系（`tokens.css` + `tailwind.config.ts`）
 
-| Token | 值 | 用途 |
-|---|---|---|
-| `bg` | `#0a0e17` | 页面背景 |
-| `surface` | `#111827` | 侧边栏、工具栏 |
-| `card` | `#1a2332` | 卡片表面 |
-| `accent` | `#6366f1` | 靛蓝强调色、活跃状态 |
-| `up` | `#10b981` | 上涨、扩张、宽松 |
-| `down` | `#ef4444` | 下跌、紧缩、衰退 |
-| `warn` | `#f59e0b` | 中性、过热（荣枯线改用 text3 灰虚线，见功能特性） |
-| `text` / `text-2` / `text-3` | `#f1f5f9` / `#94a3b8` / `#64748b` | 三级文字层级 |
+双套 CSS 变量（`:root` 暗 / `[data-theme='light']` 亮），tailwind 色板全部 var() 引用；完整色值表与决策见 `docs/design/dual-theme-plan.md`。
+
+| Token | 暗（Obsidian Blue） | 亮（Paper） | 用途 |
+|---|---|---|---|
+| `bg` | `#070b12` | `#f6f7f9` | 页面背景 |
+| `surface` | `#0c1322` | `#ffffff` | 侧边栏、工具栏 |
+| `card` | `#101a2b` | `#ffffff` | 卡片表面 |
+| `accent` | `#5b8cff` 电蓝 | `#2f5bff` 皇家蓝 | 品牌强调、活跃状态、焦点环 |
+| `up` / `down` / `warn` | `#34d399` / `#f87171` / `#fbbf24` | `#059669` / `#dc2626` / `#b45309` | 扩张·涨 / 紧缩·跌 / 中性·过热 |
+| `text` ~ `text-4` | `#e8eef7` ~ `#7f90a4` | `#0f172a` ~ `#64748b` | 四级文字层级（双主题均过 WCAG AA） |
+
+相位语义色（复苏绿/过热琥珀/滞胀红/衰退蓝…）双套同 hue 异明度，定义于 `design/phases.ts`；图表色板经 `chartTheme()` 按主题即时取值。
 
 ### ECharts 图表默认（`echarts.theme.ts`）
 
@@ -361,7 +372,8 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 - `connectNulls: true` 原生跨接断线（替代 Plotly 的 connectgaps）
 - `dataZoom`（slider + inside，滚轮已禁用防误触）对 category 时间轴自动启用
 - `tooltip.confine + appendToBody` 防裁切；日期统一 `YYYY-MM-DD`
-- 统一色板：`#6366f1, #10b981, #ef4444, #f59e0b, #a78bfa, #06b6d4, #f97316, #ec4899`
+- 轴标签跨度感知抽稀：>8 年跨度在每年首个出现的类目标年份（兼容 NBS 1 月不发布），2.5–8 年到月
+- 统一色板随主题切换（暗：电蓝/紫/琥珀/玉绿…；亮：皇家蓝/深紫/深琥珀/深绿…），相位微染 + 四象限角落标注
 
 ### 字体
 
@@ -373,21 +385,19 @@ font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe 
 
 ## 测试与质量
 
-- **后端 golden test**（`backend/tests/test_golden.py`，6/6）：`/derived/monthly` 与 `db.load` 逐字节一致 + 各周期/signals/refresh 端点
-- **后端全量**：`cd backend && ../.venv312/bin/python -m pytest -q`
-- **管道自查**（`scripts/_pipeline_test.py`，27 项 check）：闸门全分支 + 暂存继承 + 崩溃安全 + 原子切换。
+- **后端全量**：`cd backend && ../.venv312/bin/python -m pytest -q`（375 项：golden + 契约 + 闸门 + auth + 评论 + CRCL + 跨指标方向…）
+- **管道自查**（`scripts/_pipeline_test.py`，31 项 check）：闸门全分支 + 暂存继承 + 崩溃安全 + 原子切换 + live 直写表并入。
   ⚠️ 它**不是** pytest 用例——文件里没有 `test_*` 函数，`pytest --collect-only scripts/` 收集为 0，必须手动跑：
   `.venv312/bin/python scripts/_pipeline_test.py`（全通过时打印 `✅ ALL CHECKS PASSED`，失败非零退出）
+- **前端**：`vue-tsc --noEmit` 0 error（`npm run build` 已内置）+ vitest 42 例（`src/__tests__/`）
+- **契约守门**：`scripts/gen_openapi.py` 导出 `shared/openapi.json`，`test_openapi_drift` 与 CI 漂移即红；前端手写 `src/api/types.ts` 与其对应
 - **前端类型**：`vue-tsc --noEmit` 0 error（`npm run build` 已内置）
-- **契约守门（当前未生效）**：`npm run gen:api` 只从 `shared/openapi.json` 生成 `src/api/schema.d.ts`，但该快照缺 8 条 `/crcl/*`、且 `schema.d.ts` 从未生成过——前端实际用的是手写的 `src/api/types.ts`。要真正防类型漂移，需先重新导出 openapi.json 再跑 codegen 并改用生成的类型
-
 ---
 
 ## 性能优化
 
-- **数据库表缓存**：`db._load_full()` `lru_cache(maxsize=32)`，首次读盘后全表常驻内存，切片 < 1ms
-- **分类器缓存**：7 个 `classify_*`/`compute_signals`/`analyze_real_estate` `lru_cache`，启动期多页重复计算收敛为 1 次
-- **刷新缓存失效**：`clear_all_caches()` 在原子切换后清空全部 7 处，保证下次读新库
+- **数据库表缓存**：`db._load_full()` 按（表名, DB 版本）键控缓存，首次读盘后常驻内存，切片 < 1ms
+- **分类器缓存**：分类器经 `db_versioned_cache` 按 DB 版本键控；原子切换后版本号变化即自动失效，下次读到新库（无需手动清缓存）
 - **SSE 真进度**：子进程流式 stdout 数 `✅` 行驱动进度，非假 spinner
 - **暂存隔离**：采集只动 staging，生产库原子切换前零接触
 
@@ -397,7 +407,7 @@ font-family: -apple-system, BlinkMacSystemFont, Inter, 'SF Pro Display', 'Segoe 
 
 详见 `CLAUDE.md` / `AGENTS.md`，核心要点：
 
-1. **变更日志**：每次提交必须在 `changeLog.md` 记录（中英双语，`[类型]` 分类）
+1. **变更日志**：每次提交必须在 `CHANGELOG.md` 记录（中英双语，`[类型]` 分类）
 2. **提交信息**：中英双语，中文在前、英文在后
 3. **WorkTree**：新增功能/代码修改前询问是否创建 Git WorkTree 隔离
 4. **极简原则**：只改必要的代码，不引入推测性功能
@@ -459,4 +469,4 @@ vite ^5  typescript ^5.5  vue-tsc  tailwindcss ^3.4  openapi-typescript ^7
 
 ## 维护者
 
-由 Claude Code 辅助开发，遵循 `CLAUDE.md` 项目规范。
+由 Claude Code / Pi 辅助开发，遵循 `CLAUDE.md` / `AGENTS.md` 项目规范。
