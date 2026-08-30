@@ -30,6 +30,11 @@ English
 # Release note guidelines
 1. 遵照 Release_Notes_Guidelines.md 里的要求
 
+# 数据获取文档同步（持续维护）
+1. 凡涉及数据获取的变化——新增/下线数据源、主备源切换、发布窗口调整、手动补充表（如 `NIFD_DATA` / `_ISM_SUPPLEMENT`）的口径或位置变化、采集脚本结构变化（如新增 `04_*.py`）、CRCL 采集源变化——必须**与代码改动同提交**更新 `docs/data-supplement-runbook.md`（取数手册）；数据源可用性实测结论同步更新 `docs/data-sources-guide.md`。
+2. 执行数据补充任务（自动采集或 Agent 手动补充）时，发现文档与现状不符，顺手修正并记入本次提交，不留「文档债」。
+3. 目标：哪些表能一键自动更新、哪些需 Agent 按手册跑一次，看手册即可回答；手册过期视为缺陷。
+
 # Behavioral guidelines
 ## 1. Think Before Coding
 

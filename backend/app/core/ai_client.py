@@ -35,16 +35,19 @@ def call_chat(profile: dict, key: str, messages: list[dict],
               transport=None) -> str:
     """POST 一次对话，返回纯文本。profile 为 ai_config 产出的 dict。"""
     base = profile["base_url"].rstrip("/")
+    # temperature=None → 不带该字段（部分推理模型如 kimi-k3 拒收 temperature 参数，传了直接 400）
     temp = profile.get("temperature", 0.3) if temperature is None else temperature
     endpoint = profile.get("endpoint", "chat_completions")
     headers = {"Authorization": f"Bearer {key}"}
 
     if endpoint == "responses":
         url = base + "/responses"
-        payload = {"model": profile["model"], "input": messages, "temperature": temp}
+        payload = {"model": profile["model"], "input": messages}
     else:
         url = base + "/chat/completions"
-        payload = {"model": profile["model"], "messages": messages, "temperature": temp}
+        payload = {"model": profile["model"], "messages": messages}
+    if temp is not None:
+        payload["temperature"] = temp
 
     try:
         with httpx.Client(timeout=timeout, transport=transport) as client:

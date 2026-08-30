@@ -11,11 +11,12 @@
 
 ## 0. 硬编码数据清单（Hardcoded Data Inventory）
 
-全仓排查（scripts/ analysis/ backend/ frontend/）后，**唯一硬编码的时序数据**是 NIFD 宏观杠杆率：
+全仓排查（scripts/ analysis/ backend/ frontend/）后，**硬编码的时序数据**有两处：
 
 | 指标 | 硬编码位置 | 内容 | 当前到 | 更新方式 |
 |---|---|---|---|---|
 | NIFD 宏观杠杆率（居民/非金/政府/中央/地方/实体） | `scripts/nifd_leverage.py` `NIFD_DATA`（单一真相源，`01`/`03` 均 import） | 季度杠杆率(%) | 2026-06 (2026Q2) | §1 Agent 补充 |
+| 美国 ISM 制造业 PMI | `scripts/01_fetch_data.py` `_ISM_SUPPLEMENT`（Jin10 源冻结于 2025-08 后的官方值补充表） | 月度 PMI（点） | 2026-07 | §7 Agent 逐月补官方值后跑 01 |
 
 **非时序数据（配置/分类逻辑，无需定期更新）**：
 - 城市清单 `CITIES`（`frontend/src/pages/RealEstate.vue`）/ `_DEFAULT_CITIES`（`backend/app/api/v1/real_estate.py`）/ `01_fetch_data.py` 房价城市列表 —— 配置。
@@ -84,21 +85,22 @@
 
 | 项 | 内容 |
 |---|---|
-| 现状 | DB 到 2026-04；主源 akshare `macro_china_shrzgm`（MOFCOM 镜像）滞后 2 个月；**PBoC 官方已有 2026-06**。 |
-| 备用源 | PBoC 调查统计社 XLSX：列表页 `http://www.pbc.gov.cn/diaochatongjisi/116219/116319/.../shrzgm/index.html` → 最新 `attachDir/*.xlsx`（社会融资规模增量统计表，亿元）。 |
+| 现状 | DB 到 2026-07（已含 PBoC 备用源补齐的 05/06/07）；主源 akshare `macro_china_shrzgm`（MOFCOM 镜像）滞后 3-4 个月。 |
+| 备用源 | PBoC 调查统计司 XLSX——**已抽为单一真相源 `scripts/pbc_shrzgm.py`**（主源 01 的 fetch_social_finance 与其共用）。列表页 `http://www.pbc.gov.cn/diaochatongjisi/116219/116319/.../shrzgm/index.html` → 最新 `attachDir/*.xlsx`。 |
+| 独立补充脚本 | `scripts/04_supplement_social_finance.py`——脱离主管线的 CNBS 级联故障（`[Errno 9]`），单独经闸门补齐；主源滞后多期时优先跑它。 |
 | 怎么取 | GET 列表页→正则取最新 xlsx→`pandas.read_excel(header=None)`→数据行约第 11 行起；月份为 float（2026.05→5 月；注意 2026.1==10 月）；列对齐 DB（社会融资规模增量/人民币贷款/委托贷款/信托贷款/未贴现承兑/企业债券/股票）。 |
 | 校验 | 2026.05 total=20293 亿、2026.06=33645 亿（已实测）；仅追加 date>主源max 的行。 |
 | 处理 | 由 Agent 按上述补充（同 NIFD 模式）；解析脆弱，失败则保留主源。东财社融接口已下线（shrzgm.js 404），勿用。 |
 
 ---
 
-## 6. GDP 季度（case 1：源有更新，解析器未跟上）
+## 6. GDP 季度（已常态化支持累计季度）
 
 | 项 | 内容 |
 |---|---|
-| 现状 | DB gdp 到 2026-01（仅每年 Q1 行）；源 akshare `macro_china_gdp` 已有 **2026 第1-2季度**（2026-07-15 发布）。 |
-| 原因 | `fetch_gdp` 的 `parse_quarter` 正则 `^(\d{4})年第(\d)季度` 丢弃累计行（"第1-2季度"），裸重抓仍停 2026-01。 |
-| 处理 | 扩展正则为 `(\d{4})年第(\d)(?:-(\d))?季度`（累计取末季：第1-2季度→2026-04-01）后重抓。**注意**：gdp 变累计行后，`hh_debt_to_income` 的年化基数（现用 Q1×4）需改为用该年 Q4(10月)累计行，二者需联动改、联动验证。 |
+| 现状 | `gdp` 表含累计季度行（「第1-2季度」→ 末季 04-01 入库），DB 到 2026-04（2026 上半年累计）。 |
+| 源 | akshare `macro_china_gdp` / 东财 `RPT_ECONOMY_GDP`。 |
+| 说明 | `fetch_gdp` 的 `parse_quarter` 已支持累计季度（正则 `^(\d{4})年第(\d)(?:-(\d))?季度`，累计取末季）；`02` 的 `hh_debt_to_income` 年化基数优先用该年 Q4(10月)累计行，当年无 Q4 用上年全年。 |
 
 ---
 
@@ -113,7 +115,7 @@
 | 月 | CPI / PPI / PMI | ~9-10 日 / PMI 月末 | 跑 `01_fetch_data.py` |
 | 月 | 社融 | ~15 日（主源滞后时自动走 PBoC XLSX 备用源） | 跑 `01_fetch_data.py` |
 | 月 | LPR | ~20 日 | 跑 `01_fetch_data.py` |
-| 月 | 美国 ISM 制造业 PMI | ~次月 1 日（ISM 官方 / PR Newswire） | akshare Jin10 源冻结于 2025-08；按 `_ISM_SUPPLEMENT`（01_fetch_data.py）逐月补官方值后跑 `01_fetch_data.py`；2025-09~2026-05 缺口可逐月回补 |
+| 月 | 美国 ISM 制造业 PMI | ~次月 1 日（ISM 官方 / PR Newswire） | akshare Jin10 源冻结于 2025-08；按 `_ISM_SUPPLEMENT`（01_fetch_data.py）逐月补官方值后跑 `01_fetch_data.py`；**2025-09~2026-07 已补齐**，后续逐月滚动维护 |
 
 ---
 
@@ -169,6 +171,10 @@
 | 短端美债收益率 3M/6M/1Y | Treasury.gov | `home.treasury.gov/.../daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv`（回填 2 年；fiscaldata JSON API 实测不可用，弃用） | 日 |
 | CRCL 日线 | AKShare 主 / yfinance 备 | `ak.stock_us_daily(symbol='CRCL')`；新浪端点不可达时自动切 `yf.Ticker('CRCL').history(period='max')` | 日 |
 | CRCL 估值快照 | yfinance | `Ticker('CRCL').info`（marketCap/trailingPE/forwardPE/P-S/52 周） | 每次采集 |
+
+> **环境注意**：yfinance 为惰性 import 的备用源。若 CRCL 采集结果中 `yfinance_valuation` 报
+> `ModuleNotFoundError`，说明 venv 未装全依赖——在项目根目录跑
+> `.venv312/bin/pip install -r requirements.txt` 后重试（2026-08-30 实测补装即恢复）。
 
 触发：应用启动自动一次（lifespan 后台线程；`CRCL_STARTUP_COLLECT=0` 可关）+ 页内「手动刷新」（SSE 进度）。
 代码：`backend/app/core/crcl_collect.py`；告警引擎 `crcl_alerts.py`（5 规则，状态变化写历史）。

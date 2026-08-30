@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+### AI 评论接入百炼 + 提示词 v2 重写 + 生成链路超时修复
+
+概述：把 PI 当前使用的百炼（DashScope 兼容端点，kimi-k3）配置为本项目 AI 评论的 Provider；
+提示词全部按研究备忘录规格重写；修复两个导致生成必败的链路问题。
+
+变更：
+  1. **[配置]** 新增并设为默认 AI profile「bailian」：dashscope 兼容端点 + kimi-k3（与 PI 同 Provider）；
+     密钥经 `security` CLI 入 macOS 钥匙串（零落盘）。连接测试 ok（~2.9s）。
+  2. **[修复] `ai_client.call_chat`**：temperature 为 None 时不再携带该字段——kimi-k3 等推理模型
+     拒收 temperature 参数（HTTP 400 InvalidParameter），此前生成必败。
+  3. **[修复] 生成超时**：推理模型单次结构化调用实测 ~4 分钟，原 60s 超时必 ReadTimeout；
+     结构化调用放宽到 300s、逐板块补调 150s；前端 CommentaryCard 轮询 deadline 2min→5min。
+  4. **[提示词 v2]** `DEFAULT_TEMPLATES` 全部重写：system 明确「引用必带单位与口径/不编造/
+     不给投资建议/纯 JSON」；每板块写清框架语义（如债务周期的 ±1pp/−0.5pp 阈值）、快照字段口径、
+     必答任务（现状/边际/矛盾/含义）与写作结构；overall 要求跨板块一致点与背离点+风险信号。
+  5. **[文档]** 修正 data-supplement-runbook 四处漂移（社融已抽 pbc_shrzgm.py + 04 独立脚本、
+     硬编码清单漏掉 _ISM_SUPPLEMENT、GDP 累计季度解析已常态化的过时 case 记录、ISM 回补窗口已到
+     2026-07）+ CRCL 节新增 yfinance 依赖说明；AGENTS.md 新增「数据获取文档同步」持续维护规则。
+  6. **[验证]** 端到端真实生成成功（kimi-k3，~4 分钟，7 板块一次通过校验）；全部引用数值
+     与 DB 逐条对账一致（GDP 4.7/5.0、CPI 0.91/0.05、M2 7.7、脉冲 -0.74、杠杆 57.7/179.5/71.0、
+     LPR 3.5、财政 5.8/1.3、出口 23.9、ISM 55.6 等无一错漏）。
+
+### AI commentary on Bailian + prompt v2 + generation-chain timeout fixes (English)
+
+Summary: wired the PI-configured Bailian provider (DashScope-compatible endpoint, kimi-k3) as the
+commentary AI profile; rewrote all prompts to research-memo spec; fixed two chain-breaking issues.
+
+Changes:
+  1. **[config]** new default AI profile "bailian" (dashscope compat + kimi-k3); key in macOS
+     Keychain only. Connection test ok (~2.9s).
+  2. **[fix] ai_client**: temperature omitted when None — reasoning models like kimi-k3 reject the
+     parameter outright (HTTP 400), which previously made every generation fail.
+  3. **[fix] timeouts**: reasoning-model structured calls take ~4 min; the 60s default always
+     ReadTimeout'd. Structured call 300s, per-section fallback 150s; frontend poll deadline 2→5 min.
+  4. **[prompts v2]** DEFAULT_TEMPLATES rewritten: framework semantics + field definitions + required
+     tasks + writing structure per section; strict cite-with-units / no-fabrication / no-advice rules.
+  5. **[docs]** four runbook drifts corrected (pbc_shrzgm.py extraction, missing _ISM_SUPPLEMENT in
+     the hardcoded inventory, GDP cumulative-quarter parser now standard, ISM backfill window);
+     CRCL yfinance note; AGENTS.md gains a standing "keep data-acquisition docs in sync" rule.
+  6. **[verification]** real end-to-end generation succeeded (kimi-k3, ~4 min, 7 sections passed
+     validation first try); every cited number reconciled against the DB 1:1.
+
+
 ### 数据例行更新（2026-08-30）
 
 概述：按 docs/data-supplement-runbook.md 全量执行一轮数据更新（含手动补充项盘点）。

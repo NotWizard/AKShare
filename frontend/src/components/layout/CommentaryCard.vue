@@ -15,7 +15,7 @@ import type { Commentary } from '@/api/types'
 
 const EMPTY: Commentary = { status: 'empty', msg: null, hint: null, stale: false, regenerating: false, overall: '', sections: {}, provenance: null }
 const POLL_INTERVAL_MS = 2000
-const POLL_DEADLINE_MS = 120_000
+const POLL_DEADLINE_MS = 300_000   // 推理模型（kimi-k3）一次生成可达 3-4 分钟
 
 const data = ref<Commentary>({ ...EMPTY })
 const loading = ref(false)
