@@ -154,7 +154,7 @@ const fmtCorr = (k: string) => lagNum(k) !== null ? lagNum(k)!.toFixed(2) : '—
 </script>
 
 <template>
-  <div class="p-6 max-w-[1400px] space-y-5">
+  <div class="p-6 space-y-5">
     <header class="flex items-end justify-between">
       <div>
         <h1 class="text-xl font-bold text-text tracking-tight">综合概览</h1>

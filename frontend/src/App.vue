@@ -8,7 +8,7 @@ import RefreshBar from './components/layout/RefreshBar.vue'
   <div class="min-h-screen bg-bg">
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:bg-surface focus:text-text focus:px-3 focus:py-2 focus:rounded">跳到主内容</a>
     <Sidebar />
-    <main id="main" class="ml-[200px] h-screen overflow-y-auto overflow-x-hidden">
+    <main id="main" class="ml-[216px] h-screen overflow-y-auto overflow-x-hidden">
       <RefreshBar />
       <RouterView v-slot="{ Component }">
         <Transition name="fade" mode="out-in">

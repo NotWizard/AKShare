@@ -170,7 +170,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="p-6 max-w-[1200px] space-y-5">
+  <div class="p-6 space-y-5">
     <header>
       <h1 class="text-xl font-bold text-text tracking-tight">AI 设置</h1>
       <p class="text-xs text-text-3 mt-1">AI 生成配置 profiles — 密钥存 macOS 钥匙串，配置文件零密钥</p>

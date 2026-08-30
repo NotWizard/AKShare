@@ -36,6 +36,32 @@ textarea 竖排一面墙」改主-从布局。
 
 验证：vitest 42/42；vue-tsc 0 error；浏览器实测三个 tab 渲染与切换正常。
 
+### 宽度自适应修复
+
+概述：重设计误给 Overview/AI 设置加了 max-w 限宽（落地页思路），宽窗右侧大片留空；且 Sidebar
+扩到 216px 后 App.vue 主区 margin 未同步（主区被压 16px）。
+
+变更：
+  1. **[修复]** Overview/AISettings 去掉 max-w 限宽，内容随窗口铺满（看板场景密度优先）。
+  2. **[修复]** App.vue 主区 ml-[200px]→ml-[216px]，与 Sidebar 同宽。
+  3. **[修复]** 顶栏「刷新数据」按钮与预设分段按钮加 whitespace-nowrap，窄空间下不再折行。
+
+验证：vue-tsc 0 error；vitest 42/42；vite build ✓；1900px 宽窗浏览器实测两页均铺满且顶栏无折行。
+
+### Width adaptivity fixes (English)
+
+Summary: the redesign mistakenly gave Overview/AI-Settings a max-w cap (a landing-page habit),
+leaving dead space on wide windows; and App.vue's main margin never followed the 216px sidebar.
+
+Changes:
+  1. **[fix]** max-w caps removed from Overview/AISettings — content fills the window.
+  2. **[fix]** App.vue main margin synced to the 216px sidebar.
+  3. **[fix]** top-bar refresh button + preset segments get whitespace-nowrap (no more wrapped
+     one-line labels).
+
+Verification: vue-tsc 0 errors; vitest 42/42; vite build ✓; both pages verified edge-to-edge in a
+1900px-wide browser window.
+
 ### AI settings page layout rework (English)
 
 Summary: the three flat full-width blocks (Profiles / prompt templates / generation history)

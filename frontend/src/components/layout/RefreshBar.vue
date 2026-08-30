@@ -35,7 +35,7 @@ function trigger() {
     <div v-if="showDateFilter" class="flex items-center rounded-lg border border-border p-0.5 gap-0.5" role="group" aria-label="日期范围">
       <button
         v-for="p in presets" :key="p"
-        class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors duration-150"
+        class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors duration-150 whitespace-nowrap"
         :class="filters.preset === p
           ? 'bg-accent-soft text-accent'
           : 'text-text-3 hover:text-text-2'"
@@ -51,7 +51,7 @@ function trigger() {
 
     <button
       v-if="canRefresh"
-      class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 disabled:cursor-not-allowed active:scale-[0.98]"
+      class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 disabled:cursor-not-allowed active:scale-[0.98] whitespace-nowrap shrink-0"
       :class="refresh.running
         ? 'border border-border text-text-3 cursor-wait'
         : 'bg-accent text-accent-ink hover:bg-accent-hi'"
