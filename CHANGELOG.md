@@ -21,6 +21,27 @@
 
 验证：vitest 42/42；vue-tsc 0 error；vite build ✓；浏览器逐页截图核验（Overview/美林/信用/库存/债务/房地产/人口/财政外需/CRCL/AI 设置）。
 
+### 细分页 AI 板块评论移至页面最底部
+
+概述：板块评论（SectionCommentary）从「第一张图下方」改为页面最底部——先看完数据图表，
+最后读 AI 总结，叙事顺序更顺（用户在真实页面上反馈首图下方位置奇怪）。
+
+变更：
+  1. **[交互]** 美林/信用/库存/债务/房地产/财政外需 6 个细分页的 SectionCommentary 统一移至
+     页面最后一张 GraphCard 之后。
+
+验证：vue-tsc 0 error；浏览器实测美林页底部渲染（kimi-k3 评论 + 出处行）。
+
+### Section commentary moved to page bottom (English)
+
+Summary: per-section AI commentary moved from below the first chart to the very bottom of each
+detail page — read the charts first, then the AI summary (user feedback: mid-page felt odd).
+
+Changes:
+  1. **[interaction]** SectionCommentary relocated after the last GraphCard on all 6 detail pages.
+
+Verification: vue-tsc clean; Merrill page bottom verified in a real browser.
+
 ### AI 设置页布局重构
 
 概述：三大块（Profiles / 提示词模板 / 生成历史）从全宽平铺改为分区 tab；模板编辑器从「8 个

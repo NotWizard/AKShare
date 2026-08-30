@@ -84,7 +84,6 @@ const radarOpt = themedOption(() => (buildRadar(scores())))
     <GraphCard title="新建商品住宅价格同比（多城市）" tip="70 城房价指数同比；NBS 发布为指数口径（上年同月=100），图中已换算为涨跌 %，0 为持平。" :loading="loading" :error="error" @retry="load">
       <EChart :option="priceOpt" height="380px" />
     </GraphCard>
-    <SectionCommentary section="real_estate" />
     <GraphCard title="利率环境（房贷锚）" tip="5 年期 LPR（房贷定价基准）+ 实际利率（LPR 1Y − CPI 同比）；利率走低支撑购房需求。" :loading="loading" :error="error" @retry="load">
       <EChart :option="rateOpt" height="300px" />
     </GraphCard>
@@ -96,5 +95,7 @@ const radarOpt = themedOption(() => (buildRadar(scores())))
         </span>
       </p>
     </GraphCard>
+    <SectionCommentary section="real_estate" />
+
   </div>
 </template>

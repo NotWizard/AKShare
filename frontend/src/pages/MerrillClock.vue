@@ -61,12 +61,13 @@ const cpiMomOpt = themedOption(() => (buildDualAxisLine(cpiMom.value, 'cpi_mom',
     <GraphCard title="美林投资时钟" tip="横轴 = GDP 同比 − 潜在增长（5 期中位数趋势，分类带 ±0.5pp 死区，零线即边界中心）、纵轴 CPI 同比；点的颜色为投资时钟阶段（复苏/过热/滞胀/衰退）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="clockOpt" :not-merge="true" height="420px" />
     </GraphCard>
-    <SectionCommentary section="merrill" />
     <GraphCard title="CPI vs PPI 同比" tip="居民消费价格 vs 工业生产者出厂价格同比——美林时钟纵轴 CPI 的主轴曲线。" :loading="loading" :error="error" @retry="load">
       <EChart :option="cpiPpiOpt" height="300px" />
     </GraphCard>
     <GraphCard title="CPI vs PPI 环比" tip="居民消费价格 vs 工业生产者出厂价格环比（月度高频先行、0 上下波动），与同比图呼应。PPI 环比为同比推导值（东财无免费直接源）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="cpiMomOpt" height="260px" />
     </GraphCard>
+    <SectionCommentary section="merrill" />
+
   </div>
 </template>

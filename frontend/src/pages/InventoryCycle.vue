@@ -50,12 +50,13 @@ const pmiOpt = themedOption(() => (buildMultiLine(pmiDm.value, [{ col: 'pmi_offi
     <GraphCard title="PMI vs 工业增加值同比" tip="PMI 50 荣枯线；工业增加值同比趋势。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ipOpt" height="320px" />
     </GraphCard>
-    <SectionCommentary section="inventory" />
     <GraphCard title="库存周期四象限" tip="PMI vs 工业增加值同比的阶段分布。" :loading="loading" :error="error" @retry="load">
       <EChart :option="quadOpt" :not-merge="true" height="360px" />
     </GraphCard>
     <GraphCard title="PMI 多维（官方 / 财新 / 非制造业 / 服务）" tip="官方制造业 PMI + 财新制造业 PMI（公认领先）+ 非制造业 PMI + 财新服务业 PMI；50 为荣枯线。" :loading="loading" :error="error" @retry="load">
       <EChart :option="pmiOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="inventory" />
+
   </div>
 </template>

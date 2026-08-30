@@ -44,7 +44,6 @@ const ismOpt = themedOption(() => (buildMultiLine(ext.value, [{ col: 'us_ism_pmi
     <GraphCard title="财政收支累计同比" tip="国家财政收入/支出累计增长（%）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revYoyOpt" height="320px" />
     </GraphCard>
-    <SectionCommentary section="fiscal_external" />
     <GraphCard title="财政收支累计值" tip="国家财政收入/支出累计值（亿元）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="revCumOpt" height="320px" />
     </GraphCard>
@@ -57,5 +56,7 @@ const ismOpt = themedOption(() => (buildMultiLine(ext.value, [{ col: 'us_ism_pmi
     <GraphCard title="美国 ISM 制造业 PMI" tip="外需景气代理；荣枯线 50。日期由发布日归一到数据月。Jin10 源冻结于 2025-08 数据月，其后由 ISM 官方发布值按月人工/Agent 补充（见 docs/data-supplement-runbook.md）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="ismOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="fiscal_external" />
+
   </div>
 </template>

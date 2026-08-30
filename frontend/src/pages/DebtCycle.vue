@@ -56,7 +56,6 @@ const hhOpt = themedOption(() => (buildMultiLine(dqi.value, [{ col: 'household',
     <GraphCard title="分部门宏观杠杆率（堆叠）" tip="居民 / 非金融企业 / 政府杠杆率堆叠（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="stackedOpt" height="380px" />
     </GraphCard>
-    <SectionCommentary section="debt" />
     <GraphCard title="政府杠杆：中央 vs 地方" tip="政府部门杠杆率拆分为中央政府与地方政府（占 GDP %）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="govOpt" height="320px" />
     </GraphCard>
@@ -66,5 +65,7 @@ const hhOpt = themedOption(() => (buildMultiLine(dqi.value, [{ col: 'household',
     <GraphCard title="居民真实杠杆空间：杠杆率 vs 债务收入比" tip="居民部门杠杆率（占GDP%）vs 居民债务/可支配收入（%）。杠杆率看似仅~60%，但债务收入比已>120%，更真实反映居民加杠杆空间。债务=居民杠杆率×年化GDP（Q1×4近似）。" :loading="loading" :error="error" @retry="load">
       <EChart :option="hhOpt" height="300px" />
     </GraphCard>
+    <SectionCommentary section="debt" />
+
   </div>
 </template>
