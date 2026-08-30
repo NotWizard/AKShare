@@ -21,6 +21,38 @@
 
 验证：vitest 42/42；vue-tsc 0 error；vite build ✓；浏览器逐页截图核验（Overview/美林/信用/库存/债务/房地产/人口/财政外需/CRCL/AI 设置）。
 
+### AI 设置页布局重构
+
+概述：三大块（Profiles / 提示词模板 / 生成历史）从全宽平铺改为分区 tab；模板编辑器从「8 个
+textarea 竖排一面墙」改主-从布局。
+
+变更：
+  1. **[布局]** 页首新增分区 tab（Profiles 配置 / 提示词模板 / 生成历史），分段控件语汇与
+     全局日期预设一致（accent-soft 激活 + aria-selected）。
+  2. **[模板编辑器]** 左侧 200px 模板键列表（激活指示条 + 已覆盖 cyan 点标），右侧编辑面板
+     （当前模板名 + 已覆盖/使用默认状态标 + 大编辑区 monospace + 重置默认 + 保存全部带
+     dirty 态与未保存警示）。
+  3. **[一致性]** 页面 max-w-[1200px]；密钥状态/延迟读数改 tnum。
+
+验证：vitest 42/42；vue-tsc 0 error；浏览器实测三个 tab 渲染与切换正常。
+
+### AI settings page layout rework (English)
+
+Summary: the three flat full-width blocks (Profiles / prompt templates / generation history)
+became tabbed sections; the template editor went from an 8-textarea wall to a master-detail
+layout.
+
+Changes:
+  1. **[layout]** section tabs at the top (Profiles / Templates / History), same segmented
+     vocabulary as the global date presets (accent-soft active + aria-selected).
+  2. **[templates]** left 200px key list (active indicator + cyan dot for overridden), right
+     editor pane (name + override/default badge + large mono textarea + reset + save-all with
+     dirty state and unsaved warning).
+  3. **[consistency]** page max-w-[1200px]; key-status/latency readouts in tabular numerals.
+
+Verification: vitest 42/42; vue-tsc 0 errors; all three tabs render and switch correctly in a
+real browser.
+
 ### UI Redesign: Observatory Dark (English)
 
 Summary: full web-UI redesign. Deep slate base + hairline borders + a single cyan accent
