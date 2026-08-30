@@ -1,11 +1,13 @@
 {
   "_说明": "CRCL 监控 — 宏观事件与里程碑。手工维护：直接编辑本文件，页面实时读取。category ∈ {财报, 监管, 宏观, 里程碑, 合作, 检查点}；status ∈ {已发生, 进行中, 待观察, 待验证, 计划}。日期格式 YYYY-MM-DD。",
-  "updated_at": "2026-08-20",
+  "updated_at": "2026-08-30",
   "events": [
     {"date": "2026-08-05", "category": "财报", "title": "Q2 2026 财报发布", "detail": "收入 $701M；储备收入 $668M (+5% YoY)；EPS $0.18 低于一致预期 $0.26；USDC 流通量 $73.3B (+19%)；Q2 链上交易量 $14.8T。", "source": "Circle IR 新闻稿 (ir.circle.com)", "status": "已发生"},
     {"date": "2026-08-06", "category": "合作", "title": "Coinbase 分发协议续约", "detail": "USDC 分发条款更新；Coinbase 产品内 USDC 达 $20B（占流通量 30%+）。分发成本率的边际变化是利润弹性关键，需在下季财报验证。", "source": "公司公告/媒体报道", "status": "进行中"},
     {"date": "2026-08-18", "category": "监管", "title": "SEC 发布 Regulation Crypto 规则制定", "detail": "数字代币销售与分类的监管框架推进，Allaire 在 AMA 中提及。", "source": "SEC / Circle AMA (2026-08-19)", "status": "进行中"},
     {"date": "2026-08-19", "category": "财报", "title": "Q2 财报 AMA（Jeremy Allaire）", "detail": "提出 Arc = AWS 级机会；agent 经济三拼图（KYAgent/信誉/可编程策略）；EURC 破 €400M；Clarity Act 不通过也不影响 USDC 增长。当日股价 +9.6% 收 $78.59。", "source": "Circle 官方 X/YouTube 直播回放", "status": "已发生"},
+    {"date": "2026-08-28", "category": "合作", "title": "Chelsea FC 主赞助合作（USDC 品牌上球衣）", "detail": "2026/27 赛季起 Circle 与 USDC 品牌登上切尔西男足/女足/青训球衣（主要合作伙伴）。当日 CRCL 盘中 $90.50→~$96，收 $94.24。消费级品牌曝光属零售端触达利好。", "source": "Investing News Network / The Coin Republic 报道", "status": "已发生"},
+    {"date": "2026-08-28", "category": "里程碑", "title": "USDC/EURC/CCTP/Bridge Kit 上线 Plasma 链", "detail": "Plasma 上线即支持 USDC/EURC 多币种支付、结算、交易与 DeFi 场景；分发网络继续扩张，与 Arc 主网（9/16）形成生态矩阵。", "source": "Circle 官方博客", "status": "已发生"},
     {"date": "2026-09-16", "category": "里程碑", "title": "Arc 主网上线", "detail": "稳定币原生链（USDC 计 gas）；BlackRock、Visa 为首批合作伙伴；预售募资 $222M @ FDV $3B；2026 指引含 $180M 预售收入（75% 挂钩里程碑）。", "source": "Circle 财报指引/AMA", "status": "待验证"},
     {"date": "2026-09-16", "category": "宏观", "title": "FOMC 利率决议（9 月会议，日期待核实）", "detail": "每 25bp 降息 ≈ 蒸发 ~$180M 年化储备收入。关注点阵图与降息路径。", "source": "Fed（会议日期以官方日历为准）", "status": "待观察"},
     {"date": "2026-09-30", "category": "监管", "title": "Clarity Act 投票窗口（9 月）", "detail": "通过 = 估值催化；Allaire 表态即使不通过，监管机构将以规则制定兜底。", "source": "Circle AMA / 公开报道", "status": "待观察"},

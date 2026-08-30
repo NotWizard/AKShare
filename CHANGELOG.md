@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### 数据例行更新（2026-08-30）
+
+概述：按 docs/data-supplement-runbook.md 全量执行一轮数据更新（含手动补充项盘点）。
+变更：
+  1. **[数据]** `01_fetch_data.py --full` 全量 16/16 表更新：house_price 前进到 2026-07（NBS 70 城，+10 行）、fiscal 前进到 2026-07（+3 月）、其余表复核均当期；derived 重算，signal_history +1。
+  2. **[CRCL]** 触发一轮自动采集（metric_points → 2026-08-30）；修复 yfinance 未安装导致的估值源失败（装入 .venv312，7/7 源全绿）。
+  3. **[CRCL 手工]** `data/crcl_events.json` 补录 2026-08-28 两条：Chelsea FC 主赞助合作（USDC 品牌上球衣）、USDC/EURC/CCTP/Bridge Kit 上线 Plasma 链（category 按 schema 枚举用「里程碑」）。
+  4. **[盘点无需补]** NIFD 杠杆率最新为 2026Q2（2026Q3 报告约 10 月底发布）；ISM 官方值 2026-08 于 9/1 发布，未到窗口；人口/居民收入年度值已当期。
+
+验证：
+  1. 闸门管道全绿（无 kept_previous）；test_crcl_json_schema 11/11；test_crcl_alerts 通过。
+  2. /api/v1/crcl/events 返回 13 条含新增 2 条。
+
+### Routine data refresh 2026-08-30 (English)
+
+Summary: one full data-update pass per docs/data-supplement-runbook.md, incl. the manual-supplement inventory.
+Changes:
+  1. **[data]** `01_fetch_data.py --full`: 16/16 tables updated — house_price to 2026-07, fiscal to 2026-07; derived recomputed; signal_history +1.
+  2. **[CRCL]** one collector run (metric_points → 2026-08-30); fixed the yfinance-missing failure of the valuation source (7/7 sources green).
+  3. **[CRCL manual]** two 2026-08-28 events appended to data/crcl_events.json (Chelsea FC partnership; USDC/EURC/CCTP/Bridge Kit on Plasma).
+  4. **[no-op inventory]** NIFD leverage current at 2026Q2 (Q3 report ~end of Oct); ISM 2026-08 publishes Sep 1 (out of window); annual demographics/income current.
+
+Verification:
+  1. Gate pipeline green (no kept_previous); crcl json-schema 11/11; crcl alerts pass.
+  2. /api/v1/crcl/events serves 13 items incl. the 2 new ones.
+
+
 ### M4 移植：AI 评论 v2（配置层 + 结构化分板块生成 + 呈现层）并入 1.2.0 基线
 
 概述：把本机遗留的 M4a/b/c 三个里程碑（此前从未推送，存于 archive/audit-fixes-local）
