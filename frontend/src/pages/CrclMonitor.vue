@@ -12,9 +12,10 @@ import GraphCard from '@/components/layout/GraphCard.vue'
 import MetricTile from '@/components/layout/MetricTile.vue'
 import PageState from '@/components/layout/PageState.vue'
 import ChartTip from '@/components/controls/ChartTip.vue'
-import { applyTheme, baseAxis, COLORS } from '@/design/echarts.theme'
+import { applyTheme, baseAxis, chartTheme } from '@/design/echarts.theme'
 import { api } from '@/api/client'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { themedOption } from '@/composables/useThemedOption'
 import { useRefreshStore } from '@/stores/refresh'
 import type { CrclMetric, CrclPoint } from '@/api/types'
 
@@ -187,29 +188,29 @@ function lineOption(m: CrclMetric | undefined, opts: { area?: boolean; unit?: st
     series: [{
       name: m.label, type: 'line', symbol: 'none', smooth: false,
       data: vals,
-      itemStyle: { color: COLORS.accent },
-      lineStyle: { color: COLORS.accent, width: 2 },
+      itemStyle: { color: themeColors().accent },
+      lineStyle: { color: themeColors().accent, width: 2 },
       ...(opts.area ? { areaStyle: { opacity: 0.1 } } : {}),
       ...(opts.markLineY != null ? {
         markLine: {
           silent: true, symbol: 'none',
           data: [{ yAxis: opts.markLineY }],
-          lineStyle: { color: COLORS.warn, type: 'dashed', width: 1.5 },
-          label: { formatter: String(opts.markLineY), color: COLORS.warn, fontSize: 10 },
+          lineStyle: { color: themeColors().warn, type: 'dashed', width: 1.5 },
+          label: { formatter: String(opts.markLineY), color: themeColors().warn, fontSize: 10 },
         },
       } : {}),
     }],
   }))
 }
 
-const priceOpt = computed(() => lineOption(metrics.value.crcl_close, { unit: 'USD' }))
-const usdcOpt = computed(() => lineOption(metrics.value.usdc_circ, { area: true, unit: '十亿美元', divisor: 1e9 }))
-const totalOpt = computed(() => lineOption(metrics.value.stablecoin_total, { area: true, unit: '十亿美元', divisor: 1e9 }))
+const priceOpt = themedOption(() => lineOption(metrics.value.crcl_close, { unit: 'USD' }))
+const usdcOpt = themedOption(() => lineOption(metrics.value.usdc_circ, { area: true, unit: '十亿美元', divisor: 1e9 }))
+const totalOpt = themedOption(() => lineOption(metrics.value.stablecoin_total, { area: true, unit: '十亿美元', divisor: 1e9 }))
 // 6M / 1Y 曲线配色（3M 用 accent）——treasuryOpt 内引用，声明须在其之前（否则一旦
 // 该 computed 变为 eager 求值就会命中 TDZ ReferenceError）。
-const PALETTE1 = '#22d3ee'
-const PALETTE2 = '#f59e0b'
-const treasuryOpt = computed(() => {
+// 主题化：1 号色 = accent，2 号色 = warn（暗亮两套自动跟换）
+const themeColors = () => chartTheme().colors
+const treasuryOpt = themedOption(() => {
   const m3 = metrics.value.treasury_3m, m6 = metrics.value.treasury_6m, m12 = metrics.value.treasury_1y
   if (!m3 || !m6 || !m12) return null
   const dates = m3.points.map((p) => p.date)
@@ -224,35 +225,35 @@ const treasuryOpt = computed(() => {
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
     yAxis: { type: 'value', ...baseAxis({ name: '%', scale: true }) },
     series: [
-      mk('3M', m3.points.map((p) => p.value), COLORS.accent),
-      mk('6M', dates.map((d) => v6.get(d) ?? null), PALETTE1),
-      mk('1Y', dates.map((d) => v12.get(d) ?? null), PALETTE2),
+      mk('3M', m3.points.map((p) => p.value), themeColors().accent),
+      mk('6M', dates.map((d) => v6.get(d) ?? null), themeColors().warn),
+      mk('1Y', dates.map((d) => v12.get(d) ?? null), themeColors().up),
     ],
   }))
 })
 
 // ---------- alerts ----------
 const LEVEL_STYLE: Record<string, { ring: string; badge: string; label: string }> = {
-  yellow: { ring: 'border-amber-500/50', badge: 'bg-amber-500/15 text-amber-400', label: '黄色警报' },
-  red: { ring: 'border-red-500/60', badge: 'bg-red-500/15 text-red-400', label: '红色警报' },
-  confirm: { ring: 'border-emerald-500/50', badge: 'bg-emerald-500/15 text-emerald-400', label: '确认信号' },
+  yellow: { ring: 'border-warn', badge: 'bg-amber-500/15 text-warn', label: '黄色警报' },
+  red: { ring: 'border-down', badge: 'bg-red-500/15 text-down', label: '红色警报' },
+  confirm: { ring: 'border-up', badge: 'bg-up-soft text-up', label: '确认信号' },
 }
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   triggered: { text: '已触发', cls: 'bg-red-500/20 text-red-300' },
-  ok: { text: '正常', cls: 'bg-emerald-500/15 text-emerald-400' },
+  ok: { text: '正常', cls: 'bg-up-soft text-up' },
   insufficient_data: { text: '数据不足', cls: 'bg-slate-500/20 text-slate-400' },
   not_evaluated: { text: '未评估', cls: 'bg-slate-500/20 text-slate-400' },
 }
 const CATEGORY_CLS: Record<string, string> = {
   '财报': 'bg-indigo-500/15 text-indigo-300',
-  '监管': 'bg-amber-500/15 text-amber-400',
+  '监管': 'bg-amber-500/15 text-warn',
   '宏观': 'bg-cyan-500/15 text-cyan-300',
-  '里程碑': 'bg-emerald-500/15 text-emerald-400',
+  '里程碑': 'bg-up-soft text-up',
   '合作': 'bg-purple-500/15 text-purple-300',
   '检查点': 'bg-red-500/15 text-red-300',
 }
 const EVENT_STATUS_CLS: Record<string, string> = {
-  '已发生': 'text-slate-500', '进行中': 'text-cyan-300', '待观察': 'text-amber-400',
+  '已发生': 'text-text-4', '进行中': 'text-info', '待观察': 'text-warn',
   '待验证': 'text-emerald-400', '计划': 'text-text-3',
 }
 
@@ -436,9 +437,9 @@ const latestQ = computed(() => {
                 <td class="py-1.5 pr-3 text-text-2 font-mono text-[11px]">{{ l.source }}</td>
                 <td class="py-1.5 pr-3">
                   <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                    :class="l.status === 'ok' ? 'bg-emerald-500/15 text-emerald-400'
+                    :class="l.status === 'ok' ? 'bg-up-soft text-up'
                       : l.status === 'error' ? 'bg-red-500/15 text-red-300'
-                      : l.status === 'alert' ? 'bg-amber-500/15 text-amber-400'
+                      : l.status === 'alert' ? 'bg-amber-500/15 text-warn'
                       : 'bg-slate-500/15 text-slate-400'">{{ l.status }}</span>
                 </td>
                 <td class="py-1.5 pr-3 text-text-2 max-w-[420px] truncate" :title="l.message">{{ l.message }}</td>

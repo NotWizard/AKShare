@@ -7,7 +7,7 @@ import { useRefreshStore } from '@/stores/refresh'
 import SectionCommentary from '@/components/layout/SectionCommentary.vue'
 import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
-import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
+import { applyTheme, baseAxis, chartTheme } from '@/design/echarts.theme'
 import { buildRadar, buildMultiLine } from '@/components/charts/options'
 
 // Register RadarChart only on this page (lazy-loaded via router) — keeps
@@ -15,6 +15,7 @@ import { buildRadar, buildMultiLine } from '@/components/charts/options'
 import { use as echartsUse } from 'echarts/core'
 import { RadarChart } from 'echarts/charts'
 import { RadarComponent } from 'echarts/components'
+import { themedOption } from '@/composables/useThemedOption'
 echartsUse([RadarChart, RadarComponent])
 
 type Rec = Record<string, string | number | null>
@@ -40,7 +41,7 @@ const assessment = computed<Record<string, any>>(() => data.value?.assessment ??
 // pivot house_price rows → series per city (new_yoy)
 // NBS 70 城「同比」实为指数口径（上年同月=100）——换算为涨跌 % 再画，
 // 否则 97.9 会被读成 97.9%（实际 −2.1%）。
-const priceOpt = computed(() => {
+const priceOpt = themedOption(() => {
   const byDate = new Map<string, Record<string, number | null>>()
   for (const r of hp.value) {
     const d = r.date as string
@@ -50,8 +51,9 @@ const priceOpt = computed(() => {
     byDate.get(d)![c] = typeof v === 'number' ? +(v - 100).toFixed(2) : null
   }
   const dates = Array.from(byDate.keys())
+  const { palette } = chartTheme()
   const series = CITIES.map((c, i) => {
-    const color = PALETTE[i % PALETTE.length]
+    const color = palette[i % palette.length]
     return {
       name: c, type: 'line', connectNulls: true, symbol: 'none',
       itemStyle: { color }, lineStyle: { width: 1.5, color },
@@ -70,8 +72,8 @@ const scores = () => assessment.value.assessment ?? assessment.value
 
 // Remaining options built in computeds (not the template) → one markRaw'd
 // object per rebuild that ECharts merges into the live instance.
-const rateOpt = computed(() => markRaw(buildMultiLine(rate.value, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')))
-const radarOpt = computed(() => markRaw(buildRadar(scores())))
+const rateOpt = themedOption(() => (buildMultiLine(rate.value, [{ col: 'lpr_5y', name: 'LPR 5年' }, { col: 'real_rate', name: '实际利率' }], '%')))
+const radarOpt = themedOption(() => (buildRadar(scores())))
 </script>
 
 <template>

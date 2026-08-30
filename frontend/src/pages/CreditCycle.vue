@@ -10,6 +10,7 @@ import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
+import { themedOption } from '@/composables/useThemedOption'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
@@ -42,12 +43,12 @@ const credit = computed<CycleFrame | null>(() => data.value?.credit ?? null)
 
 // Options are built in computeds (not the template) so each rebuild yields one
 // markRaw'd object that ECharts merges into the live instance (preserves zoom).
-const m2Opt = computed(() => markRaw(buildCreditM2Chart(m1m2Dm.value, credit.value?.series ?? [])))
-const m1m2Opt = computed(() => markRaw(buildDualAxisLine(m1m2Dm.value, 'm1_yoy', 'm2_yoy')))
-const spreadOpt = computed(() => markRaw(buildSpreadChart(spreadDm.value, 'm2_m1_spread')))
-const impulseOpt = computed(() => markRaw(buildCreditImpulseChart(credit.value?.series ?? [])))
-const sfOpt = computed(() => markRaw(buildBarLineCombo(sfDm.value, 'total', 'sf_stock_yoy', '社融增量', '存量增速', '亿', '%')))
-const ncOpt = computed(() => markRaw(buildBarLineCombo(ncDm.value, 'new_rmb_loan', 'loan_yoy', '新增贷款', '同比', '亿', '%')))
+const m2Opt = themedOption(() => (buildCreditM2Chart(m1m2Dm.value, credit.value?.series ?? [])))
+const m1m2Opt = themedOption(() => (buildDualAxisLine(m1m2Dm.value, 'm1_yoy', 'm2_yoy')))
+const spreadOpt = themedOption(() => (buildSpreadChart(spreadDm.value, 'm2_m1_spread')))
+const impulseOpt = themedOption(() => (buildCreditImpulseChart(credit.value?.series ?? [])))
+const sfOpt = themedOption(() => (buildBarLineCombo(sfDm.value, 'total', 'sf_stock_yoy', '社融增量', '存量增速', '亿', '%')))
+const ncOpt = themedOption(() => (buildBarLineCombo(ncDm.value, 'new_rmb_loan', 'loan_yoy', '新增贷款', '同比', '亿', '%')))
 </script>
 
 <template>

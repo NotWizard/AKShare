@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRefreshStore } from '@/stores/refresh'
 import { useFiltersStore, type Preset } from '@/stores/filters'
+import { themeMode, toggleTheme } from '@/stores/theme'
 import HealthLight from './HealthLight.vue'
 
 const refresh = useRefreshStore()
@@ -46,6 +47,16 @@ function trigger() {
     <div v-else class="text-[11px] text-text-4">本页数据不受全局日期范围影响</div>
 
     <div class="w-px h-4 bg-border" />
+
+    <!-- 亮/暗主题切换 -->
+    <button
+      class="w-7 h-7 flex items-center justify-center rounded-lg border border-border text-text-3 hover:text-text hover:border-border-hi transition-colors duration-150"
+      :aria-label="themeMode === 'dark' ? '切换为亮色主题' : '切换为暗色主题'"
+      :title="themeMode === 'dark' ? '切换为亮色主题' : '切换为暗色主题'"
+      @click="toggleTheme()"
+    >
+      <span aria-hidden="true" class="text-[13px] leading-none">{{ themeMode === 'dark' ? '☀' : '☾' }}</span>
+    </button>
 
     <HealthLight />
 

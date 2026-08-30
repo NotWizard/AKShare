@@ -1,22 +1,64 @@
-/* Observatory Dark design tokens — global CSS variables (mirror tailwind config).
-   更深的 slate 底 + 发丝边框 + cyan 单强调（避开 AI 紫；与相位语义色零冲突）。 */
+/* 双主题设计 token —— 暗色 Obsidian Blue（默认）· 亮色 Paper。
+   亮暗共用同一套变量名；tailwind.config.ts 以 var(--x) 引用，全站工具类零改动双主题。
+   色板明细与决策见 docs/design/dual-theme-plan.md。 */
 :root {
+  /* ── Obsidian Blue（暗，默认）── */
   --bg: #070b12;
   --surface: #0c1322;
   --card: #101a2b;
   --card-hover: #152236;
   --border: rgba(148, 163, 184, 0.10);
   --border-hi: rgba(148, 163, 184, 0.18);
-  --accent: #22d3ee;
-  --accent-hi: #67e8f9;
-  --accent-ink: #052531;
-  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent: #5b8cff;
+  --accent-hi: #7fa6ff;
+  --accent-ink: #06122b;
+  --accent-soft: rgba(91, 140, 255, 0.14);
   --up: #34d399;
   --down: #f87171;
   --warn: #fbbf24;
   --info: #60a5fa;
+  --up-soft: rgba(52, 211, 153, 0.12);
+  --down-soft: rgba(248, 113, 113, 0.12);
+  --warn-soft: rgba(251, 191, 36, 0.12);
   --text: #e8eef7;
   --text-2: #9baac0;
   --text-3: #7c8da5;
-  --text-4: #7f90a4; /* dimmest tier that still passes WCAG AA at 10px */
+  --text-4: #7f90a4; /* dimmest tier that still passes WCAG AA at 10px（暗色已验） */
+  --grid: rgba(148, 163, 184, 0.06);
+  --grid-hi: rgba(148, 163, 184, 0.10);
+  --tooltip-bg: rgba(12, 19, 34, 0.92);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --hover-wash: rgba(255, 255, 255, 0.04);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  /* ── Paper（亮）── */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-hover: #f8fafc;
+  --border: #e3e8ef;
+  --border-hi: #cbd5e1;
+  --accent: #2f5bff;
+  --accent-hi: #1e40af;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(47, 91, 255, 0.10);
+  --up: #059669;
+  --down: #dc2626;
+  --warn: #b45309;
+  --info: #2563eb;
+  --up-soft: rgba(5, 150, 105, 0.10);
+  --down-soft: rgba(220, 38, 38, 0.07);
+  --warn-soft: rgba(180, 83, 9, 0.10);
+  --text: #0f172a;
+  --text-2: #334155;
+  --text-3: #475569;
+  --text-4: #64748b; /* 亮色下 dimmest 仍过 AA（4.76:1 on white） */
+  --grid: rgba(100, 116, 139, 0.12);
+  --grid-hi: rgba(100, 116, 139, 0.18);
+  --tooltip-bg: rgba(255, 255, 255, 0.96);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --hover-wash: rgba(15, 23, 42, 0.04);
+  color-scheme: light;
 }

@@ -35,7 +35,7 @@ const isActive = (to: string): boolean =>
   <aside class="w-[216px] shrink-0 min-h-screen bg-surface border-r border-border fixed top-0 left-0 overflow-y-auto z-[100] flex flex-col">
     <div class="px-5 pt-6 pb-5">
       <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(34,211,238,0.6)]" aria-hidden="true" />
+        <span class="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_var(--accent)]" aria-hidden="true" />
         <span class="text-lg font-extrabold tracking-[0.18em] text-text">MACRO</span>
       </div>
       <div class="text-[11px] text-text-3 mt-1.5">中国经济分析平台</div>

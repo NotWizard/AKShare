@@ -10,6 +10,7 @@ import EChart from '@/components/charts/EChart.vue'
 import GraphCard from '@/components/layout/GraphCard.vue'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import type { CycleFrame } from '@/api/types'
+import { themedOption } from '@/composables/useThemedOption'
 
 const filters = useFiltersStore()
 const refresh = useRefreshStore()
@@ -43,9 +44,9 @@ const quadrant = computed(() =>
         : null,
   })),
 )
-const clockOpt = computed(() => markRaw(buildScatterQuadrant(quadrant.value, 'gdp_gap', 'cpi_yoy', 'GDP同比−潜在增长(pp)', 'CPI同比(%)', 2, 0, { tr: 'overheating', tl: 'stagflation', br: 'recovery', bl: 'recession' })))
-const cpiPpiOpt = computed(() => markRaw(buildDualAxisLine(cpiPpi.value, 'cpi_yoy', 'ppi_yoy')))
-const cpiMomOpt = computed(() => markRaw(buildDualAxisLine(cpiMom.value, 'cpi_mom', 'ppi_mom')))
+const clockOpt = themedOption(() => (buildScatterQuadrant(quadrant.value, 'gdp_gap', 'cpi_yoy', 'GDP同比−潜在增长(pp)', 'CPI同比(%)', 2, 0, { tr: 'overheating', tl: 'stagflation', br: 'recovery', bl: 'recession' })))
+const cpiPpiOpt = themedOption(() => (buildDualAxisLine(cpiPpi.value, 'cpi_yoy', 'ppi_yoy')))
+const cpiMomOpt = themedOption(() => (buildDualAxisLine(cpiMom.value, 'cpi_mom', 'ppi_mom')))
 </script>
 
 <template>

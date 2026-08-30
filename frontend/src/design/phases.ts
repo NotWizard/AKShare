@@ -1,36 +1,59 @@
-// Phase colors + labels — mirror dashboard/config.py PHASE_COLORS / PHASE_LABELS.
-// Single source for badges, phase-background segments, timelines.
+// Phase colors + labels — 双主题（暗亮同 hue、异明度；语义：绿=扩张/红=收缩/琥珀=中性·过热/蓝=衰退）。
+// 读当前主题（stores/theme.ts）——图表重建时随 chartTheme() 一并换肤。
 
-export const PHASE_COLORS: Record<string, string> = {
+import { isLight } from '@/stores/theme'
+
+const DARK: Record<string, string> = {
   // Merrill clock
-  recovery: '#10b981',
-  overheating: '#f59e0b',
-  stagflation: '#ef4444',
-  recession: '#3b82f6',
+  recovery: '#34d399',
+  overheating: '#fbbf24',
+  stagflation: '#f87171',
+  recession: '#60a5fa',
   // Credit cycle
-  easing: '#10b981',
-  tightening: '#ef4444',
-  neutral: '#64748b',
+  easing: '#34d399',
+  tightening: '#f87171',
+  neutral: '#7c8da5',
   // Inventory cycle
-  active_restocking: '#10b981',
-  passive_restocking: '#f59e0b',
-  active_destocking: '#ef4444',
-  passive_destocking: '#3b82f6',
+  active_restocking: '#34d399',
+  passive_restocking: '#fbbf24',
+  active_destocking: '#f87171',
+  passive_destocking: '#60a5fa',
   // Debt cycle
-  leveraging: '#10b981',
-  deleveraging: '#ef4444',
-  stable: '#f59e0b',
-  beautiful_deleveraging: '#10b981',
-  ugly_deleveraging: '#ef4444',
-  leveraging_boom: '#10b981',
-  leveraging_bust: '#ef4444',
-  stable_growth: '#f59e0b',
-  stable_contraction: '#3b82f6',
+  leveraging: '#34d399',
+  deleveraging: '#f87171',
+  stable: '#fbbf24',
+  beautiful_deleveraging: '#34d399',
+  ugly_deleveraging: '#f87171',
+  leveraging_boom: '#34d399',
+  leveraging_bust: '#f87171',
+  stable_growth: '#fbbf24',
+  stable_contraction: '#60a5fa',
+}
+
+const LIGHT: Record<string, string> = {
+  recovery: '#059669',
+  overheating: '#b45309',
+  stagflation: '#dc2626',
+  recession: '#2563eb',
+  easing: '#059669',
+  tightening: '#dc2626',
+  neutral: '#64748b',
+  active_restocking: '#059669',
+  passive_restocking: '#b45309',
+  active_destocking: '#dc2626',
+  passive_destocking: '#2563eb',
+  leveraging: '#059669',
+  deleveraging: '#dc2626',
+  stable: '#b45309',
+  beautiful_deleveraging: '#059669',
+  ugly_deleveraging: '#dc2626',
+  leveraging_boom: '#059669',
+  leveraging_bust: '#dc2626',
+  stable_growth: '#b45309',
+  stable_contraction: '#2563eb',
 }
 
 export const PHASE_LABELS: Record<string, string> = {
-  // 数据不足：子信号在输入缺失时返回该相位（不再伪装成中性），需可读文案
-  insufficient_data: '数据不足',
   recovery: '复苏', overheating: '过热', stagflation: '滞胀', recession: '衰退',
   easing: '宽松', tightening: '紧缩', neutral: '中性',
   active_restocking: '主动补库', passive_restocking: '被动补库',
@@ -42,6 +65,6 @@ export const PHASE_LABELS: Record<string, string> = {
 }
 
 export const phaseColor = (p: string | null | undefined): string =>
-  PHASE_COLORS[p ?? ''] ?? '#64748b'
+  (isLight() ? LIGHT : DARK)[p ?? ''] ?? (isLight() ? '#64748b' : '#7c8da5')
 export const phaseLabel = (p: string | null | undefined): string =>
   PHASE_LABELS[p ?? ''] ?? (p ?? '')

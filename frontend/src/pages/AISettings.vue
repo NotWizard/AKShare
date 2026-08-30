@@ -303,7 +303,7 @@ async function submit() {
       >
         <summary class="cursor-pointer text-sm text-text-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
           <span class="tnum">{{ b.generated_at }}</span><template v-if="b.model"> · {{ b.model }}</template><template v-if="b.profile"> · {{ b.profile }}</template><template v-if="b.template_hash"> · tpl {{ b.template_hash.slice(0, 8) }}</template> · {{ b.status }}
-          <span v-if="b.stale" class="text-xs px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400">已过期</span>
+          <span v-if="b.stale" class="text-xs px-1.5 py-0.5 rounded bg-warn-soft text-warn">已过期</span>
         </summary>
         <div v-if="batchLoading[b.generated_at]" class="text-xs text-text-3 mt-2">加载中…</div>
         <div v-else-if="batchErrors[b.generated_at]" class="text-xs text-down mt-2">{{ batchErrors[b.generated_at] }}</div>

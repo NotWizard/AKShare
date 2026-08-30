@@ -69,7 +69,7 @@ const reloading = computed(() => props.state === 'loading')
   <div>
     <!-- reload failed but we still hold good data: banner, don't nuke the page -->
     <div v-if="showError && hasData" role="alert"
-         class="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500/40 bg-red-500/10">
+         class="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl border border-down bg-down-soft">
       <div class="min-w-0 flex-1 text-xs">
         <div class="font-semibold text-red-300">{{ title }} — 页面显示的是上一次成功获取的数据</div>
         <div class="text-red-300/80 mt-0.5">{{ box.hint }}</div>
@@ -81,7 +81,7 @@ const reloading = computed(() => props.state === 'loading')
 
     <!-- first load failed: the ONLY thing on screen (no misleading skeleton) -->
     <div v-else-if="showError" role="alert"
-         class="flex flex-col items-center justify-center gap-2 text-center px-6 py-10 rounded-2xl border border-red-500/40 bg-red-500/10"
+         class="flex flex-col items-center justify-center gap-2 text-center px-6 py-10 rounded-2xl border border-down bg-down-soft"
          :style="{ minHeight }">
       <div class="text-sm font-semibold text-red-300">{{ title }}</div>
       <p class="text-xs text-red-300/80 max-w-[520px] leading-relaxed">{{ box.hint }}</p>

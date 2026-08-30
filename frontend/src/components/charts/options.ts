@@ -1,7 +1,7 @@
 // ECharts option builders — one per chart family. Pure functions: records in,
 // option out. Each applies the Terminal Fintech theme (≈ _apply_layout).
 
-import { applyTheme, baseAxis, COLORS, PALETTE } from '@/design/echarts.theme'
+import { applyTheme, baseAxis, chartTheme } from '@/design/echarts.theme'
 import { phaseColor, phaseLabel } from '@/design/phases'
 import { hexA, mergePhaseSegments } from './utils'
 import type { EChartsOption, LineSeriesOption, ScatterSeriesOption } from 'echarts'
@@ -44,6 +44,7 @@ const zh = (col: string): string => COL_ZH[col] ?? col
 /** Credit cycle flagship: M2 同比 line (connectNulls) + M2 趋势 dashed +
  *  phase-background markArea + the 1991–1996 source-gap markArea + caption. */
 export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = derived.map((r) => r.date as string)
   const m2 = derived.map((r) => r.m2_yoy)
   const trendByDate = new Map(cycle.map((r) => [r.date as string, r.m2_trend as number | null]))
@@ -76,6 +77,7 @@ export function buildCreditM2Chart(derived: Rec[], cycle: Rec[]): EChartsOption 
 
 /** Credit impulse — bars (社融信贷脉冲). */
 export function buildCreditImpulseChart(cycle: Rec[]): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = cycle.map((r) => r.date as string)
   const impulse = cycle.map((r) => r.credit_impulse as number | null)
   return themed({
@@ -95,9 +97,12 @@ export function buildCreditImpulseChart(cycle: Rec[]): EChartsOption {
  *  CPI vs PPI share the % axis; PMI (~50) vs IP-yoy (~5%) need separate axes. */
 export function buildDualAxisLine(
   derived: Rec[], a: string, b: string,
-  aColor = COLORS.accent, bColor = COLORS.up,
+  aColor?: string, bColor?: string,
   aName?: string, bName?: string,
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
+  const aCol = aColor ?? COLORS.accent
+  const bCol = bColor ?? COLORS.up
   const dates = derived.map((r) => r.date as string)
   return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
@@ -110,10 +115,10 @@ export function buildDualAxisLine(
     series: [
       { name: aName ?? zh(a), type: 'line', yAxisIndex: 0, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[a]),
-        itemStyle: { color: aColor }, lineStyle: { color: aColor, width: 2.5 }, areaStyle: { opacity: 0.08 } },
+        itemStyle: { color: aCol }, lineStyle: { color: aCol, width: 2.5 }, areaStyle: { opacity: 0.08 } },
       { name: bName ?? zh(b), type: 'line', yAxisIndex: 1, connectNulls: true, symbol: 'none',
         data: derived.map((r) => r[b]),
-        itemStyle: { color: bColor }, lineStyle: { color: bColor, width: 2 } },
+        itemStyle: { color: bCol }, lineStyle: { color: bCol, width: 2 } },
     ],
   })
 }
@@ -122,6 +127,7 @@ export function buildDualAxisLine(
 export function buildStackedArea(
   derived: Rec[], cols: string[],
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = derived.map((r) => r.date as string)
   return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
@@ -149,6 +155,7 @@ export function buildScatterQuadrant(
   xLabel: string, yLabel: string, hline: number | null = null, vline: number | null = null,
   quadrantLabels?: { tl?: string; tr?: string; bl?: string; br?: string },
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const byPhase = new Map<string, [number, number][]>()
   for (const r of cycle) {
     const x = r[xKey] as number | null
@@ -227,6 +234,7 @@ export function buildRadar(assessment: {
   price_momentum_score?: number
   rate_env_score?: number
 }): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   return themed({
     tooltip: { trigger: 'item', valueFormatter: (v: unknown) => Number(v).toFixed(2) },
     legend: { show: false },
@@ -266,6 +274,7 @@ export function buildBarLineCombo(
   barName: string, lineName: string,
   barUnit = '', lineUnit = '',
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = derived.map((r) => r.date as string)
   return themed({
     legend: { top: 0 },
@@ -290,6 +299,7 @@ export function buildBarLineCombo(
 export function buildMultiLine(
   derived: Rec[], cols: { col: string; name: string }[], yUnit = '', markLineAt?: number, markLineName = '荣枯线',
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = derived.map((r) => r.date as string)
   const series: LineSeriesOption[] = cols.map((c, i): LineSeriesOption => {
     const color = PALETTE[i % PALETTE.length]
@@ -337,6 +347,7 @@ export function buildMultiLine(
 export function buildSpreadChart(
   derived: Rec[], col: string, name = '剪刀差', unit = 'pp', markLineValue = 0,
 ): EChartsOption {
+  const { colors: COLORS, palette: PALETTE } = chartTheme()
   const dates = derived.map((r) => r.date as string)
   return themed({
     xAxis: { type: 'category', data: dates, ...baseAxis({ boundaryGap: false }) },
