@@ -53,7 +53,7 @@
 ## 2. 目录结构（新增 + 保留并存）
 
 ```
-AKShare/
+MACRO/
 ├── analysis/                  # 【不变】核心分析引擎
 ├── scripts/                   # 【不变】_pipeline.py / 01_fetch / 02_compute（后端复用）
 ├── data/                      # 【不变】macro_data.db（前后端共享）

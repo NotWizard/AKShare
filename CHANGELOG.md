@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### 项目正式命名为 MACRO
+
+概述：项目定名 **MACRO**（macroeconomics 词根，与侧边栏品牌字标一致）；GitHub 仓库 NotWizard/AKShare → NotWizard/MACRO，本地目录同步改名。
+
+变更：
+  1. **[仓库]** GitHub 仓库改名 MACRO（gh repo rename，旧名自动重定向）；本地目录 AKShare → MACRO；遗留 worktree 经 git worktree repair 修复链接。
+  2. **[环境]** .venv312/bin 下脚本 shebang 批量改指新路径；venv/pip 实测完好。
+  3. **[文档]** README 目录树标签与主题描述（Terminal Fintech → Obsidian Blue × Paper 双主题）、docs/architecture-upgrade.md 同步；PWA manifest 与 index.html 主题色随新底色 #070b12 更新。
+  4. **[说明]** 库名 AKShare 作为数据来源的引用（badge/依赖/文档）保持不变——项目名 ≠ 库名。
+
+验证：.venv312 python/pip 正常；git worktree list 双路径正确；应用自新路径启动 200。
+
+### Project named MACRO (English)
+
+Summary: the project is now officially **MACRO**; GitHub repo renamed NotWizard/AKShare → NotWizard/MACRO (old URL redirects), local directory renamed in step.
+
+Changes:
+  1. **[repo]** gh repo rename + local directory rename; leftover worktree re-linked via git worktree repair.
+  2. **[env]** .venv312/bin shebangs rewritten to the new path; venv/pip verified.
+  3. **[docs]** README tree label + theme description (dual theme), architecture doc, PWA manifest/index.html theme color.
+  4. **[note]** references to the AKShare library (badge/deps/docs) intentionally unchanged — project name ≠ library name.
+
+Verification: venv python/pip work; worktree list correct; app boots from the new path with 200.
+
+
 ### AI 评论接入百炼 + 提示词 v2 重写 + 生成链路超时修复
 
 概述：把 PI 当前使用的百炼（DashScope 兼容端点，kimi-k3）配置为本项目 AI 评论的 Provider；

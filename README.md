@@ -6,7 +6,7 @@
 [![ECharts](https://img.shields.io/badge/ECharts-5.5-aa344d)](https://echarts.apache.org/)
 [![AKShare](https://img.shields.io/badge/Data-AKShare-green)](https://www.akshare.xyz/)
 
-一个基于 **Python + FastAPI + Vue 3 + ECharts** 构建的**中国宏观经济数据分析平台**，采用 **Terminal Fintech** 暗色主题。通过 [`AKShare`](https://www.akshare.xyz/) 采集国家统计局、中国人民银行等权威数据源，计算四大经典周期分析框架与综合宏观信号，并以高度交互的可视化方式呈现。
+一个基于 **Python + FastAPI + Vue 3 + ECharts** 构建的**中国宏观经济数据分析平台**，采用 **Obsidian Blue × Paper** 双主题（一键换肤）。通过 [`AKShare`](https://www.akshare.xyz/) 采集国家统计局、中国人民银行等权威数据源，计算四大经典周期分析框架与综合宏观信号，并以高度交互的可视化方式呈现。
 
 > 架构升级历史详见 [`docs/architecture-upgrade.md`](docs/architecture-upgrade.md)（Dash+Plotly → FastAPI+Vue 迁移全过程）。
 
@@ -109,7 +109,7 @@
 ## 目录结构
 
 ```text
-AKShare/
+MACRO/
 ├── analysis/                    # 宏观分析引擎（无 UI / API 依赖，纯计算）
 │   ├── cycle_merrill.py         # 美林时钟
 │   ├── cycle_credit.py          # 信用周期
@@ -340,7 +340,7 @@ FastAPI（`:8000`，同时托管 Vue 构建产物），OpenAPI 文档 `http://lo
 
 ## 设计系统
 
-统一的 **Terminal Fintech** 暗色主题，定义于 `frontend/src/design/`。
+双主题色彩体系（**Obsidian Blue** 暗色 × **Paper** 亮色，顶栏 ☾/☀ 一键换肤），定义于 `frontend/src/design/` + `stores/theme.ts`；完整方案见 `docs/design/dual-theme-plan.md`。
 
 ### 色彩体系（`tokens.css` + `tailwind.config.ts`）
 
